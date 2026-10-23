@@ -437,6 +437,8 @@ def plan_episode(
     thread_evidence: str = "",
     owner_texts: Sequence[str] = (),
     outcome_caption: str = "",
+    facts: Sequence[Any] = (),
+    facts_evidence: str = "",
     actors_by_event: Mapping[str, str] | None = None,
     cast_map: Mapping[str, str] | None = None,
     title: str | None = None,
@@ -506,6 +508,31 @@ def plan_episode(
         actors = {actors_map.get(event_id, "") for event_id in beat.event_ids} - {""}
         return {actor for actor in actors if actor in cast_names}
 
+    # Round 6: the facts a panel may state, chosen by its role in the story.
+    goal_facts = [fact for fact in facts if getattr(fact, "kind", "") == "goal"]
+    turn_facts = [fact for fact in facts if getattr(fact, "kind", "") == "turn"]
+    result_facts = [fact for fact in facts if getattr(fact, "kind", "") == "outcome"]
+    used_facts: set[str] = set()
+
+    def facts_for(role: str) -> str:
+        if role == "setup" and goal_facts:
+            return goal_facts[0].sentence
+        if role in {"climax", "win"} and result_facts:
+            parts: list[str] = []
+            for fact in result_facts:
+                sentence = fact.sentence
+                if sentence and sentence not in parts:
+                    parts.append(sentence)
+                if len(parts) == 2:
+                    break
+            return " ".join(parts)
+        for fact in turn_facts:
+            sentence = fact.sentence
+            if sentence and sentence not in used_facts:
+                used_facts.add(sentence)
+                return sentence
+        return ""
+
     panel_specs: list[dict[str, Any]] = []
     for role in roles:
         beat = by_id.get(arc.roles[role])
@@ -524,9 +551,13 @@ def plan_episode(
                 "evidence": _evidence_for(beat),
                 "cast": _cast_for(beat, canon, hero, cast_map),
                 "structured_caption": (
-                    outcome_caption
-                    if role in {"climax", "win"} and outcome_caption
-                    else next(
+                    facts_for(role)
+                    or (
+                        outcome_caption
+                        if role in {"climax", "win"} and outcome_caption
+                        else ""
+                    )
+                    or next(
                         (
                             structured.get(event_id, "")
                             for event_id in (beat.event_ids if beat else ())
@@ -598,6 +629,7 @@ def plan_episode(
             continue
         cast_names = tuple(spec.get("cast") or ())
         evidence_text = str(spec.get("evidence", ""))
+        judge_text = facts_evidence or evidence_text
         speakers_allowed = set(spec.get("speakers") or spec.get("actors") or ())
         written = dialogue.get(role, {})
 
@@ -616,7 +648,7 @@ def plan_episode(
             if caption_problem(text, owner_texts=owner_texts, max_owner_quote=limit):
                 return False
             if grounder is not None:
-                verdict = grounder.check(text, evidence_text, layer="caption")
+                verdict = grounder.check(text, judge_text, layer="caption")
                 if not verdict.supported:
                     return False
             return True
@@ -704,7 +736,7 @@ def plan_episode(
                 generic_used += 1
             if grounder is not None:
                 report.lines += 1
-                verdict = grounder.check(candidate, evidence_text, layer="dialogue")
+                verdict = grounder.check(candidate, judge_text, layer="dialogue")
                 if verdict.supported:
                     report.lines_supported += 1
                 else:

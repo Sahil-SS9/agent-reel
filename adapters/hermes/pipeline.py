@@ -42,6 +42,7 @@ from canon.aliases import AliasBook, apply_to_ir, masks_in
 from canon.canon import Canon, build_canon
 from canon.caption import compose_caption, trim_caption
 from canon.casting import build_cast_map, summarise as summarise_cast
+from canon.facts import build_facts, facts_text
 from canon.episode import (
     EpisodeIR,
     LLMDialogueWriter,
@@ -582,6 +583,10 @@ def run_pipeline(
                         break
                 if not outcome_caption:
                     outcome_caption = trim_caption(brief.outcome)
+            thread_facts = build_facts(
+                brief, thread_event_map, display=cast_map, hero=config.hero
+            )
+            thread_facts_text = facts_text(thread_facts)
             thread_evidence_text = "\n".join(
                 [brief.text()]
                 + [evidence_map.get(event_id, "") for event_id in candidate.event_ids]
@@ -614,6 +619,8 @@ def run_pipeline(
                 thread_evidence=thread_evidence_text,
                 owner_texts=owner_texts,
                 outcome_caption=outcome_caption,
+                facts=thread_facts,
+                facts_evidence=thread_facts_text,
                 title=title,
             )
             if len(episode_ir.panels) < 3:
@@ -641,6 +648,7 @@ def run_pipeline(
                     "cliffhanger": episode_ir.cliffhanger,
                     "grounding": dict(episode_ir.grounding),
                     "brief": brief.as_dict(),
+                    "facts": [fact.as_dict() for fact in thread_facts],
                     "ir": episode_ir,
                 }
             )

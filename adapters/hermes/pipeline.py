@@ -29,7 +29,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any, Mapping, Iterable, Sequence
 
 from canon.brief import build_brief
 from canon.selection import select_stories
@@ -211,7 +211,9 @@ def markdown_of(ir: EpisodeIR) -> str:
     return render_script_markdown(ir)
 
 
-def evidence_by_event(gated: Iterable[GatedEvent]) -> dict[str, str]:
+def evidence_by_event(
+    gated: Iterable[GatedEvent], *, display: Mapping[str, str] | None = None
+) -> dict[str, str]:
     """The gated text each event can ground a line with.
 
     Text plus its string fields: a line may only repeat what is in here, so a beat
@@ -223,7 +225,7 @@ def evidence_by_event(gated: Iterable[GatedEvent]) -> dict[str, str]:
         # kind or the actor is repeating the record, not inventing.
         # R3-F4: no provenance in the evidence either - a model shown a record dump
         # writes one back. The structured sentence is the event's own fact.
-        composed = compose_caption(event)
+        composed = compose_caption(event, display=display)
         parts: list[str] = [composed] if composed else []
         text = event.payload.get("text")
         if isinstance(text, str) and text:
@@ -484,8 +486,10 @@ def run_pipeline(
             who = cast_map.get(event.profile) or cast_map.get(event.actor) or ""
             actors_by_event[event.id] = who
 
-        evidence_map = evidence_by_event(gated)
-        structured_captions = {event.id: compose_caption(event) for event in gated}
+        evidence_map = evidence_by_event(gated, display=cast_map)
+        structured_captions = {
+            event.id: compose_caption(event, display=cast_map) for event in gated
+        }
 
         # R3-F1: pick stories by meaning (sessions with a goal and an outcome, or task
         # families whose titles describe real work). Bookkeeping is never a story.

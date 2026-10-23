@@ -71,7 +71,12 @@ def looks_like_provenance(text: str) -> bool:
 def _object_from(text: str) -> str:
     """The first clause of a text, short enough to be an object."""
     cleaned = re.sub(r"https?://\S+", "a link", text or "")
-    cleaned = re.sub(r"\s+", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    # Drop the conversational lead-in so the object is the thing itself.
+    for lead in ("please ", "can you ", "could you ", "i want you to ", "i need "):
+        if cleaned.lower().startswith(lead):
+            cleaned = cleaned[len(lead):]
+            break
     clause = re.split(r"[.;\n]", cleaned.strip(), maxsplit=1)[0]
     clause = clause.strip(" ,:-\u2014")
     words = clause.split()

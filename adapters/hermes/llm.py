@@ -233,39 +233,14 @@ def client_from_env() -> OpenAICompatLLMClient | None:
 
 
 # --------------------------------------------------------------------------- #
-# Round 4, R3-F6: the owner's main model through the local Hermes API server
+# Call budget (round 4, kept in round 5)
 # --------------------------------------------------------------------------- #
 #
-# Production uses ctx.llm, the owner's main model. Dev runs used the small local model,
-# so every prose judgement was made by a much weaker writer than users get. Writer,
-# title and entailment calls now go to the API server; redaction stays on the local
-# model, so only post-gate text ever reaches the other endpoint.
-#
-# The key is read from ~/.hermes/.env at call time, kept in memory, and never written,
-# logged or printed. Nothing here can put it in a repr, an error or a metric.
-
-API_SERVER_BASE_URL = "http://127.0.0.1:8642/v1"
-API_SERVER_MODEL = "hermes-agent"
-API_SERVER_KEY_NAME = "API_SERVER_KEY"
-DEFAULT_ENV_PATH = "~/.hermes/.env"
-
-
-def read_api_server_key(env_path: str | os.PathLike[str] = DEFAULT_ENV_PATH) -> str:
-    """Read API_SERVER_KEY from the Hermes env file. Never log the result."""
-    path = os.path.expanduser(str(env_path))
-    try:
-        with open(path, "r", encoding="utf-8") as handle:
-            for line in handle:
-                line = line.strip()
-                if not line or line.startswith("#") or "=" not in line:
-                    continue
-                name, value = line.split("=", 1)
-                if name.strip() == API_SERVER_KEY_NAME:
-                    return value.strip().strip('"').strip("'")
-    except OSError:
-        return ""
-    return ""
-
+# Round 4 sent the writer through the Hermes API server. That is dropped: it is a full
+# agent, so every call carried the Hermes system prompt (~57k prompt tokens) and the
+# "judge" was an agent persona rather than a clean model. The writer now runs on
+# ctx.llm through adapters/hermes/plugin_llm.py. The budget guard stays because a run
+# still has to be bounded.
 
 class BudgetExceeded(LLMError):
     """A run spent more model calls than its budget allows."""
@@ -293,20 +268,3 @@ class BudgetedLLM:
         payload = dict(inner() if callable(inner) else {})
         payload.update({"calls": self.calls, "budget": self.max_calls})
         return payload
-
-
-def api_server_client(
-    *,
-    model: str = API_SERVER_MODEL,
-    base_url: str = API_SERVER_BASE_URL,
-    env_path: str | os.PathLike[str] = DEFAULT_ENV_PATH,
-    max_calls: int = 150,
-) -> BudgetedLLM:
-    """The writer client: owner's main model, key read at runtime, budget enforced."""
-    client = OpenAICompatLLMClient(
-        base_url=base_url,
-        model=model,
-        api_key=read_api_server_key(env_path) or None,
-        timeout=DEFAULT_TIMEOUT,
-    )
-    return BudgetedLLM(client, max_calls=max_calls, name="writer")

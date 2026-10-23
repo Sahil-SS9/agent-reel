@@ -1,0 +1,9 @@
+name: scrollback-reel
+version: 0.1.0
+api_version: 1
+description: "Turn this machine's Hermes history into a weekly comic: one CLI command (hermes reel plan --dry-run), no hooks, no tools."
+author: Sahil Saghir
+kind: standalone
+provides_hooks: []
+provides_tools: []
+requires_env: []

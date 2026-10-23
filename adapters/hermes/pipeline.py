@@ -840,15 +840,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=1,
         help="how many threads to turn into scripts (each from a different thread)",
     )
-    parser.add_argument(
-        "--writer",
-        choices=("api", "local", "none"),
-        default="api",
-        help="where writer/title/entailment calls go (api = owner's main model on 8642)",
-    )
-    parser.add_argument(
-        "--writer-budget", type=int, default=150, help="max API-server calls per run"
-    )
     parser.add_argument("--json", action="store_true", help="print the metrics JSON")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
@@ -864,20 +855,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             extra_body={"chat_template_kwargs": {"enable_thinking": False}},
         )
 
+    # The writer/title/entailment route is the plugin's ctx.llm (see
+    # adapters/hermes/plugin_llm.py); this CLI only runs the pipeline itself, so it
+    # either uses the local model for everything or nothing at all.
     writer_llm: Any = None
     writer_note = ""
-    if args.writer == "api":
-        from adapters.hermes.llm import api_server_client
-
-        candidate = api_server_client(max_calls=args.writer_budget)
-        if candidate.inner.api_key:
-            writer_llm = candidate
-            writer_note = "api-server"
-        else:
-            writer_note = "no API_SERVER_KEY, writer fell back to the local model"
-    elif args.writer == "none":
-        writer_llm = None
-        writer_note = "writer disabled"
 
     if client is not None:
         fallback_url = os.environ.get("REEL_LLM_FALLBACK_URL")

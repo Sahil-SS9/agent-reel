@@ -194,6 +194,7 @@ New requirements found:
   - the weekly blueprint and the commands
   - accept: a 4-week synthetic history plus 1 real week give consistent strips (human review of 24 panels), nothing unapproved is named, and Sahil posts at least 1
 - **M3, release:**
+  - **source bake-off (§7 bar) on at least one local source (Qwen-Image-Edit-2511 via ComfyUI) and the other shortlisted hosted sources**, so V1 can honestly claim "works with whatever you have". Untested sources are listed as unsupported.
   - per-episode cost and time budgets
   - privacy review of public mode
   - docs and a demo strip
@@ -205,7 +206,7 @@ Kill test: after 4 real weekly strips, if Sahil isn't reading or posting them, s
 
 ## 9. Open items
 
-1. The final name (catalog check).
+1. ~~The final name (catalog check).~~ Decided: "Hermes Scrollback Reel" (D8). Catalog check was clean at upstream a4072ce7e6; re-check right before the M3 catalog submission.
 2. Ready-made cast source:
    - Mike's care package is 3D Blender/Godot models with no licence found
    - Sahil's hermes-multiverse states "not a reuse licence"

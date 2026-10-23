@@ -65,7 +65,7 @@ hermes-scrollback-reel/
 
 ```bash
 cd /home/kensei/repos/hermes-scrollback-reel && git log --oneline -1   # expect the pack commit KENSEI gave you
-git -C ~/repos/hermes-agent-vanilla rev-parse upstream/main            # expect a4072ce7e67313eda344de4e4d691b6a5ba50164
+git -C ~/repos/hermes-agent-vanilla merge-base --is-ancestor a4072ce7e67313eda344de4e4d691b6a5ba50164 upstream/main; echo $?   # expect 0 (surfaces were verified at a4072ce7e6; upstream/main moves, so check ancestry, not equality)
 hermes --version                                                        # expect v0.22.2+... KenseiAgent fork
 hermes plugins --help | grep -E 'validate|doctor'                       # expect both listed
 ls ~/.hermes/profiles/*/state.db | wc -l                                # expect ~65

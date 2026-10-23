@@ -1,0 +1,232 @@
+{"category": "url_token", "id": "rb-0001", "labels": [{"category": "url_token", "span": "https://example.test/reset?token=9dQ2mXb7Vc4RtY8Np1Ls6Kw3Jz5Hg0"}], "text": "Link that leaked: https://example.test/reset?token=9dQ2mXb7Vc4RtY8Np1Ls6Kw3Jz5Hg0"}
+{"category": "path", "id": "rb-0002", "labels": [{"category": "path", "span": "/home/alex/secret-project/keys.txt"}], "text": "The data lives at /home/alex/secret-project/keys.txt on the desktop."}
+{"category": "secret", "id": "rb-0003", "labels": [{"category": "secret", "span": "hf_aBcDeFgHiJkLmNoPqRsTuVwXyZ012345"}], "text": "Deploy failed: the token hf_aBcDeFgHiJkLmNoPqRsTuVwXyZ012345 was rejected by the gateway."}
+{"category": "email", "id": "rb-0004", "labels": [{"category": "email", "span": "mike.harrington@example.org"}], "text": "The alert went to mike.harrington@example.org at 03:12."}
+{"category": "phone", "id": "rb-0005", "labels": [{"category": "phone", "span": "+44 7700 900123"}], "text": "Client asked us to ring +44 7700 900123 tomorrow."}
+{"category": "financial", "id": "rb-0006", "labels": [{"category": "financial", "span": "\u00a385 per month"}], "text": "The client approved \u00a385 per month for the next phase."}
+{"category": "secret", "id": "rb-0007", "labels": [{"category": "secret", "span": "retaindb_aBcDeFgHiJkLmNoPqRsTu"}], "text": "The config holds retaindb_aBcDeFgHiJkLmNoPqRsTu in plain sight, which is the bug."}
+{"category": "path", "id": "rb-0008", "labels": [{"category": "path", "span": "/home/jordan/repos/private-thing/main.py"}], "text": "Open /home/jordan/repos/private-thing/main.py and you will see it."}
+{"category": "path", "id": "rb-0009", "labels": [{"category": "path", "span": "/Users/sam/Documents/client-work.pdf"}], "text": "The data lives at /Users/sam/Documents/client-work.pdf on the desktop."}
+{"category": "person_name", "id": "rb-0010", "labels": [{"category": "person_name", "span": "Fatima Al-Sayed"}], "text": "Waiting on Fatima Al-Sayed for the final call."}
+{"category": "financial", "id": "rb-0011", "labels": [{"category": "financial", "span": "\u00a312,000"}], "text": "The client approved \u00a312,000 for the next phase."}
+{"category": "secret", "id": "rb-0012", "labels": [{"category": "secret", "span": "fc-9dQ2mXb7Vc4RtY8Np1Ls6Kw3Jz5"}], "text": "The config holds fc-9dQ2mXb7Vc4RtY8Np1Ls6Kw3Jz5 in plain sight, which is the bug."}
+{"category": "phone", "id": "rb-0013", "labels": [{"category": "phone", "span": "+44 7700 900321"}], "text": "Client asked us to ring +44 7700 900321 tomorrow."}
+{"category": "email", "id": "rb-0014", "labels": [{"category": "email", "span": "hello@synthetic-studio.test"}], "text": "Reply to hello@synthetic-studio.test and cc the client."}
+{"category": "secret", "id": "rb-0015", "labels": [{"category": "secret", "span": "am_9dQ2mXb7Vc4RtY8Np1Ls6Kw3J"}], "text": "Pasted from the logs: am_9dQ2mXb7Vc4RtY8Np1Ls6Kw3J (do not share)."}
+{"category": "client_name", "id": "rb-0016", "labels": [{"category": "client_name", "span": "Kestrel Labs"}], "text": "The invoice for Kestrel Labs is still unpaid."}
+{"category": "client_name", "id": "rb-0017", "labels": [{"category": "client_name", "span": "Ashgrove Legal"}], "text": "Ashgrove Legal wants the dashboard by Friday."}
+{"category": "path", "id": "rb-0018", "labels": [{"category": "path", "span": "/home/priya/finances/2026.xlsx"}], "text": "Open /home/priya/finances/2026.xlsx and you will see it."}
+{"category": "email", "id": "rb-0019", "labels": [{"category": "email", "span": "mike.harrington@example.org"}], "text": "Escalate to mike.harrington@example.org before the deadline."}
+{"category": "secret", "id": "rb-0020", "labels": [{"category": "secret", "span": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3OCJ9.9dQ2mXb7Vc4RtY8Np1Ls6Kw3Jz5Hg0Fa2Ed"}], "text": "Session cookie: eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3OCJ9.9dQ2mXb7Vc4RtY8Np1Ls6Kw3Jz5Hg0Fa2Ed"}
+{"category": "secret", "id": "rb-0021", "labels": [{"category": "secret", "span": "mem0_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123"}], "text": "Pasted from the logs: mem0_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123 (do not share)."}
+{"category": "secret", "id": "rb-0022", "labels": [{"category": "secret", "span": "sk-proj-8fJ2kLm9QwErTyUiOp3AsDfGhJkL"}], "text": "Deploy failed: the token sk-proj-8fJ2kLm9QwErTyUiOp3AsDfGhJkL was rejected by the gateway."}
+{"category": "email", "id": "rb-0023", "labels": [{"category": "email", "span": "alerts@monitoring.example"}], "text": "The alert went to alerts@monitoring.example at 03:12."}
+{"category": "client_name", "id": "rb-0024", "labels": [{"category": "client_name", "span": "Pinewood Motors"}], "text": "The invoice for Pinewood Motors is still unpaid."}
+{"category": "email", "id": "rb-0025", "labels": [{"category": "email", "span": "ops@example.test"}], "text": "The alert went to ops@example.test at 03:12."}
+{"category": "phone", "id": "rb-0026", "labels": [{"category": "phone", "span": "07700 900456"}], "text": "The contact number on file is 07700 900456."}
+{"category": "ip", "id": "rb-0027", "labels": [{"category": "ip", "span": "198.51.100.42"}], "text": "Gateway answered from 198.51.100.42."}
+{"category": "url_token", "id": "rb-0028", "labels": [{"category": "url_token", "span": "https://storage.example.test/file?X-Amz-Signature=9dQ2mXb7Vc4RtY8Np1"}], "text": "Link that leaked: https://storage.example.test/file?X-Amz-Signature=9dQ2mXb7Vc4RtY8Np1"}
+{"category": "financial", "id": "rb-0029", "labels": [{"category": "financial", "span": "refund of \u00a3119.99"}], "text": "The client approved refund of \u00a3119.99 for the next phase."}
+{"category": "client_name", "id": "rb-0030", "labels": [{"category": "client_name", "span": "Verdant Systems"}], "text": "Verdant Systems wants the dashboard by Friday."}
+{"category": "person_name", "id": "rb-0031", "labels": [{"category": "person_name", "span": "Arjun Mehta"}], "text": "Waiting on Arjun Mehta for the final call."}
+{"category": "health", "id": "rb-0032", "labels": [{"category": "health", "span": "diagnosed with type 2 diabetes"}], "text": "Private note: diagnosed with type 2 diabetes."}
+{"category": "secret", "id": "rb-0033", "labels": [{"category": "secret", "span": "brv_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123"}], "text": "curl -H 'Authorization: Bearer brv_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123' https://api.example.test/v1/ping"}
+{"category": "secret", "id": "rb-0034", "labels": [{"category": "secret", "span": "ntn_aBcDeFgHiJkLmNoPqRsTuVwXyZ01234"}], "text": "The config holds ntn_aBcDeFgHiJkLmNoPqRsTuVwXyZ01234 in plain sight, which is the bug."}
+{"category": "person_name", "id": "rb-0035", "labels": [{"category": "person_name", "span": "Aoife Byrne"}], "text": "Aoife Byrne flagged the regression first."}
+{"category": "person_name", "id": "rb-0036", "labels": [{"category": "person_name", "span": "Ingrid Larsson"}], "text": "We need Ingrid Larsson to confirm the numbers."}
+{"category": "person_name", "id": "rb-0037", "labels": [{"category": "person_name", "span": "Ingrid Larsson"}], "text": "We need Ingrid Larsson to confirm the numbers."}
+{"category": "secret", "id": "rb-0038", "labels": [{"category": "secret", "span": "pypi-AgEIcHlwaS5vcmcCJGE3ZjJhNGM2LThk"}], "text": "Pasted from the logs: pypi-AgEIcHlwaS5vcmcCJGE3ZjJhNGM2LThk (do not share)."}
+{"category": "person_name", "id": "rb-0039", "labels": [{"category": "person_name", "span": "Zara Hussain"}], "text": "Zara Hussain flagged the regression first."}
+{"category": "secret", "id": "rb-0040", "labels": [{"category": "secret", "span": "Authorization: Basic U2FoaWw6OXFRMm1YYjdWYzRSdFk4TnAxTHM2S3czSno1"}], "text": "Header dump:\nAuthorization: Basic U2FoaWw6OXFRMm1YYjdWYzRSdFk4TnAxTHM2S3czSno1\nend"}
+{"category": "path", "id": "rb-0041", "labels": [{"category": "path", "span": "/home/alex/secret-project/keys.txt"}], "text": "The data lives at /home/alex/secret-project/keys.txt on the desktop."}
+{"category": "path", "id": "rb-0042", "labels": [{"category": "path", "span": "/home/alex/secret-project/keys.txt"}], "text": "The data lives at /home/alex/secret-project/keys.txt on the desktop."}
+{"category": "person_name", "id": "rb-0043", "labels": [{"category": "person_name", "span": "Hiroshi Tanaka"}], "text": "Waiting on Hiroshi Tanaka for the final call."}
+{"category": "url_token", "id": "rb-0044", "labels": [{"category": "url_token", "span": "https://storage.example.test/file?X-Amz-Signature=9dQ2mXb7Vc4RtY8Np1"}], "text": "Link that leaked: https://storage.example.test/file?X-Amz-Signature=9dQ2mXb7Vc4RtY8Np1"}
+{"category": "phone", "id": "rb-0045", "labels": [{"category": "phone", "span": "07700 900654"}], "text": "The contact number on file is 07700 900654."}
+{"category": "health", "id": "rb-0046", "labels": [{"category": "health", "span": "referred to cardiology at St Mary's"}], "text": "Private note: referred to cardiology at St Mary's."}
+{"category": "person_name", "id": "rb-0047", "labels": [{"category": "person_name", "span": "Chen Wei"}], "text": "We need Chen Wei to confirm the numbers."}
+{"category": "path", "id": "rb-0048", "labels": [{"category": "path", "span": "/home/jordan/repos/private-thing/main.py"}], "text": "Open /home/jordan/repos/private-thing/main.py and you will see it."}
+{"category": "secret", "id": "rb-0049", "labels": [{"category": "secret", "span": "github_pat_11ABCDEFG0aBcDeFgHiJkL_9zYxWvUtSrQpOnMlKj"}], "text": "curl -H 'Authorization: Bearer github_pat_11ABCDEFG0aBcDeFgHiJkL_9zYxWvUtSrQpOnMlKj' https://api.example.test/v1/ping"}
+{"category": "secret", "id": "rb-0050", "labels": [{"category": "secret", "span": "sk-ant-api03-Xy7Qm2Lp9RtV4Bn6Wc1Zs8Yh3Jd5Gf0Ka"}], "text": "The config holds sk-ant-api03-Xy7Qm2Lp9RtV4Bn6Wc1Zs8Yh3Jd5Gf0Ka in plain sight, which is the bug."}
+{"category": "health", "id": "rb-0051", "labels": [{"category": "health", "span": "blood pressure 158/96"}], "text": "Private note: blood pressure 158/96."}
+{"category": "person_name", "id": "rb-0052", "labels": [{"category": "person_name", "span": "Dmitri Volkov"}], "text": "Waiting on Dmitri Volkov for the final call."}
+{"category": "url_token", "id": "rb-0053", "labels": [{"category": "url_token", "span": "https://api.example.test/v1/billing?api_key=9dQ2mXb7Vc4RtY8"}], "text": "Link that leaked: https://api.example.test/v1/billing?api_key=9dQ2mXb7Vc4RtY8"}
+{"category": "ip", "id": "rb-0054", "labels": [{"category": "ip", "span": "10.0.0.17"}], "text": "The box is reachable at 10.0.0.17 on the LAN."}
+{"category": "client_name", "id": "rb-0055", "labels": [{"category": "client_name", "span": "Northwind Traders"}], "text": "Northwind Traders wants the dashboard by Friday."}
+{"category": "secret", "id": "rb-0056", "labels": [{"category": "secret", "span": "pplx-9dQ2mXb7Vc4RtY8Np1Ls"}], "text": "Deploy failed: the token pplx-9dQ2mXb7Vc4RtY8Np1Ls was rejected by the gateway."}
+{"category": "health", "id": "rb-0057", "labels": [{"category": "health", "span": "NHS number 943 476 5919"}], "text": "Private note: NHS number 943 476 5919."}
+{"category": "person_name", "id": "rb-0058", "labels": [{"category": "person_name", "span": "Tomasz Nowak"}], "text": "Tomasz Nowak signed off on the design yesterday."}
+{"category": "project_name", "id": "rb-0059", "labels": [{"category": "project_name", "span": "Operation Tinderbox"}], "text": "Operation Tinderbox is still not announced, keep it quiet."}
+{"category": "ip", "id": "rb-0060", "labels": [{"category": "ip", "span": "172.16.4.9"}], "text": "The box is reachable at 172.16.4.9 on the LAN."}
+{"category": "health", "id": "rb-0061", "labels": [{"category": "health", "span": "referred to cardiology at St Mary's"}], "text": "Private note: referred to cardiology at St Mary's."}
+{"category": "email", "id": "rb-0062", "labels": [{"category": "email", "span": "hello@synthetic-studio.test"}], "text": "Escalate to hello@synthetic-studio.test before the deadline."}
+{"category": "secret", "id": "rb-0063", "labels": [{"category": "secret", "span": "https://alex:9dQ2mXb7Vc4Rt@internal.example.test/api"}], "text": "clone with https://alex:9dQ2mXb7Vc4Rt@internal.example.test/api and it works"}
+{"category": "financial", "id": "rb-0064", "labels": [{"category": "financial", "span": "\u00a247,300 budget"}], "text": "The client approved \u00a247,300 budget for the next phase."}
+{"category": "project_name", "id": "rb-0065", "labels": [{"category": "project_name", "span": "Project Nightjar"}], "text": "Project Nightjar is still not announced, keep it quiet."}
+{"category": "secret", "id": "rb-0066", "labels": [{"category": "secret", "span": "X-Api-Key: 9dQ2mXb7Vc4RtY8Np1Ls6Kw3Jz5Hg0Fa2EdBcDe"}], "text": "X-Api-Key: 9dQ2mXb7Vc4RtY8Np1Ls6Kw3Jz5Hg0Fa2EdBcDe"}
+{"category": "secret", "id": "rb-0067", "labels": [{"category": "secret", "span": "xapp-1-A09B7CDEF-9876543210-abcdef0123456789"}], "text": "curl -H 'Authorization: Bearer xapp-1-A09B7CDEF-9876543210-abcdef0123456789' https://api.example.test/v1/ping"}
+{"category": "secret", "id": "rb-0068", "labels": [{"category": "secret", "span": "bb_live_aBcDeFgHiJkLmNoPqRsTuVwXyZ"}], "text": "curl -H 'Authorization: Bearer bb_live_aBcDeFgHiJkLmNoPqRsTuVwXyZ' https://api.example.test/v1/ping"}
+{"category": "path", "id": "rb-0069", "labels": [{"category": "path", "span": "/Users/sam/Documents/client-work.pdf"}], "text": "The data lives at /Users/sam/Documents/client-work.pdf on the desktop."}
+{"category": "path", "id": "rb-0070", "labels": [{"category": "path", "span": "/home/jordan/repos/private-thing/main.py"}], "text": "Open /home/jordan/repos/private-thing/main.py and you will see it."}
+{"category": "ip", "id": "rb-0071", "labels": [{"category": "ip", "span": "172.16.4.9"}], "text": "The box is reachable at 172.16.4.9 on the LAN."}
+{"category": "secret", "id": "rb-0072", "labels": [{"category": "secret", "span": "fw_9dQ2mXb7Vc4RtY8Np1Ls6Kw3Jz5Hg0Fa2EdBcDe"}], "text": "curl -H 'Authorization: Bearer fw_9dQ2mXb7Vc4RtY8Np1Ls6Kw3Jz5Hg0Fa2EdBcDe' https://api.example.test/v1/ping"}
+{"category": "person_name", "id": "rb-0073", "labels": [{"category": "person_name", "span": "Aoife Byrne"}], "text": "Aoife Byrne flagged the regression first."}
+{"category": "person_name", "id": "rb-0074", "labels": [{"category": "person_name", "span": "Lucia Fernandez"}], "text": "We need Lucia Fernandez to confirm the numbers."}
+{"category": "project_name", "id": "rb-0075", "labels": [{"category": "project_name", "span": "Atlas Rebuild"}], "text": "Atlas Rebuild is still not announced, keep it quiet."}
+{"category": "secret", "id": "rb-0076", "labels": [{"category": "secret", "span": "rk_live_51H8xQm2Lp9RtV4Bn6Wc1Zs8Yh"}], "text": "Deploy failed: the token rk_live_51H8xQm2Lp9RtV4Bn6Wc1Zs8Yh was rejected by the gateway."}
+{"category": "person_name", "id": "rb-0077", "labels": [{"category": "person_name", "span": "Priya Raman"}], "text": "We need Priya Raman to confirm the numbers."}
+{"category": "secret", "id": "rb-0078", "labels": [{"category": "secret", "span": "gsk_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789"}], "text": "Deploy failed: the token gsk_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789 was rejected by the gateway."}
+{"category": "ip", "id": "rb-0079", "labels": [{"category": "ip", "span": "203.0.113.7"}], "text": "The box is reachable at 203.0.113.7 on the LAN."}
+{"category": "path", "id": "rb-0080", "labels": [{"category": "path", "span": "/Users/sam/Documents/client-work.pdf"}], "text": "The data lives at /Users/sam/Documents/client-work.pdf on the desktop."}
+{"category": "phone", "id": "rb-0081", "labels": [{"category": "phone", "span": "07700900789"}], "text": "Client asked us to ring 07700900789 tomorrow."}
+{"category": "financial", "id": "rb-0082", "labels": [{"category": "financial", "span": "\u00a312,000"}], "text": "The client approved \u00a312,000 for the next phase."}
+{"category": "phone", "id": "rb-0083", "labels": [{"category": "phone", "span": "+44 7700 900321"}], "text": "Client asked us to ring +44 7700 900321 tomorrow."}
+{"category": "project_name", "id": "rb-0084", "labels": [{"category": "project_name", "span": "Initiative Redshift"}], "text": "Initiative Redshift is still not announced, keep it quiet."}
+{"category": "secret", "id": "rb-0085", "labels": [{"category": "secret", "span": "Bearer 9dQ2mXb7Vc4RtY8Np1Ls6Kw3Jz5Hg0Fa2Ed"}], "text": "The client sent Bearer 9dQ2mXb7Vc4RtY8Np1Ls6Kw3Jz5Hg0Fa2Ed to the API."}
+{"category": "financial", "id": "rb-0086", "labels": [{"category": "financial", "span": "\u00a247,300 budget"}], "text": "The client approved \u00a247,300 budget for the next phase."}
+{"category": "secret", "id": "rb-0087", "labels": [{"category": "secret", "span": "pk-lf-9dQ2mXb7Vc4RtY8Np1Ls"}], "text": "The config holds pk-lf-9dQ2mXb7Vc4RtY8Np1Ls in plain sight, which is the bug."}
+{"category": "secret", "id": "rb-0088", "labels": [{"category": "secret", "span": "AKIAIOSFODNN7EXAMPLE"}], "text": "Pasted from the logs: AKIAIOSFODNN7EXAMPLE (do not share)."}
+{"category": "client_name", "id": "rb-0089", "labels": [{"category": "client_name", "span": "Verdant Systems"}], "text": "The invoice for Verdant Systems is still unpaid."}
+{"category": "person_name", "id": "rb-0090", "labels": [{"category": "person_name", "span": "Kwame Mensah"}], "text": "Kwame Mensah signed off on the design yesterday."}
+{"category": "secret", "id": "rb-0091", "labels": [{"category": "secret", "span": "SG.aBcDeFgHiJkLmNoPqRsTuV.wXyZ0123456789"}], "text": "Pasted from the logs: SG.aBcDeFgHiJkLmNoPqRsTuV.wXyZ0123456789 (do not share)."}
+{"category": "ip", "id": "rb-0092", "labels": [{"category": "ip", "span": "10.0.0.17"}], "text": "Gateway answered from 10.0.0.17."}
+{"category": "client_name", "id": "rb-0093", "labels": [{"category": "client_name", "span": "Ashgrove Legal"}], "text": "The invoice for Ashgrove Legal is still unpaid."}
+{"category": "email", "id": "rb-0094", "labels": [{"category": "email", "span": "billing@acme-corp.test"}], "text": "The alert went to billing@acme-corp.test at 03:12."}
+{"category": "ip", "id": "rb-0095", "labels": [{"category": "ip", "span": "192.168.1.24"}], "text": "Gateway answered from 192.168.1.24."}
+{"category": "phone", "id": "rb-0096", "labels": [{"category": "phone", "span": "+44 7700 900123"}], "text": "Client asked us to ring +44 7700 900123 tomorrow."}
+{"category": "phone", "id": "rb-0097", "labels": [{"category": "phone", "span": "+1 415 555 0132"}], "text": "The contact number on file is +1 415 555 0132."}
+{"category": "path", "id": "rb-0098", "labels": [{"category": "path", "span": "/home/priya/finances/2026.xlsx"}], "text": "Open /home/priya/finances/2026.xlsx and you will see it."}
+{"category": "secret", "id": "rb-0099", "labels": [{"category": "secret", "span": "xoxb-4829137465-8273645192837-AbCdEfGhIjKlMnOpQrStUvWx"}], "text": "Deploy failed: the token xoxb-4829137465-8273645192837-AbCdEfGhIjKlMnOpQrStUvWx was rejected by the gateway."}
+{"category": "phone", "id": "rb-0100", "labels": [{"category": "phone", "span": "07700 900654"}], "text": "The contact number on file is 07700 900654."}
+{"category": "project_name", "id": "rb-0101", "labels": [{"category": "project_name", "span": "The Hollow Crown"}], "text": "The Hollow Crown is still not announced, keep it quiet."}
+{"category": "secret", "id": "rb-0102", "labels": [{"category": "secret", "span": "{\"api_key\": \"9dQ2mXb7Vc4RtY8Np1Ls6Kw3Jz5\", \"model\": \"x\"}"}], "text": "response body: {\"api_key\": \"9dQ2mXb7Vc4RtY8Np1Ls6Kw3Jz5\", \"model\": \"x\"}"}
+{"category": "path", "id": "rb-0103", "labels": [{"category": "path", "span": "/home/priya/finances/2026.xlsx"}], "text": "Open /home/priya/finances/2026.xlsx and you will see it."}
+{"category": "person_name", "id": "rb-0104", "labels": [{"category": "person_name", "span": "Kwame Mensah"}], "text": "Kwame Mensah signed off on the design yesterday."}
+{"category": "secret", "id": "rb-0105", "labels": [{"category": "secret", "span": "syt_aBcDeFgHiJkLmNoPqRsTu"}], "text": "Deploy failed: the token syt_aBcDeFgHiJkLmNoPqRsTu was rejected by the gateway."}
+{"category": "health", "id": "rb-0106", "labels": [{"category": "health", "span": "prescribed 40mg atorvastatin"}], "text": "Private note: prescribed 40mg atorvastatin."}
+{"category": "project_name", "id": "rb-0107", "labels": [{"category": "project_name", "span": "Operation Tinderbox"}], "text": "Operation Tinderbox is still not announced, keep it quiet."}
+{"category": "person_name", "id": "rb-0108", "labels": [{"category": "person_name", "span": "Priya Raman"}], "text": "We need Priya Raman to confirm the numbers."}
+{"category": "email", "id": "rb-0109", "labels": [{"category": "email", "span": "alex.turner@example.com"}], "text": "The alert went to alex.turner@example.com at 03:12."}
+{"category": "url_token", "id": "rb-0110", "labels": [{"category": "url_token", "span": "https://example.test/reset?token=9dQ2mXb7Vc4RtY8Np1Ls6Kw3Jz5Hg0"}], "text": "Link that leaked: https://example.test/reset?token=9dQ2mXb7Vc4RtY8Np1Ls6Kw3Jz5Hg0"}
+{"category": "financial", "id": "rb-0111", "labels": [{"category": "financial", "span": "\u00a34,820.55"}], "text": "The client approved \u00a34,820.55 for the next phase."}
+{"category": "path", "id": "rb-0112", "labels": [{"category": "path", "span": "/Users/sam/Documents/client-work.pdf"}], "text": "The data lives at /Users/sam/Documents/client-work.pdf on the desktop."}
+{"category": "person_name", "id": "rb-0113", "labels": [{"category": "person_name", "span": "Tomasz Nowak"}], "text": "Tomasz Nowak signed off on the design yesterday."}
+{"category": "secret", "id": "rb-0114", "labels": [{"category": "secret", "span": "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA9dQ2mXb7Vc4RtY8Np1Ls6Kw3Jz5Hg0Fa2EdBcDeFgHiJkLmNoPq\n-----END RSA PRIVATE KEY-----"}], "text": "Here is the key material:\n-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA9dQ2mXb7Vc4RtY8Np1Ls6Kw3Jz5Hg0Fa2EdBcDeFgHiJkLmNoPq\n-----END RSA PRIVATE KEY-----\ntreat it as compromised"}
+{"category": "ip", "id": "rb-0115", "labels": [{"category": "ip", "span": "198.51.100.42"}], "text": "The box is reachable at 198.51.100.42 on the LAN."}
+{"category": "person_name", "id": "rb-0116", "labels": [{"category": "person_name", "span": "Jonas Weber"}], "text": "We need Jonas Weber to confirm the numbers."}
+{"category": "url_token", "id": "rb-0117", "labels": [{"category": "url_token", "span": "https://api.example.test/v1/billing?api_key=9dQ2mXb7Vc4RtY8"}], "text": "Link that leaked: https://api.example.test/v1/billing?api_key=9dQ2mXb7Vc4RtY8"}
+{"category": "email", "id": "rb-0118", "labels": [{"category": "email", "span": "support@fakevendor.test"}], "text": "Reply to support@fakevendor.test and cc the client."}
+{"category": "financial", "id": "rb-0119", "labels": [{"category": "financial", "span": "4111 1111 1111 1111"}], "text": "The client approved 4111 1111 1111 1111 for the next phase."}
+{"category": "secret", "id": "rb-0120", "labels": [{"category": "secret", "span": "sk_test_51H8xQm2Lp9RtV4Bn6Wc1Zs8Yh"}], "text": "curl -H 'Authorization: Bearer sk_test_51H8xQm2Lp9RtV4Bn6Wc1Zs8Yh' https://api.example.test/v1/ping"}
+{"category": "project_name", "id": "rb-0121", "labels": [{"category": "project_name", "span": "Atlas Rebuild"}], "text": "Atlas Rebuild is still not announced, keep it quiet."}
+{"category": "person_name", "id": "rb-0122", "labels": [{"category": "person_name", "span": "Sofia Rossi"}], "text": "Sofia Rossi signed off on the design yesterday."}
+{"category": "person_name", "id": "rb-0123", "labels": [{"category": "person_name", "span": "Dmitri Volkov"}], "text": "Waiting on Dmitri Volkov for the final call."}
+{"category": "path", "id": "rb-0124", "labels": [{"category": "path", "span": "/home/alex/secret-project/keys.txt"}], "text": "The data lives at /home/alex/secret-project/keys.txt on the desktop."}
+{"category": "financial", "id": "rb-0125", "labels": [{"category": "financial", "span": "invoice 4471 for \u00a39,250"}], "text": "The client approved invoice 4471 for \u00a39,250 for the next phase."}
+{"category": "person_name", "id": "rb-0126", "labels": [{"category": "person_name", "span": "Nnenna Okafor"}], "text": "Nnenna Okafor flagged the regression first."}
+{"category": "health", "id": "rb-0127", "labels": [{"category": "health", "span": "blood pressure 158/96"}], "text": "Private note: blood pressure 158/96."}
+{"category": "secret", "id": "rb-0128", "labels": [{"category": "secret", "span": "hsk-9dQ2mXb7Vc4RtY8Np1Ls6Kw3Jz5"}], "text": "Pasted from the logs: hsk-9dQ2mXb7Vc4RtY8Np1Ls6Kw3Jz5 (do not share)."}
+{"category": "url_token", "id": "rb-0129", "labels": [{"category": "url_token", "span": "https://example.test/reset?token=9dQ2mXb7Vc4RtY8Np1Ls6Kw3Jz5Hg0"}], "text": "Link that leaked: https://example.test/reset?token=9dQ2mXb7Vc4RtY8Np1Ls6Kw3Jz5Hg0"}
+{"category": "person_name", "id": "rb-0130", "labels": [{"category": "person_name", "span": "Rafael Mendoza"}], "text": "Rafael Mendoza signed off on the design yesterday."}
+{"category": "path", "id": "rb-0131", "labels": [{"category": "path", "span": "/home/jordan/repos/private-thing/main.py"}], "text": "Open /home/jordan/repos/private-thing/main.py and you will see it."}
+{"category": "path", "id": "rb-0132", "labels": [{"category": "path", "span": "/home/jordan/repos/private-thing/main.py"}], "text": "Open /home/jordan/repos/private-thing/main.py and you will see it."}
+{"category": "email", "id": "rb-0133", "labels": [{"category": "email", "span": "support@fakevendor.test"}], "text": "The alert went to support@fakevendor.test at 03:12."}
+{"category": "path", "id": "rb-0134", "labels": [{"category": "path", "span": "/home/priya/finances/2026.xlsx"}], "text": "Open /home/priya/finances/2026.xlsx and you will see it."}
+{"category": "secret", "id": "rb-0135", "labels": [{"category": "secret", "span": "bot8237645123:AAH9dQ2mXb7Vc4RtY8Np1Ls6Kw3Jz5Hg0"}], "text": "Telegram URL: https://api.telegram.org/bot8237645123:AAH9dQ2mXb7Vc4RtY8Np1Ls6Kw3Jz5Hg0/sendMessage"}
+{"category": "project_name", "id": "rb-0136", "labels": [{"category": "project_name", "span": "The Hollow Crown"}], "text": "The Hollow Crown is still not announced, keep it quiet."}
+{"category": "client_name", "id": "rb-0137", "labels": [{"category": "client_name", "span": "Northwind Traders"}], "text": "The invoice for Northwind Traders is still unpaid."}
+{"category": "secret", "id": "rb-0138", "labels": [{"category": "secret", "span": "OPENAI_API_KEY=sk-proj-QwErTyUiOp3AsDfGhJkLzXcVbNm1234567"}], "text": "Environment was set as OPENAI_API_KEY=sk-proj-QwErTyUiOp3AsDfGhJkLzXcVbNm1234567 on the box."}
+{"category": "secret", "id": "rb-0139", "labels": [{"category": "secret", "span": "dop_v1_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789abcdef"}], "text": "Deploy failed: the token dop_v1_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789abcdef was rejected by the gateway."}
+{"category": "financial", "id": "rb-0140", "labels": [{"category": "financial", "span": "IBAN GB29NWBK60161331926819"}], "text": "The client approved IBAN GB29NWBK60161331926819 for the next phase."}
+{"category": "url_token", "id": "rb-0141", "labels": [{"category": "url_token", "span": "https://storage.example.test/file?X-Amz-Signature=9dQ2mXb7Vc4RtY8Np1"}], "text": "Link that leaked: https://storage.example.test/file?X-Amz-Signature=9dQ2mXb7Vc4RtY8Np1"}
+{"category": "ip", "id": "rb-0142", "labels": [{"category": "ip", "span": "203.0.113.7"}], "text": "Gateway answered from 203.0.113.7."}
+{"category": "path", "id": "rb-0143", "labels": [{"category": "path", "span": "/home/priya/finances/2026.xlsx"}], "text": "Open /home/priya/finances/2026.xlsx and you will see it."}
+{"category": "financial", "id": "rb-0144", "labels": [{"category": "financial", "span": "\u00a385 per month"}], "text": "The client approved \u00a385 per month for the next phase."}
+{"category": "path", "id": "rb-0145", "labels": [{"category": "path", "span": "/Users/sam/Documents/client-work.pdf"}], "text": "The data lives at /Users/sam/Documents/client-work.pdf on the desktop."}
+{"category": "person_name", "id": "rb-0146", "labels": [{"category": "person_name", "span": "Lucia Fernandez"}], "text": "We need Lucia Fernandez to confirm the numbers."}
+{"category": "person_name", "id": "rb-0147", "labels": [{"category": "person_name", "span": "Oluwaseun Adeyemi"}], "text": "Oluwaseun Adeyemi flagged the regression first."}
+{"category": "email", "id": "rb-0148", "labels": [{"category": "email", "span": "mike.harrington@example.org"}], "text": "Reply to mike.harrington@example.org and cc the client."}
+{"category": "phone", "id": "rb-0149", "labels": [{"category": "phone", "span": "07700900789"}], "text": "Client asked us to ring 07700900789 tomorrow."}
+{"category": "secret", "id": "rb-0150", "labels": [{"category": "secret", "span": "gAAAAABk9dQ2mXb7Vc4RtY8Np1Ls6Kw3Jz5Hg0Fa2EdBcDeFg"}], "text": "Pasted from the logs: gAAAAABk9dQ2mXb7Vc4RtY8Np1Ls6Kw3Jz5Hg0Fa2EdBcDeFg (do not share)."}
+{"category": "secret", "id": "rb-0151", "labels": [{"category": "secret", "span": "r8_aBcDeFgHiJkLmNoPqRsTuVwXyZ012345"}], "text": "The config holds r8_aBcDeFgHiJkLmNoPqRsTuVwXyZ012345 in plain sight, which is the bug."}
+{"category": "email", "id": "rb-0152", "labels": [{"category": "email", "span": "ops@example.test"}], "text": "Escalate to ops@example.test before the deadline."}
+{"category": "secret", "id": "rb-0153", "labels": [{"category": "secret", "span": "ghp_9dQ2mXb7Vc4RtY8Np1Ls6Kw3Jz5Hg0Fa2Ed"}], "text": "Pasted from the logs: ghp_9dQ2mXb7Vc4RtY8Np1Ls6Kw3Jz5Hg0Fa2Ed (do not share)."}
+{"category": "secret", "id": "rb-0154", "labels": [{"category": "secret", "span": "password: \"9dQ2mXb7Vc4RtY8Np1Ls6Kw3\""}], "text": "config.yaml line 12: password: \"9dQ2mXb7Vc4RtY8Np1Ls6Kw3\""}
+{"category": "person_name", "id": "rb-0155", "labels": [{"category": "person_name", "span": "Mike Harrington"}], "text": "Mike Harrington signed off on the design yesterday."}
+{"category": "client_name", "id": "rb-0156", "labels": [{"category": "client_name", "span": "Halden & Rook"}], "text": "Halden & Rook wants the dashboard by Friday."}
+{"category": "person_name", "id": "rb-0157", "labels": [{"category": "person_name", "span": "Jonas Weber"}], "text": "We need Jonas Weber to confirm the numbers."}
+{"category": "client_name", "id": "rb-0158", "labels": [{"category": "client_name", "span": "Halden & Rook"}], "text": "The invoice for Halden & Rook is still unpaid."}
+{"category": "person_name", "id": "rb-0159", "labels": [{"category": "person_name", "span": "Zara Hussain"}], "text": "Zara Hussain flagged the regression first."}
+{"category": "person_name", "id": "rb-0160", "labels": [{"category": "person_name", "span": "Amara Diallo"}], "text": "Waiting on Amara Diallo for the final call."}
+{"category": "phone", "id": "rb-0161", "labels": [{"category": "phone", "span": "07700 900654"}], "text": "The contact number on file is 07700 900654."}
+{"category": "secret", "id": "rb-0162", "labels": [{"category": "secret", "span": "glpat-Xy7Qm2Lp9RtV4Bn6Wc1Z"}], "text": "The config holds glpat-Xy7Qm2Lp9RtV4Bn6Wc1Z in plain sight, which is the bug."}
+{"category": "secret", "id": "rb-0163", "labels": [{"category": "secret", "span": "fal_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123"}], "text": "Deploy failed: the token fal_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123 was rejected by the gateway."}
+{"category": "secret", "id": "rb-0164", "labels": [{"category": "secret", "span": "aws_secret_access_key = 9dQ2mXb7Vc4RtY8Np1Ls6Kw3Jz5Hg0Fa2Ed"}], "text": ".env contains aws_secret_access_key = 9dQ2mXb7Vc4RtY8Np1Ls6Kw3Jz5Hg0Fa2Ed"}
+{"category": "email", "id": "rb-0165", "labels": [{"category": "email", "span": "jane.doe@example.net"}], "text": "Reply to jane.doe@example.net and cc the client."}
+{"category": "person_name", "id": "rb-0166", "labels": [{"category": "person_name", "span": "Elena Petrova"}], "text": "Elena Petrova flagged the regression first."}
+{"category": "secret", "id": "rb-0167", "labels": [{"category": "secret", "span": "GR1348941Xy7Qm2Lp9RtV4Bn6Wc"}], "text": "Pasted from the logs: GR1348941Xy7Qm2Lp9RtV4Bn6Wc (do not share)."}
+{"category": "email", "id": "rb-0168", "labels": [{"category": "email", "span": "hello@synthetic-studio.test"}], "text": "The alert went to hello@synthetic-studio.test at 03:12."}
+{"category": "financial", "id": "rb-0169", "labels": [{"category": "financial", "span": "invoice 4471 for \u00a39,250"}], "text": "The client approved invoice 4471 for \u00a39,250 for the next phase."}
+{"category": "financial", "id": "rb-0170", "labels": [{"category": "financial", "span": "IBAN GB29NWBK60161331926819"}], "text": "The client approved IBAN GB29NWBK60161331926819 for the next phase."}
+{"category": "phone", "id": "rb-0171", "labels": [{"category": "phone", "span": "07700900789"}], "text": "Client asked us to ring 07700900789 tomorrow."}
+{"category": "client_name", "id": "rb-0172", "labels": [{"category": "client_name", "span": "Pinewood Motors"}], "text": "Pinewood Motors wants the dashboard by Friday."}
+{"category": "url_token", "id": "rb-0173", "labels": [{"category": "url_token", "span": "https://api.example.test/v1/billing?api_key=9dQ2mXb7Vc4RtY8"}], "text": "Link that leaked: https://api.example.test/v1/billing?api_key=9dQ2mXb7Vc4RtY8"}
+{"category": "phone", "id": "rb-0174", "labels": [{"category": "phone", "span": "07700 900456"}], "text": "The contact number on file is 07700 900456."}
+{"category": "health", "id": "rb-0175", "labels": [{"category": "health", "span": "sick note until 12 November"}], "text": "Private note: sick note until 12 November."}
+{"category": "person_name", "id": "rb-0176", "labels": [{"category": "person_name", "span": "Nnenna Okafor"}], "text": "Nnenna Okafor flagged the regression first."}
+{"category": "person_name", "id": "rb-0177", "labels": [{"category": "person_name", "span": "Rafael Mendoza"}], "text": "Rafael Mendoza signed off on the design yesterday."}
+{"category": "person_name", "id": "rb-0178", "labels": [{"category": "person_name", "span": "Elena Petrova"}], "text": "Elena Petrova flagged the regression first."}
+{"category": "url_token", "id": "rb-0179", "labels": [{"category": "url_token", "span": "https://example.test/reset?token=9dQ2mXb7Vc4RtY8Np1Ls6Kw3Jz5Hg0"}], "text": "Link that leaked: https://example.test/reset?token=9dQ2mXb7Vc4RtY8Np1Ls6Kw3Jz5Hg0"}
+{"category": "person_name", "id": "rb-0180", "labels": [{"category": "person_name", "span": "Arjun Mehta"}], "text": "Waiting on Arjun Mehta for the final call."}
+{"category": "person_name", "id": "rb-0181", "labels": [{"category": "person_name", "span": "Mike Harrington"}], "text": "Mike Harrington signed off on the design yesterday."}
+{"category": "url_token", "id": "rb-0182", "labels": [{"category": "url_token", "span": "https://api.example.test/v1/billing?api_key=9dQ2mXb7Vc4RtY8"}], "text": "Link that leaked: https://api.example.test/v1/billing?api_key=9dQ2mXb7Vc4RtY8"}
+{"category": "secret", "id": "rb-0183", "labels": [{"category": "secret", "span": "sk-sp-9dQ2mXb7.Vc4RtY8Np1Ls6Kw3Jz5"}], "text": "curl -H 'Authorization: Bearer sk-sp-9dQ2mXb7.Vc4RtY8Np1Ls6Kw3Jz5' https://api.example.test/v1/ping"}
+{"category": "person_name", "id": "rb-0184", "labels": [{"category": "person_name", "span": "Amara Diallo"}], "text": "Waiting on Amara Diallo for the final call."}
+{"category": "health", "id": "rb-0185", "labels": [{"category": "health", "span": "sick note until 12 November"}], "text": "Private note: sick note until 12 November."}
+{"category": "email", "id": "rb-0186", "labels": [{"category": "email", "span": "billing@acme-corp.test"}], "text": "Escalate to billing@acme-corp.test before the deadline."}
+{"category": "client_name", "id": "rb-0187", "labels": [{"category": "client_name", "span": "Kestrel Labs"}], "text": "Kestrel Labs wants the dashboard by Friday."}
+{"category": "secret", "id": "rb-0188", "labels": [{"category": "secret", "span": "sk_live_51H8xQm2Lp9RtV4Bn6Wc1Zs8Yh"}], "text": "curl -H 'Authorization: Bearer sk_live_51H8xQm2Lp9RtV4Bn6Wc1Zs8Yh' https://api.example.test/v1/ping"}
+{"category": "financial", "id": "rb-0189", "labels": [{"category": "financial", "span": "refund of \u00a3119.99"}], "text": "The client approved refund of \u00a3119.99 for the next phase."}
+{"category": "secret", "id": "rb-0190", "labels": [{"category": "secret", "span": "npm_aBcDeFgHiJkLmNoPqRsTuVwXyZ012345678"}], "text": "Pasted from the logs: npm_aBcDeFgHiJkLmNoPqRsTuVwXyZ012345678 (do not share)."}
+{"category": "phone", "id": "rb-0191", "labels": [{"category": "phone", "span": "+1 415 555 0132"}], "text": "The contact number on file is +1 415 555 0132."}
+{"category": "client_name", "id": "rb-0192", "labels": [{"category": "client_name", "span": "Bluepeak Analytics"}], "text": "Bluepeak Analytics wants the dashboard by Friday."}
+{"category": "ip", "id": "rb-0193", "labels": [{"category": "ip", "span": "203.0.113.7"}], "text": "The box is reachable at 203.0.113.7 on the LAN."}
+{"category": "financial", "id": "rb-0194", "labels": [{"category": "financial", "span": "\u00a34,820.55"}], "text": "The client approved \u00a34,820.55 for the next phase."}
+{"category": "health", "id": "rb-0195", "labels": [{"category": "health", "span": "prescribed 40mg atorvastatin"}], "text": "Private note: prescribed 40mg atorvastatin."}
+{"category": "financial", "id": "rb-0196", "labels": [{"category": "financial", "span": "4111 1111 1111 1111"}], "text": "The client approved 4111 1111 1111 1111 for the next phase."}
+{"category": "email", "id": "rb-0197", "labels": [{"category": "email", "span": "support@fakevendor.test"}], "text": "Escalate to support@fakevendor.test before the deadline."}
+{"category": "email", "id": "rb-0198", "labels": [{"category": "email", "span": "alerts@monitoring.example"}], "text": "Escalate to alerts@monitoring.example before the deadline."}
+{"category": "secret", "id": "rb-0199", "labels": [{"category": "secret", "span": "xai-Xy7Qm2Lp9RtV4Bn6Wc1Zs8Yh3Jd5Gf0KaBcDe"}], "text": "The config holds xai-Xy7Qm2Lp9RtV4Bn6Wc1Zs8Yh3Jd5Gf0KaBcDe in plain sight, which is the bug."}
+{"category": "client_name", "id": "rb-0200", "labels": [{"category": "client_name", "span": "Bluepeak Analytics"}], "text": "The invoice for Bluepeak Analytics is still unpaid."}
+{"category": "email", "id": "rb-0201", "labels": [{"category": "email", "span": "jane.doe@example.net"}], "text": "The alert went to jane.doe@example.net at 03:12."}
+{"category": "secret", "id": "rb-0202", "labels": [{"category": "secret", "span": "gldt-Xy7Qm2Lp9RtV4Bn6Wc1Z"}], "text": "The config holds gldt-Xy7Qm2Lp9RtV4Bn6Wc1Z in plain sight, which is the bug."}
+{"category": "ip", "id": "rb-0203", "labels": [{"category": "ip", "span": "198.51.100.42"}], "text": "Gateway answered from 198.51.100.42."}
+{"category": "person_name", "id": "rb-0204", "labels": [{"category": "person_name", "span": "Sofia Rossi"}], "text": "Sofia Rossi signed off on the design yesterday."}
+{"category": "path", "id": "rb-0205", "labels": [{"category": "path", "span": "/home/alex/secret-project/keys.txt"}], "text": "The data lives at /home/alex/secret-project/keys.txt on the desktop."}
+{"category": "secret", "id": "rb-0206", "labels": [{"category": "secret", "span": "gho_aBcDeFgHiJkLmNoPqRsTuVwXyZ012345"}], "text": "Deploy failed: the token gho_aBcDeFgHiJkLmNoPqRsTuVwXyZ012345 was rejected by the gateway."}
+{"category": "health", "id": "rb-0207", "labels": [{"category": "health", "span": "NHS number 943 476 5919"}], "text": "Private note: NHS number 943 476 5919."}
+{"category": "ip", "id": "rb-0208", "labels": [{"category": "ip", "span": "192.168.1.24"}], "text": "The box is reachable at 192.168.1.24 on the LAN."}
+{"category": "person_name", "id": "rb-0209", "labels": [{"category": "person_name", "span": "Chen Wei"}], "text": "We need Chen Wei to confirm the numbers."}
+{"category": "secret", "id": "rb-0210", "labels": [{"category": "secret", "span": "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"}], "text": "curl -H 'Authorization: Bearer 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' https://api.example.test/v1/ping"}
+{"category": "health", "id": "rb-0211", "labels": [{"category": "health", "span": "diagnosed with type 2 diabetes"}], "text": "Private note: diagnosed with type 2 diabetes."}
+{"category": "person_name", "id": "rb-0212", "labels": [{"category": "person_name", "span": "Oluwaseun Adeyemi"}], "text": "Oluwaseun Adeyemi flagged the regression first."}
+{"category": "email", "id": "rb-0213", "labels": [{"category": "email", "span": "jane.doe@example.net"}], "text": "Escalate to jane.doe@example.net before the deadline."}
+{"category": "person_name", "id": "rb-0214", "labels": [{"category": "person_name", "span": "Hiroshi Tanaka"}], "text": "Waiting on Hiroshi Tanaka for the final call."}
+{"category": "phone", "id": "rb-0215", "labels": [{"category": "phone", "span": "+44 7700 900123"}], "text": "Client asked us to ring +44 7700 900123 tomorrow."}
+{"category": "phone", "id": "rb-0216", "labels": [{"category": "phone", "span": "07700 900456"}], "text": "The contact number on file is 07700 900456."}
+{"category": "phone", "id": "rb-0217", "labels": [{"category": "phone", "span": "+44 7700 900321"}], "text": "Client asked us to ring +44 7700 900321 tomorrow."}
+{"category": "email", "id": "rb-0218", "labels": [{"category": "email", "span": "ops@example.test"}], "text": "Reply to ops@example.test and cc the client."}
+{"category": "project_name", "id": "rb-0219", "labels": [{"category": "project_name", "span": "Initiative Redshift"}], "text": "Initiative Redshift is still not announced, keep it quiet."}
+{"category": "ip", "id": "rb-0220", "labels": [{"category": "ip", "span": "172.16.4.9"}], "text": "Gateway answered from 172.16.4.9."}
+{"category": "secret", "id": "rb-0221", "labels": [{"category": "secret", "span": "exa_aBcDeFgHiJkLmNoPqRsTuVwXyZ01234"}], "text": "curl -H 'Authorization: Bearer exa_aBcDeFgHiJkLmNoPqRsTuVwXyZ01234' https://api.example.test/v1/ping"}
+{"category": "ip", "id": "rb-0222", "labels": [{"category": "ip", "span": "10.0.0.17"}], "text": "Gateway answered from 10.0.0.17."}
+{"category": "secret", "id": "rb-0223", "labels": [{"category": "secret", "span": "AIzaSyD-9tSrke7H1pQ2mB4nX6vZ8wY0aC3eF5g"}], "text": "The config holds AIzaSyD-9tSrke7H1pQ2mB4nX6vZ8wY0aC3eF5g in plain sight, which is the bug."}
+{"category": "ip", "id": "rb-0224", "labels": [{"category": "ip", "span": "192.168.1.24"}], "text": "The box is reachable at 192.168.1.24 on the LAN."}
+{"category": "person_name", "id": "rb-0225", "labels": [{"category": "person_name", "span": "Fatima Al-Sayed"}], "text": "Waiting on Fatima Al-Sayed for the final call."}
+{"category": "email", "id": "rb-0226", "labels": [{"category": "email", "span": "billing@acme-corp.test"}], "text": "Reply to billing@acme-corp.test and cc the client."}
+{"category": "phone", "id": "rb-0227", "labels": [{"category": "phone", "span": "+1 415 555 0132"}], "text": "The contact number on file is +1 415 555 0132."}
+{"category": "url_token", "id": "rb-0228", "labels": [{"category": "url_token", "span": "https://storage.example.test/file?X-Amz-Signature=9dQ2mXb7Vc4RtY8Np1"}], "text": "Link that leaked: https://storage.example.test/file?X-Amz-Signature=9dQ2mXb7Vc4RtY8Np1"}
+{"category": "email", "id": "rb-0229", "labels": [{"category": "email", "span": "alex.turner@example.com"}], "text": "Escalate to alex.turner@example.com before the deadline."}
+{"category": "project_name", "id": "rb-0230", "labels": [{"category": "project_name", "span": "Project Nightjar"}], "text": "Project Nightjar is still not announced, keep it quiet."}
+{"category": "email", "id": "rb-0231", "labels": [{"category": "email", "span": "alex.turner@example.com"}], "text": "Reply to alex.turner@example.com and cc the client."}
+{"category": "email", "id": "rb-0232", "labels": [{"category": "email", "span": "alerts@monitoring.example"}], "text": "Reply to alerts@monitoring.example and cc the client."}

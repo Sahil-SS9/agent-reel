@@ -1,0 +1,9 @@
+{
+ "key": "redact.spans|openai-compat:auto|0bbee378e39d2b3e6eac128d72ef6c50|283e6ba8edebd51c0b501ac9fed93fff",
+ "model": "openai-compat:auto",
+ "stage": "redact.spans",
+ "v": 1,
+ "value": {
+  "spans": []
+ }
+}

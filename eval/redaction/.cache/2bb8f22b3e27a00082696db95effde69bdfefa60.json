@@ -1,0 +1,14 @@
+{
+ "key": "redact.spans|openai-compat:auto|0bbee378e39d2b3e6eac128d72ef6c50|ba86766ba1f931d74449adb21374f237",
+ "model": "openai-compat:auto",
+ "stage": "redact.spans",
+ "v": 1,
+ "value": {
+  "spans": [
+   {
+    "category": "financial",
+    "text": "\u00a3119.99"
+   }
+  ]
+ }
+}

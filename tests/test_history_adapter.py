@@ -14,6 +14,7 @@ from adapters.hermes.history import HermesHistorySource, main
 from canon.events import (
     KIND_CRON_FINISHED,
     KIND_MEMORY_ADDED,
+    KIND_MEMORY_FACT,
     KIND_MEMORY_REMOVED,
     KIND_SESSION_STARTED,
     KIND_SKILL_CREATED,
@@ -189,7 +190,10 @@ def test_memory_snapshot_diff_reports_added_and_removed(fresh_home):
         if event.profile == "default" and event.payload.get("file") == "MEMORY.md"
     ]
     kinds = {event.kind for event in events}
-    assert kinds == {KIND_MEMORY_ADDED, KIND_MEMORY_REMOVED}
+    # The current facts are always emitted (stable across re-runs); the diff rides
+    # on top of them.
+    assert KIND_MEMORY_FACT in kinds
+    assert {KIND_MEMORY_ADDED, KIND_MEMORY_REMOVED} <= kinds
     assert sum(1 for e in events if e.kind == KIND_MEMORY_ADDED) == 1
     assert sum(1 for e in events if e.kind == KIND_MEMORY_REMOVED) == 1
 
@@ -213,8 +217,17 @@ def test_summary_is_readable_and_prints_no_message_text(hermes_env, capsys):
     assert "last 50 sessions" in out
     assert "Synthetic request" not in out, "message content must never be printed"
     assert "redaction preflight" in out
-    # Titles are allowed and required by the gate.
-    assert "Synthetic " in out
+    # Owner decision 3 (M0 audit): titles no longer ride in the event stream and
+    # are not printed unless the diagnostic is asked for them.
+    assert "Synthetic alpha session" not in out
+    assert "--show-titles" in out
+
+
+def test_summary_can_show_titles_on_request(hermes_env, capsys):
+    code = main(["--days", "7", "--summary", "--show-titles"])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "Synthetic " in out, "the diagnostic should fetch titles when asked"
 
 
 def test_redaction_preflight_flags_a_planted_secret(hermes_env, capsys, monkeypatch):

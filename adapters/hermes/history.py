@@ -55,6 +55,7 @@ from canon.events import (
     KIND_SKILL_PATCHED,
     KIND_SKILL_USED,
     KIND_TASK_CLAIMED,
+    KIND_TASK_COMMENT,
     KIND_TASK_CREATED,
     KIND_TASK_FINISHED,
     KIND_TASK_STATUS,
@@ -90,6 +91,7 @@ PK_COLUMNS: dict[str, str] = {
     "tasks": "id",
     "task_events": "id",
     "task_runs": "id",
+    "task_comments": "id",
     "executions": "id",
 }
 
@@ -417,7 +419,8 @@ class HermesHistorySource:
                     payload = {
                         "source": _row_get(row, "source") or "",
                         "model": _row_get(row, "model") or "",
-                        "title": _preview(title),
+                        # Owner decision 3 (M0 audit): the title lives behind the
+                        # content ref and only the redaction gate releases it.
                         "title_chars": len(title),
                         "started_at": started,
                         "ended_at": ended,
@@ -438,7 +441,7 @@ class HermesHistorySource:
                         ts=started,
                         profile=profile,
                         actor=profile,
-                        subject=_preview(title, 48),
+                        subject=_row_get(row, "source") or "",
                         payload=payload,
                         store=store,
                         table="sessions",
@@ -653,6 +656,8 @@ class HermesHistorySource:
                 yield event
             for event in self._kanban_runs(conn, window, allowed):
                 yield event
+            for event in self._kanban_comments(conn, window, allowed):
+                yield event
         finally:
             ro.safe_close(conn)
 
@@ -711,10 +716,9 @@ class HermesHistorySource:
                     ts=created,
                     profile=assignee,
                     actor=(_row_get(row, "created_by") or "").strip(),
-                    subject=_preview(title, 48),
+                    subject=task_id,
                     payload={
                         "task_id": task_id,
-                        "title": _preview(title),
                         "title_chars": len(title),
                         "assignee": assignee,
                         "status": _row_get(row, "status") or "",
@@ -922,6 +926,62 @@ class HermesHistorySource:
                 )
                 self._count(SOURCE_KANBAN, emitted=1)
 
+    def _kanban_comments(
+        self, conn: sqlite3.Connection, window: Window, allowed: set[str] | None = None
+    ) -> Iterator[Event]:
+        """Task comments: the richest "who said what" signal the fleet produces.
+
+        Added in M1 on the owner's decision, and behind the redaction gate: the
+        body is only reachable through a ContentRef.
+        """
+        if not ro.table_exists(conn, "task_comments"):
+            return
+        cols = ro.filter_columns(
+            conn, "task_comments", ("id", "task_id", "author", "body", "created_at")
+        )
+        if not cols:
+            return
+        select = ", ".join(f"c.{column}" for column in cols)
+        join = "LEFT JOIN tasks t ON t.id = c.task_id" if ro.table_exists(conn, "tasks") else ""
+        assignee_select = ", t.assignee AS assignee" if join else ""
+        sql = (
+            f"SELECT {select}{assignee_select} FROM task_comments c {join} "
+            "WHERE c.created_at >= ? ORDER BY c.created_at ASC, c.id ASC"
+        )
+        params: list[Any] = [window.since]
+        if window.until is not None:
+            sql = sql.replace("ORDER BY", "AND c.created_at < ? ORDER BY")
+            params.append(window.until)
+        for row in conn.execute(sql, params):
+            assignee = (_row_get(row, "assignee") or "").strip()
+            if allowed is not None and assignee not in allowed:
+                continue
+            ts = _epoch(_row_get(row, "created_at"))
+            if ts is None:
+                continue
+            body = _row_get(row, "body") or ""
+            author = str(_row_get(row, "author") or "").strip()
+            yield build_event(
+                source=SOURCE_KANBAN,
+                kind=KIND_TASK_COMMENT,
+                ts=ts,
+                profile=assignee,
+                actor=author,
+                subject=author,
+                payload={
+                    "task_id": str(_row_get(row, "task_id") or ""),
+                    "author": author,
+                    "comment_chars": len(body),
+                    "comment_digest": text_digest(body) if body else "",
+                    "assignee": assignee,
+                },
+                store=STORE_KANBAN,
+                table="task_comments",
+                pk=str(_row_get(row, "id")),
+                content_column="body",
+            )
+            self._count(SOURCE_KANBAN, emitted=1)
+
     # -- skills ------------------------------------------------------------
     def _skill_usage_files(self) -> Iterator[tuple[str, Path]]:
         fleet = self.paths.skills_usage_json
@@ -1125,6 +1185,32 @@ class HermesHistorySource:
             if prior is not None:
                 prior_set = set(prior)
                 current_set = set(facts)
+                # Always emit the current facts, so a re-run with no changes gives
+                # a byte-identical stream (and therefore identical canon). The
+                # added/removed events are the diff on top.
+                for index, fact in enumerate(facts):
+                    if not window.contains(mtime):
+                        continue
+                    yield build_event(
+                        source=SOURCE_MEMORY,
+                        kind=KIND_MEMORY_FACT,
+                        ts=mtime,
+                        profile=profile,
+                        actor=profile,
+                        subject=path.name,
+                        payload={
+                            "file": path.name,
+                            "fact_digest": text_digest(fact),
+                            "fact_chars": len(fact),
+                            "index": index,
+                            "change": "present",
+                        },
+                        store=store,
+                        table="lines",
+                        pk=str(index),
+                        content_column="line",
+                    )
+                    self._count(SOURCE_MEMORY, emitted=1)
                 for index, fact in enumerate(facts):
                     if fact in prior_set:
                         continue
@@ -1227,6 +1313,7 @@ class HermesHistorySource:
             "tasks": {"title", "body", "result"},
             "task_events": {"payload"},
             "task_runs": {"summary", "metadata", "error"},
+            "task_comments": {"body"},
             "executions": {"error"},
         }
         if column not in allowed.get(table, set()):
@@ -1366,6 +1453,7 @@ def _summary_lines(
     window: Window,
     *,
     top_sessions: int = 50,
+    show_titles: bool = False,
 ) -> list[str]:
     per_source: dict[str, int] = {}
     per_profile: dict[str, int] = {}
@@ -1446,7 +1534,13 @@ def _summary_lines(
             row += f"{per_profile_source.get((profile, name), 0):>10,}"
         lines.append(row)
     lines.append("")
-    lines.append(f"=== last {top_sessions} sessions (title, profile, time, message count) ===")
+    lines.append(
+        f"=== last {top_sessions} sessions "
+        f"(title, profile, time, message count) ==="
+        if show_titles
+        else f"=== last {top_sessions} sessions (profile, time, message count; "
+        f"titles stay behind the gate - add --show-titles) ==="
+    )
     sessions.sort(
         key=lambda ev: (
             ev.payload.get("last_activity_at") or ev.payload.get("started_at") or ev.ts
@@ -1455,7 +1549,12 @@ def _summary_lines(
     )
     for event in sessions[:top_sessions]:
         activity = event.payload.get("last_activity_at") or event.payload.get("started_at")
-        title = event.payload.get("title") or "(untitled)"
+        title = ""
+        if show_titles and event.content_ref is not None:
+            try:
+                title = _preview(source.fetch_content(event.content_ref))
+            except Exception:  # noqa: BLE001 - a diagnostic must never fail the run
+                title = "(title unavailable)"
         lines.append(
             f"{_iso(activity):<25} {event.profile or '(none)':<18} "
             f"{event.payload.get('source', ''):<9} "
@@ -1475,6 +1574,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--since", default=None, help="explicit window start (epoch or ISO-8601)")
     parser.add_argument("--until", default=None, help="explicit window end (epoch or ISO-8601)")
     parser.add_argument("--summary", action="store_true", help="print the human summary")
+    parser.add_argument(
+        "--show-titles",
+        action="store_true",
+        help=(
+            "include session titles in the summary. Titles are not carried in the "
+            "event stream (owner decision: only the redaction gate releases them); "
+            "this diagnostic fetches them directly for the owner's own screen."
+        ),
+    )
     parser.add_argument("--out", default=None, help="write the event stream as JSONL to this path")
     parser.add_argument(
         "--sources",
@@ -1552,7 +1660,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 count += 1
         print(f"wrote {count:,} events to {out_path}")
     elif args.summary:
-        lines = _summary_lines(source, events, window)
+        lines = _summary_lines(
+            source, events, window, show_titles=bool(args.show_titles)
+        )
         if args.redaction_preflight:
             from adapters.hermes.leakscan import scan_lines
 

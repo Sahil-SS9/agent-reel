@@ -121,6 +121,13 @@ def _kanban_db(path: Path) -> sqlite3.Connection:
             summary TEXT,
             error TEXT
         );
+        CREATE TABLE task_comments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id TEXT NOT NULL,
+            author TEXT NOT NULL,
+            body TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+        );
         """
     )
     return conn
@@ -355,6 +362,15 @@ def build(target: Path, *, seed: int = 20261023, days: int = DAYS) -> Path:
             ),
         )
         kanban.execute("UPDATE task_events SET run_id = ? WHERE task_id = ?", (cur.lastrowid, task_id))
+        kanban.execute(
+            "INSERT INTO task_comments (task_id, author, body, created_at) VALUES (?,?,?,?)",
+            (
+                task_id,
+                rng.choice(PROFILES),
+                f"Synthetic comment on {task_id}: fixture note {rng.randint(1, 99)}.",
+                created + 120,
+            ),
+        )
     kanban.commit()
     kanban.close()
 

@@ -18,10 +18,10 @@ Audit fixes: `a37fca9` (F1), `ed872ae` (F2), `c8d54d9` (F3), `66fd89f` (F4). Bra
 | Redaction benchmark, ≥200 synthetic labelled items | **VERIFIED** — 232 items, 11 categories | `build-evidence/M1/redaction-benchmark.json` (outside the repo) |
 | 100% recall on secrets | **VERIFIED** — 51/51 caught, 0 leaked | `redaction-benchmark.txt` |
 | ≥95% recall on names | **VERIFIED** — person 40/40, client 14/14, project 10/10 (100%) | `redaction-benchmark.txt` |
-| Every IR line resolves to real event ids | **VERIFIED** — `validate_ir` in the pipeline plus a test | `run/script-ir.json`, `tests/test_m1_engine.py` |
+| Every IR line resolves to real event ids | **VERIFIED** — `validate_ir` in the pipeline plus a test | `run-live/script-ir.json`, `tests/test_m1_engine.py` |
 | Same input twice → byte-identical canon and IR | **VERIFIED** — deterministic mode (pinned window) and model mode (cache) | `det-canon-1.json` == `det-run/canon.json`; `det-model-canon-1.json` == `det-model/canon.json`; same for the IR |
-| Real-data dry run: one episode script, last 7 days, redacted, script only | **VERIFIED** — 6 panels, writer `llm`, 0 quarantined | `run/episode-script.md`, `run/metrics.json` |
-| Arc template: each panel causes the next | **VERIFIED** — roles are chosen chronologically and committed in order; a test asserts the timestamps rise | `run/arcs.json`, `tests/test_m1_engine.py::test_arc_has_the_template_roles_in_order` |
+| Real-data dry run: one episode script, last 7 days, redacted, script only | **VERIFIED** — 6 panels, writer `llm`, 0 quarantined | `run-live/episode-script.md`, `run-live/metrics.json` |
+| Arc template: each panel causes the next | **VERIFIED** — roles are chosen chronologically and committed in order; a test asserts the timestamps rise | `run-live/arcs.json`, `tests/test_m1_engine.py::test_arc_has_the_template_roles_in_order` |
 | Ingest idempotent on re-run | **VERIFIED** — same event ids, no duplicates, second run byte-identical | determinism evidence above |
 | Beats → arcs, canon with retcon log, episode planner, Script IR, cache | **VERIFIED** | `canon/beats.py`, `arcs.py`, `canon.py`, `episode.py`, `cache.py` |
 | F1 privacy + post-gate payload | **VERIFIED** — 13 tests | commit `a37fca9`, `tests/test_gate.py` |
@@ -33,18 +33,19 @@ Audit fixes: `a37fca9` (F1), `ed872ae` (F2), `c8d54d9` (F3), `66fd89f` (F4). Bra
 ## Real-data run (last 7 days)
 
 ```
-events ingested          80,526
-events with text          8,491   (bounded, priority ordered)
-gated                     80,737   (deep-gated subset: 14 events)
+events ingested          81,152
+events with text          8,319   (bounded, priority ordered)
+gated                     81,152   (deep-gated subset: 14 events)
 quarantined                    0
 beats                        400   (cap)
 arcs                           3   (primary + rivalry + montage candidates)
 panels                         6
 dialogue                    llm
-wall clock                 302 s   (ingest 4.8 s, text 29.7 s, vocabulary 132.7 s, gate 201.9 s, deep 248.6 s)
+wall clock                 128 s   (ingest 3.3 s, text 22.2 s, vocabulary 82.0 s, gate 127.1 s, deep 127.5 s)
 ```
 
-Findings by category in that week: `path` 4,587, `project_name` 483, `person_name` 334, `ip` 189, `email` 144, `secret` 116.
+Findings by category in that week: `path` 4,337, `project_name` 437, `person_name` 365,
+`ip` 193, `email` 140, `secret` 103, `health` 1.
 
 The script reads as one arc: a latency spike on the local model server, a missing
 timeout key found during diagnosis, a worker that gives up at the climax, then the
@@ -52,7 +53,7 @@ fix holding in the aftermath and the win. Six panels, six distinct arc roles, ea
 one caused by the previous panel.
 
 The dialogue is **not quoted here**: output from a real-data run belongs in the
-evidence folder (ground rule 5), so read `build-evidence/M1/run/episode-script.md`.
+evidence folder (ground rule 5), so read `build-evidence/M1/run-live/episode-script.md`.
 What M1 can say from inside the repo is the structure: 6 panels, roles
 setup/hidden_problem/diagnosis/climax/aftermath/win, writer `llm`, every line
 carrying one source event id, 0 panels without text, leak scan clean.

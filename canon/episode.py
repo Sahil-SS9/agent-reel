@@ -354,6 +354,26 @@ def compose_caption_first(beat: Beat | None) -> str:
     return ""
 
 
+def _logline(title: str, panels: Sequence[Panel]) -> str:
+    """One short line for the script header: the title plus a brief where-we-ended."""
+    import re as _re
+
+    seed = ""
+    for panel in reversed(panels):
+        if panel.caption:
+            seed = panel.caption
+            break
+    seed = _re.sub(r"https?://\S+", "a link", seed)
+    seed = " ".join(seed.split())
+    words = seed.split()[:12]
+    while words and words[-1].lower() in {"and", "or", "the", "a", "of", "to", "with"}:
+        words = words[:-1]
+    tail = " ".join(words).rstrip(" .,;:")
+    if title and tail:
+        return f"{title} \u2014 {tail}"
+    return title or tail
+
+
 def plan_episode(
     arc: Arc,
     beats: Sequence[Beat],
@@ -657,7 +677,7 @@ def plan_episode(
             label=(last.label + " \u00b7 " if last.label else "") + "To be continued\u2026",
         )
 
-    logline = f"{title or arc.title}: {arc.stakes}"
+    logline = _logline(title, panels)
     return EpisodeIR(
         episode_id=make_event_id("episode", format, arc.opened, {"arc": arc.id, "n": number}),
         season=season,

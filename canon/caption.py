@@ -103,9 +103,16 @@ def _text_for(event: GatedEvent) -> str:
     return ""
 
 
-def compose_caption(event: GatedEvent) -> str:
+def compose_caption(
+    event: GatedEvent, *, display: dict[str, str] | None = None
+) -> str:
     """A plain sentence about one event, or '' when there is nothing to say."""
     actor = _actor_for(event)
+    if display:
+        for key in (event.actor, event.profile):
+            if key and key in display:
+                actor = display[key]
+                break
     verb = _verb_for(event)
     text = _text_for(event)
     obj = _object_from(text) if text else ""

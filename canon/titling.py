@@ -23,6 +23,11 @@ TITLE_PROMPT = (
 )
 
 #: Words a title may use that the beats need not contain: glue and register only.
+#: A title must not end on a word that needs an object.
+_DANGLING = frozenset(
+    "against checked for with on of the and to in at from by vs versus about".split()
+)
+
 _ALLOWED = frozenset(
     """
     the a an of and or in on at to for with from by is was are were be been it its
@@ -40,7 +45,13 @@ def _clean(title: str) -> str:
     if len(words) > MAX_TITLE_WORDS:
         text = " ".join(words[:MAX_TITLE_WORDS])
     if len(text) > MAX_TITLE_CHARS:
-        text = text[:MAX_TITLE_CHARS].rstrip(" ,;:-")
+        text = text[:MAX_TITLE_CHARS]
+        # Never cut a word in half, and never end on a word that needs a noun after it.
+        if " " in text:
+            text = text.rsplit(" ", 1)[0]
+        text = text.rstrip(" ,;:-")
+        while text.split() and text.split()[-1].lower() in _DANGLING:
+            text = " ".join(text.split()[:-1])
     return text
 
 

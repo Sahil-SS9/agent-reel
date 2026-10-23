@@ -463,6 +463,13 @@ def run_pipeline(
             hero=config.hero,
         )
         cast_map["default"] = cast_map.get("default", "Kensei")
+        # R4-F1: the owner is a character in his own story, and no one is called "Assistant".
+        cast_map["owner"] = config.hero
+        cast_map = {
+            profile: character
+            for profile, character in cast_map.items()
+            if character.strip().lower() not in {"assistant", "default", "agent", ""}
+        }
         # A character name is released in the evidence, so it must survive the gate:
         # a profile whose name matches a learned sensitive term gets a neutral alias.
         safe_cast: dict[str, str] = {}
@@ -488,7 +495,8 @@ def run_pipeline(
 
         evidence_map = evidence_by_event(gated, display=cast_map)
         structured_captions = {
-            event.id: compose_caption(event, display=cast_map) for event in gated
+            event.id: compose_caption(event, display=cast_map, hero=config.hero)
+            for event in gated
         }
 
         # R3-F1: pick stories by meaning (sessions with a goal and an outcome, or task

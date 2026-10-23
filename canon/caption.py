@@ -49,6 +49,7 @@ KIND_VERBS: dict[str, str] = {
     KIND_TASK_STATUS: "moved",
     KIND_TASK_FINISHED: "completed",
     KIND_TASK_COMMENT: "noted",
+    # "asked" is only ever said of the owner (R4-F1).
     KIND_MESSAGE_USER: "asked for",
     KIND_MESSAGE_ASSISTANT: "reported",
     KIND_TOOL_CALL: "ran",
@@ -92,11 +93,38 @@ def _verb_for(event: GatedEvent) -> str:
     return STATUS_VERBS.get(status) or KIND_VERBS.get(event.kind, "worked on")
 
 
-def _actor_for(event: GatedEvent) -> str:
-    for value in (event.actor, event.profile):
-        if value and value not in {"default"}:
-            return str(value).replace("-", " ").title()
-    return "The fleet"
+#: Names that must never appear as a character (round 5, R4-F1).
+NON_CHARACTERS = frozenset({"assistant", "default", "agent", "the fleet", "user", "owner", ""})
+
+OWNER_ACTOR = "owner"
+
+
+def _role_of(event: GatedEvent) -> str:
+    return str((event.payload or {}).get("role") or "").strip().lower()
+
+
+def _actor_for(
+    event: GatedEvent, *, display: dict[str, str] | None = None, hero: str = "Sahil"
+) -> str:
+    """Who the event belongs to.
+
+    R4-F1: a user message is the owner's, whatever profile was active, and an assistant
+    message is the profile's character - never a tool name and never "Assistant".
+    """
+    table = display or {}
+    if _role_of(event) == "user" or event.actor == OWNER_ACTOR:
+        return table.get(OWNER_ACTOR) or hero
+    for key in (event.profile, event.actor):
+        if not key:
+            continue
+        mapped = table.get(key)
+        if mapped and mapped.strip().lower() not in NON_CHARACTERS:
+            return mapped
+        clean = str(key).replace("-", " ").title()
+        if clean.strip().lower() not in NON_CHARACTERS:
+            return clean
+    # Never fall back to the owner for someone else's action, and never to "Assistant".
+    return "The agent"
 
 
 def _text_for(event: GatedEvent) -> str:
@@ -109,15 +137,10 @@ def _text_for(event: GatedEvent) -> str:
 
 
 def compose_caption(
-    event: GatedEvent, *, display: dict[str, str] | None = None
+    event: GatedEvent, *, display: dict[str, str] | None = None, hero: str = "Sahil"
 ) -> str:
     """A plain sentence about one event, or '' when there is nothing to say."""
-    actor = _actor_for(event)
-    if display:
-        for key in (event.actor, event.profile):
-            if key and key in display:
-                actor = display[key]
-                break
+    actor = _actor_for(event, display=display, hero=hero)
     verb = _verb_for(event)
     text = _text_for(event)
     obj = _object_from(text) if text else ""

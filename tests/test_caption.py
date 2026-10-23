@@ -75,7 +75,9 @@ def test_an_assistant_message_reports():
         subject="s1",
     )
     caption = compose_caption(row)
-    assert caption.startswith("The fleet reported")
+    # R4-F1: an assistant message is the profile's character; with no usable name it is
+    # "The agent" - never "The fleet", never "Assistant", never the owner.
+    assert caption.startswith("The agent reported")
 
 
 def test_no_text_means_a_short_but_valid_sentence_or_nothing():

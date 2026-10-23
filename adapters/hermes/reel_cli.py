@@ -36,6 +36,20 @@ def ctx_llm() -> Any:
     return getattr(_CTX, "llm", None) if _CTX is not None else None
 
 
+def _default_data_dir() -> Path:
+    """The plugin's own data directory (decision P1), never a hand-built ~/.hermes path."""
+    try:
+        from plugins.plugin_storage import plugin_data_dir  # host surface
+    except ImportError:
+        try:
+            from hermes_plugins.scrollback_reel.plugins.plugin_storage import (  # type: ignore
+                plugin_data_dir,
+            )
+        except ImportError:
+            return Path.home() / ".local" / "share" / "scrollback-reel"
+    return Path(plugin_data_dir("scrollback-reel"))
+
+
 def register_cli(subparser: argparse.ArgumentParser) -> None:
     """``hermes reel <action>`` - only ``plan`` exists."""
     subs = subparser.add_subparsers(dest="reel_action")
@@ -83,7 +97,7 @@ def reel_command(args: argparse.Namespace) -> int:
 
     from adapters.hermes.plugin_llm import PluginLLMClient
 
-    data_dir = Path(args.data_dir).expanduser() if args.data_dir else Path.home() / ".hermes" / "reel"
+    data_dir = Path(args.data_dir).expanduser() if args.data_dir else _default_data_dir()
     writer = PluginLLMClient(llm)
     local = OpenAICompatLLMClient(base_url=args.llm_url, model="auto")
 

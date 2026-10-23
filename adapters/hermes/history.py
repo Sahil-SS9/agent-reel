@@ -549,7 +549,10 @@ class HermesHistorySource:
                         "token_count": _row_get(row, "token_count") or 0,
                         "compacted": bool(_row_get(row, "compacted") or 0),
                     }
-                    actor = profile if role == "user" else (payload["tool_name"] or role)
+                    # R4-F1: a user message belongs to the owner, never to the profile that
+                    # happens to be active. An assistant message belongs to the profile's
+                    # character, not to a tool name and not to "assistant".
+                    actor = "owner" if role == "user" else (profile or "agent")
                     yield build_event(
                         source=SOURCE_MESSAGE,
                         kind=kind,

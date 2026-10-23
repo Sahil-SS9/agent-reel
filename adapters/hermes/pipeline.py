@@ -40,7 +40,7 @@ from canon.beats import Beat, beats_from_events
 from canon.cache import ModelCache
 from canon.aliases import AliasBook, apply_to_ir, masks_in
 from canon.canon import Canon, build_canon
-from canon.caption import compose_caption
+from canon.caption import compose_caption, trim_caption
 from canon.casting import build_cast_map, summarise as summarise_cast
 from canon.episode import (
     EpisodeIR,
@@ -549,6 +549,20 @@ def run_pipeline(
             if arc is None:
                 skipped.append({"key": candidate.key, "reason": "no arc"})
                 continue
+            owner_texts = tuple(
+                str((event.payload or {}).get("text", ""))
+                for event in thread_events.get(thread.id, [])
+                if str((event.payload or {}).get("role", "")) == "user"
+                and str((event.payload or {}).get("text", "")).strip()
+            )
+            outcome_caption = ""
+            if brief.outcome:
+                for event in thread_events.get(thread.id, []):
+                    if str((event.payload or {}).get("text", "")).strip() == brief.outcome.strip():
+                        outcome_caption = compose_caption(event, display=cast_map, hero=config.hero)
+                        break
+                if not outcome_caption:
+                    outcome_caption = trim_caption(brief.outcome)
             thread_evidence_text = "\n".join(
                 [brief.text()]
                 + [evidence_map.get(event_id, "") for event_id in candidate.event_ids]
@@ -579,6 +593,8 @@ def run_pipeline(
                 actors_by_event=actors_by_event,
                 cast_map=cast_map,
                 thread_evidence=thread_evidence_text,
+                owner_texts=owner_texts,
+                outcome_caption=outcome_caption,
                 title=title,
             )
             if len(episode_ir.panels) < 3:

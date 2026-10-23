@@ -21,7 +21,12 @@ from canon.beats import Beat
 from canon.casting import build_cast_map, speaker_for
 from canon.canon import Canon
 from canon.events import make_event_id
-from canon.caption import compose_caption, looks_like_provenance
+from canon.caption import (
+    caption_problem,
+    compose_caption,
+    looks_like_provenance,
+    trim_caption,
+)
 from canon.grounding import ClaimGate, ClaimReport, GroundingReport
 from canon.llm import CachedLLM, LLMError
 
@@ -389,6 +394,8 @@ def plan_episode(
     brief: Any | None = None,
     structured_captions: Mapping[str, str] | None = None,
     thread_evidence: str = "",
+    owner_texts: Sequence[str] = (),
+    outcome_caption: str = "",
     actors_by_event: Mapping[str, str] | None = None,
     cast_map: Mapping[str, str] | None = None,
     title: str | None = None,
@@ -475,13 +482,17 @@ def plan_episode(
                 "summary": beat.summary if beat else "",
                 "evidence": _evidence_for(beat),
                 "cast": _cast_for(beat, canon, hero, cast_map),
-                "structured_caption": next(
-                    (
-                        structured.get(event_id, "")
-                        for event_id in (beat.event_ids if beat else ())
-                        if structured.get(event_id, "")
-                    ),
-                    "",
+                "structured_caption": (
+                    outcome_caption
+                    if role in {"climax", "win"} and outcome_caption
+                    else next(
+                        (
+                            structured.get(event_id, "")
+                            for event_id in (beat.event_ids if beat else ())
+                            if structured.get(event_id, "")
+                        ),
+                        "",
+                    )
                 ),
                 "actors": [],
                 "format": format,
@@ -554,13 +565,40 @@ def plan_episode(
         # composed sentence stands and nothing is counted as a repair.
         structured_caption = str(spec.get("structured_caption", "")).strip()
         model_caption = str(written.get("caption", "")).strip() if isinstance(written, dict) else ""
-        caption = structured_caption
-        if model_caption and grounder is not None and structured_caption:
-            candidate = grounder.check(model_caption, evidence_text, layer="caption")
-            if candidate.supported and not looks_like_provenance(model_caption):
-                caption = model_caption
-        elif model_caption and structured_caption == "":
+        owner_texts = tuple(str(t) for t in (owner_texts or ()) if str(t).strip())
+
+        def acceptable(text: str) -> bool:
+            if not text:
+                return False
+            if caption_problem(text, owner_texts=owner_texts):
+                return False
+            if grounder is not None:
+                verdict = grounder.check(text, evidence_text, layer="caption")
+                if not verdict.supported:
+                    return False
+            return True
+
+        # R4-F2: the model paraphrases the fact; the composed sentence is the fallback.
+        caption = ""
+        if acceptable(model_caption):
             caption = model_caption
+        elif acceptable(structured_caption):
+            caption = structured_caption
+        elif structured_caption:
+            trimmed = trim_caption(structured_caption)
+            if acceptable(trimmed):
+                caption = trimmed
+        elif model_caption:
+            trimmed = trim_caption(model_caption)
+            if acceptable(trimmed):
+                caption = trimmed
+        if not caption:
+            # Last resort: the beat's own summary, under the same policy and the same gate.
+            fallback = TemplateDialogueWriter(cast_names, hero=hero).caption_for(spec)
+            for candidate_text in (fallback, trim_caption(fallback)):
+                if acceptable(candidate_text):
+                    caption = candidate_text
+                    break
         if caption and (len(caption.split()) < 3 or looks_like_provenance(caption)):
             caption = ""
         if grounder is not None and caption:

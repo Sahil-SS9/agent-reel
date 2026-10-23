@@ -171,3 +171,71 @@ def compose_from_parts(
     if looks_like_provenance(sentence) or len(sentence.split()) < 3:
         return ""
     return sentence
+
+
+# --------------------------------------------------------------------------- #
+# Caption policy (round 5, R4-F2)
+# --------------------------------------------------------------------------- #
+#
+# A caption paraphrases a fact from the brief in at most 20 words and never quotes the
+# owner's own message beyond 8 words. The owner's raw text is his, not the comic's.
+
+MAX_CAPTION_WORDS = 20
+MAX_OWNER_QUOTE_WORDS = 8
+
+_STOP = frozenset(
+    "the a an and or of to in on at for with from by is was are were be been it its this "
+    "that these those i you he she we they my your his her our their as so but if then".split()
+)
+
+
+def _words(text: str) -> list[str]:
+    import re as _re
+
+    return [w for w in _re.findall(r"[a-z0-9']+", (text or "").lower())]
+
+
+def longest_common_run(caption: str, source: str) -> int:
+    """Longest run of consecutive words shared by a caption and a source text."""
+    left, right = _words(caption), _words(source)
+    if not left or not right:
+        return 0
+    best = 0
+    previous = [0] * (len(right) + 1)
+    for i in range(1, len(left) + 1):
+        current = [0] * (len(right) + 1)
+        for j in range(1, len(right) + 1):
+            if left[i - 1] == right[j - 1]:
+                current[j] = previous[j - 1] + 1
+                best = max(best, current[j])
+        previous = current
+    return best
+
+
+def caption_problem(
+    caption: str,
+    *,
+    owner_texts: list[str] | tuple[str, ...] = (),
+    max_words: int = MAX_CAPTION_WORDS,
+    max_owner_quote: int = MAX_OWNER_QUOTE_WORDS,
+) -> str:
+    """Why this caption is not acceptable ('' when it is)."""
+    text = " ".join((caption or "").split())
+    if not text:
+        return "empty"
+    if len(text.split()) > max_words:
+        return f"over {max_words} words ({len(text.split())})"
+    if looks_like_provenance(text):
+        return "provenance"
+    for source in owner_texts:
+        if longest_common_run(text, source) > max_owner_quote:
+            return f"quotes the owner for more than {max_owner_quote} words"
+    return ""
+
+
+def trim_caption(caption: str, *, max_words: int = MAX_CAPTION_WORDS) -> str:
+    """Cut a caption to the policy length on a word boundary, keeping the sentence."""
+    words = " ".join((caption or "").split()).split()
+    if len(words) <= max_words:
+        return " ".join(words)
+    return " ".join(words[:max_words]).rstrip(" ,;:") + "."

@@ -342,10 +342,23 @@ def check_claims(line: str, evidence_text: str, *, allow: Iterable[str] = ()) ->
     """Names and numbers must appear in the evidence; causes and outcomes need a model."""
     haystack = " ".join((evidence_text or "").lower().split())
     claims = extract_claims(line, allow=allow)
+
+    def backed(claim: Claim) -> bool:
+        needle = claim.text.lower()
+        if needle in haystack:
+            return True
+        if claim.kind != "name":
+            return False
+        # A multi-word name is backed when every word is present ("Denji Reviewer" for a
+        # profile called denji-reviewer). The term check already allows this; the claim
+        # check refusing it made every composed caption fail.
+        words = [word for word in needle.replace("-", " ").split() if word]
+        return bool(words) and all(word in haystack for word in words)
+
     unbacked = [
         claim
         for claim in claims
-        if claim.kind in {"name", "number"} and claim.text.lower() not in haystack
+        if claim.kind in {"name", "number"} and not backed(claim)
     ]
     return ClaimReport(claims=claims, unbacked=tuple(unbacked))
 

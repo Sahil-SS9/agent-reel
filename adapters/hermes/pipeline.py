@@ -433,7 +433,12 @@ def run_pipeline(
             [beat.profile for beat in beats if beat.profile],
             hero=config.hero,
         )
+        # Round 3 item 3: a script never shows a redaction marker. Every masked value
+        # gets a stable fictional alias from the private alias book. It is loaded before
+        # the title so the title can be alias-safe too.
+        alias_book = AliasBook.load(snapshot_store.root / "aliases.json")
         cast_map["default"] = cast_map.get("default", "Kensei")
+        _title_alias = alias_book.resolve
         # A character name is released in the evidence, so it must survive the gate:
         # a profile whose name matches a learned sensitive term gets a neutral alias.
         safe_cast: dict[str, str] = {}
@@ -470,11 +475,19 @@ def run_pipeline(
         cast_map = safe_cast
         # One cached title call, after grounding, and only kept when it is grounded.
         thread_beats = [beat for beat in beats if beat.id in set(arcs[0].beat_ids)]
+        title_evidence = "\n".join(
+            evidence_by_event(gated).get(event_id, "")
+            for beat in (thread_beats or beats)
+            for event_id in beat.event_ids
+        )
         title, title_source = write_title(
             cached if config.use_model else None,
             beats=thread_beats or beats,
             derived=arcs[0].title,
             hero=config.hero,
+            gate=grounder,
+            evidence=title_evidence,
+            alias=_title_alias,
         )
         result.title = title
         result.title_source = title_source
@@ -494,9 +507,6 @@ def run_pipeline(
             cast_map=cast_map,
             title=title,
         )
-        # Round 3 item 3: a script never shows a redaction marker. Every masked value
-        # gets a stable fictional alias from the private alias book.
-        alias_book = AliasBook.load(snapshot_store.root / "aliases.json")
         ir = apply_to_ir(ir, alias_book)
         alias_book.save()
         stray_masks = masks_in(markdown_of(ir))

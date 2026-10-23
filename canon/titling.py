@@ -1,24 +1,24 @@
-"""One cached title call, after grounding (audit M1-F6).
+"""One cached title call, after grounding (round 3, item 5).
 
-The derived title read "The week default, denji-reviewer, octacon had". A title is a
-creative act, so it comes from the model - once, cached, and constrained to the arc's
-own grounded material.
+A title is short, carries no redaction marker, and is entailed by the thread's own
+evidence. The derived title is the fallback and follows the same rules.
 """
 
 from __future__ import annotations
 
 import re
-from typing import Any, Sequence
+from typing import Any, Callable, Iterable, Sequence
 
 from canon.beats import Beat
 from canon.llm import CachedLLM, LLMError
 
-MAX_TITLE_WORDS = 7
-MAX_TITLE_CHARS = 60
+MAX_TITLE_WORDS = 6
+MAX_TITLE_CHARS = 48
 
 TITLE_PROMPT = (
-    "Give this comic episode one title. It must name what actually happened in the "
-    "beats, in at most 7 words, with no invented facts, no quotes and no full stop. "
+    "Title this comic episode in at most 6 words. It must describe what actually "
+    "happened in the beats: no invented place, person, project, number or outcome, no "
+    "quotation marks, no full stop. Prefer the thread's own words. "
     'Answer with JSON only: {"title": "..."}.'
 )
 
@@ -26,8 +26,8 @@ TITLE_PROMPT = (
 _ALLOWED = frozenset(
     """
     the a an of and or in on at to for with from by is was are were be been it its
-    this that these those a week day night again still back out up down over under
-    how why what when where who nobody everyone something nothing one two three
+    this that these those one two three a week day night again still back out up down
+    how why what when where who nobody everyone something nothing
     """.split()
 )
 
@@ -61,14 +61,40 @@ def write_title(
     beats: Sequence[Beat],
     derived: str,
     hero: str = "Sahil",
+    gate: Any | None = None,
+    evidence: str = "",
+    alias: Callable[[str], str] | None = None,
 ) -> tuple[str, str]:
-    """Return (title, source). ``source`` is "model", "derived" or "fallback"."""
+    """Return (title, source). ``source`` is model / derived / fallback / ungrounded."""
+
+    def finish(candidate: str) -> str:
+        text = _clean(candidate)
+        if alias is not None:
+            text = alias(text)
+        return text
+
+    derived_clean = finish(derived)
+
+    def acceptable(candidate: str) -> bool:
+        if not candidate:
+            return False
+        if "[REDACTED" in candidate:
+            return False  # a title never shows a marker (round 3, item 3)
+        if len(candidate.split()) > MAX_TITLE_WORDS:
+            return False
+        if gate is not None and evidence:
+            verdict = gate.check(candidate, evidence, layer="caption")
+            if not verdict.supported:
+                return False
+        return _grounded(candidate, beats)
+
     if llm is None:
-        return derived, "derived"
+        return derived_clean, "derived"
+
     payload = {
         "beats": [beat.summary for beat in beats][:12],
         "hero": hero,
-        "derived": derived,
+        "derived": derived_clean,
     }
     try:
         response = llm.complete_json(
@@ -78,11 +104,11 @@ def write_title(
             stage="episode.title",
         )
     except LLMError:
-        return derived, "fallback"
-    candidate = _clean(str(response.get("title", "")))
+        return derived_clean, "fallback"
+
+    candidate = finish(str(response.get("title", "")))
     if not candidate:
-        return derived, "fallback"
-    if not _grounded(candidate, beats):
-        # A title that invents a word is exactly the M1-F1 failure in miniature.
-        return derived, "ungrounded"
+        return derived_clean, "fallback"
+    if not acceptable(candidate):
+        return derived_clean, "ungrounded"
     return candidate, "model"

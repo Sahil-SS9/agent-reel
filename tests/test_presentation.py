@@ -184,3 +184,55 @@ def test_a_tool_name_never_becomes_a_struggle_beat():
     )
     sealed = seal(event, payload)
     assert beats_from_events([sealed]) == []
+
+
+# --------------------------------------------------------------------------- #
+# item 5: titles are short, alias-safe and entailed
+# --------------------------------------------------------------------------- #
+
+
+def test_a_long_model_title_is_refused():
+    class Wordy:
+        name = "wordy"
+
+        def complete_json(self, **_kwargs):
+            return {"title": "the build blocked twice and then the runner gave up again"}
+
+    cached = CachedLLM(Wordy(), ModelCache.__new__(ModelCache), stage="t")
+    cached.cache = _NullCache()
+    _events, beats, _arc, _canon, _evidence, _cast = _episode()
+    title, source = write_title(cached, beats=beats, derived="the build blocked")
+    assert source == "ungrounded"
+    assert len(title.split()) <= 6
+
+
+def test_a_title_with_a_redaction_marker_is_refused():
+    class Masked:
+        name = "masked"
+
+        def complete_json(self, **_kwargs):
+            return {"title": "the [REDACTED:project_name#ab12cd] slice"}
+
+    cached = CachedLLM(Masked(), ModelCache.__new__(ModelCache), stage="t")
+    cached.cache = _NullCache()
+    _events, beats, _arc, _canon, _evidence, _cast = _episode()
+    title, source = write_title(cached, beats=beats, derived="the build blocked")
+    assert "[REDACTED" not in title
+    assert source in {"ungrounded", "derived"}
+
+
+def test_a_title_is_alias_resolved():
+    class Masked:
+        name = "masked"
+
+        def complete_json(self, **_kwargs):
+            return {"title": "the [REDACTED:project_name#ab12cd] slice blocked"}
+
+    cached = CachedLLM(Masked(), ModelCache.__new__(ModelCache), stage="t")
+    cached.cache = _NullCache()
+    _events, beats, _arc, _canon, _evidence, _cast = _episode()
+    title, _source = write_title(
+        cached, beats=beats, derived="the build blocked",
+        alias=lambda text: text.replace("[REDACTED:project_name#ab12cd]", "Project Lantern"),
+    )
+    assert "[REDACTED" not in title

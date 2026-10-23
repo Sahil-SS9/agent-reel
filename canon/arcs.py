@@ -220,7 +220,13 @@ def build_arc(
     win = by_id.get(roles.get("win", ""))
     opened = min(by_id[beat_id].ts for beat_id in ordered_ids)
     resolved = max(by_id[beat_id].ts for beat_id in ordered_ids)
-    status = "resolved" if win is not None else "open"
+    # The ending belongs to the thread, not to a role name: a thread that reached a
+    # completed state is a resolved arc even if the role layout has no "win" panel
+    # (round 3, item 4).
+    if thread is not None:
+        status = "resolved" if thread.completed else "open"
+    else:
+        status = "resolved" if win is not None else "open"
     cliffhanger = ""
     if status == "resolved":
         later = [beat for beat in beats if beat.ts > resolved and beat.type in {"struggle", "failure"}]
@@ -271,7 +277,7 @@ def build_arcs(
     # ``threads`` arrive best-first (text before size before recency), so the first
     # thread with enough beats is the story, not whichever thread happened to be
     # seen first.
-    for thread in threads:
+    for thread in sorted(threads, key=lambda item: item.score, reverse=True):
         thread_beats = grouped.get(thread.id, [])
         if len(thread_beats) < MIN_BEATS_PER_ARC:
             continue

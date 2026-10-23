@@ -109,10 +109,13 @@ class Thread:
         if self.kind not in THREAD_KINDS:
             raise ValueError(f"unknown thread kind: {self.kind!r}")
 
+    #: True when the thread reached a completed state (round 3, item 4).
+    completed: bool = False
+
     @property
-    def score(self) -> tuple[int, int, float]:
-        """Prefer threads with real text, then size, then recency."""
-        return (1 if self.has_text else 0, self.size, self.end)
+    def score(self) -> tuple[int, int, float, float]:
+        """Prefer threads that finished, then ones with text, then size, then recency."""
+        return (1 if self.completed else 0, 1 if self.has_text else 0, self.size, self.end)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -124,6 +127,7 @@ class Thread:
             "start": round(self.start, 6),
             "end": round(self.end, 6),
             "has_text": self.has_text,
+            "completed": self.completed,
             "size": self.size,
         }
 
@@ -229,7 +233,13 @@ def _thread(kind: str, key: str, group: Sequence[GatedEvent]) -> Thread:
         isinstance(event.payload.get("text"), str) and len(str(event.payload.get("text"))) >= 8
         for event in ordered
     )
+    completed = any(
+        (event.kind == KIND_TASK_FINISHED)
+        or (event.kind == KIND_TASK_STATUS and str(event.payload.get("kind")) == "completed")
+        for event in ordered
+    )
     return Thread(
+        completed=completed,
         id=make_event_id("thread", kind, ordered[0].ts, {"key": key}),
         kind=kind,
         key=key,

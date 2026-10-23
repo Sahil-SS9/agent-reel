@@ -41,6 +41,7 @@ class OpenAICompatLLMClient:
         temperature: float = 0.0,
         max_tokens: int = 1200,
         extra_body: Mapping[str, Any] | None = None,
+        thinking: bool = False,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
@@ -49,7 +50,12 @@ class OpenAICompatLLMClient:
         self.retries = retries
         self.temperature = temperature
         self.max_tokens = max_tokens
-        self.extra_body = dict(extra_body or {})
+        # Audit R2-F3: thinking is OFF by default. A reasoning model that spends its
+        # budget on reasoning_content returns content: null, which the gate treats as a
+        # failure - any new caller would silently quarantine its items.
+        body = dict(extra_body or {})
+        body.setdefault("chat_template_kwargs", {"enable_thinking": bool(thinking)})
+        self.extra_body = body
         self.name = f"openai-compat:{model}"
         self.calls = 0
 

@@ -536,8 +536,7 @@ def plan_episode(
         last = panels[-1]
         panels[-1] = replace(
             last,
-            caption=(last.caption + " " if last.caption else "") + "To be continued\u2026",
-            label=last.label or "CLIFFHANGER",
+            label=(last.label + " \u00b7 " if last.label else "") + "To be continued\u2026",
         )
 
     logline = f"{title or arc.title}: {arc.stakes}"

@@ -285,7 +285,8 @@ def test_panels_carry_staging():
     for panel in ir.panels:
         assert panel.shot in {"wide", "medium", "close", "insert"}
         assert panel.setting
-        assert panel.caption
+        assert panel.label, "a panel always carries its date/role label"
+        assert panel.caption or panel.lines, "a panel carries a caption or a line"
         assert panel.pose
         assert panel.expression
 

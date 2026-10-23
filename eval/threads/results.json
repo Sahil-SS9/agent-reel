@@ -1,0 +1,10 @@
+{
+ "adversarial_captions_or_lines_released": [],
+ "adversarial_refusals": 240,
+ "clean_problems": [],
+ "clean_threads_ok": true,
+ "cliffhangers": 10,
+ "completed_threads": 20,
+ "ok": true,
+ "threads": 30
+}

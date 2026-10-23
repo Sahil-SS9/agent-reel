@@ -57,7 +57,7 @@ def test_a_finished_thread_produces_a_resolved_arc_with_no_cliffhanger():
     canon = build_canon(events, beats)
     ir = plan_episode(arc, beats, canon)
     assert ir.cliffhanger is False
-    assert all("to be continued" not in panel.caption.lower() for panel in ir.panels)
+    assert all("to be continued" not in panel.label.lower() for panel in ir.panels)
 
 
 def test_an_unfinished_thread_ends_with_a_labelled_cliffhanger():
@@ -69,4 +69,4 @@ def test_an_unfinished_thread_ends_with_a_labelled_cliffhanger():
     canon = build_canon(events, beats)
     ir = plan_episode(arc, beats, canon)
     assert ir.cliffhanger is True
-    assert "to be continued" in ir.panels[-1].caption.lower()
+    assert "to be continued" in ir.panels[-1].label.lower()

@@ -122,6 +122,8 @@ class PipelineConfig:
     max_text_events: int = MAX_TEXT_EVENTS
     max_vocabulary: int = 400
     episodes: int = 1
+    writer_llm: Any = None
+    max_writer_calls: int = 150
     snapshot_root: Path | None = None
     #: Where the private memory snapshot lives. Never the evidence folder (M1-F4).
     state_dir: Path | None = None
@@ -148,6 +150,7 @@ class PipelineResult:
     title_source: str = ""
     cast: list[dict[str, Any]] = field(default_factory=list)
     episodes: list[dict[str, Any]] = field(default_factory=list)
+    llm_usage: dict[str, Any] = field(default_factory=dict)
     timings: dict[str, float] = field(default_factory=dict)
     artifacts: dict[str, str] = field(default_factory=dict)
 
@@ -330,6 +333,14 @@ def run_pipeline(
         else:
             client = config.llm or NullLLM()
         cached = CachedLLM(client, cache, stage="m1")
+        # R3-F6: the writer, title and entailment calls use the owner's main model via
+        # the local API server. Redaction stays on the local model, so only post-gate
+        # text ever reaches the other endpoint.
+        writer_cached = (
+            CachedLLM(config.writer_llm, cache, stage="m1")
+            if config.writer_llm is not None
+            else cached
+        )
 
         redactor = DeterministicRedactor(rules_from_snapshot())
         # Agent/profile names are the cast, not internal projects: keep them out of the
@@ -427,7 +438,7 @@ def run_pipeline(
         writer: Any
         if config.use_model:
             writer = LLMDialogueWriter(
-                cached,
+                writer_cached,
                 cast,
                 fallback=TemplateDialogueWriter(cast, hero=config.hero),
             )
@@ -455,7 +466,7 @@ def run_pipeline(
         # Audit M1-F1 + round 3: claims in both layers must be supported by the gated
         # content of the events the line cites.
         grounder = ClaimGate(
-            cached if config.use_model else None,
+            writer_cached if config.use_model else None,
             allow=tuple(cast_map.values()) + tuple(config.allowlist) + (config.hero,),
         )
         # Who did what: only an actor of a cited event may speak its panel (R2-F2).
@@ -477,7 +488,7 @@ def run_pipeline(
                 for event_id in beat.event_ids
             )
             title, title_source = write_title(
-                cached if config.use_model else None,
+                writer_cached if config.use_model else None,
                 beats=thread_beats or beats,
                 derived=arc.title,
                 hero=config.hero,
@@ -538,6 +549,14 @@ def run_pipeline(
         result.cast = summarise_cast(cast_map)
         result.ir = ir
         result.timings["episode_s"] = round(time.time() - started, 2)
+        result.llm_usage = {
+            "redaction": getattr(client, "usage", lambda: {})(),
+            "writer": getattr(config.writer_llm, "usage", lambda: {})(),
+            "writer_endpoint": getattr(config.writer_llm, "name", "local"),
+        }
+        if isinstance(result.llm_usage["writer"], dict) and result.llm_usage["writer"].get("budget"):
+            if result.llm_usage["writer"]["calls"] > result.llm_usage["writer"]["budget"]:
+                result.problems.append("writer budget exceeded")
 
         # ---- gates on the output ----------------------------------------
         known = set(gated_by_id)
@@ -621,6 +640,7 @@ def run_pipeline(
                     "writer": ir.writer,
                     "grounding": result.grounding,
                     "episodes": result.episodes,
+                    "llm_usage": result.llm_usage,
                     "threads": result.threads,
                     "title": result.title,
                     "title_source": result.title_source,
@@ -740,6 +760,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=1,
         help="how many threads to turn into scripts (each from a different thread)",
     )
+    parser.add_argument(
+        "--writer",
+        choices=("api", "local", "none"),
+        default="api",
+        help="where writer/title/entailment calls go (api = owner's main model on 8642)",
+    )
+    parser.add_argument(
+        "--writer-budget", type=int, default=150, help="max API-server calls per run"
+    )
     parser.add_argument("--json", action="store_true", help="print the metrics JSON")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
@@ -754,6 +783,21 @@ def main(argv: Sequence[str] | None = None) -> int:
             model=args.llm_model,
             extra_body={"chat_template_kwargs": {"enable_thinking": False}},
         )
+
+    writer_llm: Any = None
+    writer_note = ""
+    if args.writer == "api":
+        from adapters.hermes.llm import api_server_client
+
+        candidate = api_server_client(max_calls=args.writer_budget)
+        if candidate.inner.api_key:
+            writer_llm = candidate
+            writer_note = "api-server"
+        else:
+            writer_note = "no API_SERVER_KEY, writer fell back to the local model"
+    elif args.writer == "none":
+        writer_llm = None
+        writer_note = "writer disabled"
 
     if client is not None:
         fallback_url = os.environ.get("REEL_LLM_FALLBACK_URL")
@@ -782,10 +826,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         max_text_events=args.max_text_events,
         max_vocabulary=args.max_vocabulary,
         episodes=max(1, args.episodes),
+        writer_llm=writer_llm,
         state_dir=Path(args.state_dir).expanduser() if args.state_dir else None,
         llm=client,
     )
     result = run_pipeline(config)
+    if writer_note == "api-server" and writer_llm is not None:
+        result.problems = [p for p in result.problems]
+    elif writer_note:
+        result.timings["writer_note"] = writer_note
     payload = {
         "ok": result.ok,
         "events_ingested": result.events_ingested,

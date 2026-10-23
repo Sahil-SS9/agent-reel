@@ -58,6 +58,18 @@ class OpenAICompatLLMClient:
         self.extra_body = body
         self.name = f"openai-compat:{model}"
         self.calls = 0
+        self.prompt_tokens = 0
+        self.completion_tokens = 0
+
+    def __repr__(self) -> str:  # never include the key
+        return f"OpenAICompatLLMClient(base_url={self.base_url!r}, model={self.model!r})"
+
+    def usage(self) -> dict[str, int]:
+        return {
+            "calls": self.calls,
+            "prompt_tokens": self.prompt_tokens,
+            "completion_tokens": self.completion_tokens,
+        }
 
     @classmethod
     def local(cls, model: str = "auto", port: int = 8091) -> "OpenAICompatLLMClient":
@@ -133,6 +145,10 @@ class OpenAICompatLLMClient:
         last_error: Exception | None = None
         for _attempt in range(2):
             response = self._post(body)
+            usage = response.get("usage") if isinstance(response, dict) else None
+            if isinstance(usage, dict):
+                self.prompt_tokens += int(usage.get("prompt_tokens") or 0)
+                self.completion_tokens += int(usage.get("completion_tokens") or 0)
             try:
                 content = response["choices"][0]["message"]["content"]
             except (KeyError, IndexError, TypeError) as exc:
@@ -214,3 +230,83 @@ def client_from_env() -> OpenAICompatLLMClient | None:
         model=os.environ.get("REEL_LLM_MODEL", "auto"),
         api_key=os.environ.get("REEL_LLM_API_KEY") or None,
     )
+
+
+# --------------------------------------------------------------------------- #
+# Round 4, R3-F6: the owner's main model through the local Hermes API server
+# --------------------------------------------------------------------------- #
+#
+# Production uses ctx.llm, the owner's main model. Dev runs used the small local model,
+# so every prose judgement was made by a much weaker writer than users get. Writer,
+# title and entailment calls now go to the API server; redaction stays on the local
+# model, so only post-gate text ever reaches the other endpoint.
+#
+# The key is read from ~/.hermes/.env at call time, kept in memory, and never written,
+# logged or printed. Nothing here can put it in a repr, an error or a metric.
+
+API_SERVER_BASE_URL = "http://127.0.0.1:8642/v1"
+API_SERVER_MODEL = "hermes-agent"
+API_SERVER_KEY_NAME = "API_SERVER_KEY"
+DEFAULT_ENV_PATH = "~/.hermes/.env"
+
+
+def read_api_server_key(env_path: str | os.PathLike[str] = DEFAULT_ENV_PATH) -> str:
+    """Read API_SERVER_KEY from the Hermes env file. Never log the result."""
+    path = os.path.expanduser(str(env_path))
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                name, value = line.split("=", 1)
+                if name.strip() == API_SERVER_KEY_NAME:
+                    return value.strip().strip('"').strip("'")
+    except OSError:
+        return ""
+    return ""
+
+
+class BudgetExceeded(LLMError):
+    """A run spent more model calls than its budget allows."""
+
+
+class BudgetedLLM:
+    """A thin guard around a client: a hard call cap, and nothing else."""
+
+    def __init__(self, inner: Any, *, max_calls: int = 150, name: str = "writer") -> None:
+        self.inner = inner
+        self.name = name
+        self.max_calls = max_calls
+        self.calls = 0
+
+    def complete_json(self, **kwargs: Any) -> dict[str, Any]:
+        if self.calls >= self.max_calls:
+            raise BudgetExceeded(
+                f"{self.name} budget exhausted: {self.calls}/{self.max_calls} calls"
+            )
+        self.calls += 1
+        return self.inner.complete_json(**kwargs)
+
+    def usage(self) -> dict[str, Any]:
+        inner = getattr(self.inner, "usage", None)
+        payload = dict(inner() if callable(inner) else {})
+        payload.update({"calls": self.calls, "budget": self.max_calls})
+        return payload
+
+
+def api_server_client(
+    *,
+    model: str = API_SERVER_MODEL,
+    base_url: str = API_SERVER_BASE_URL,
+    env_path: str | os.PathLike[str] = DEFAULT_ENV_PATH,
+    max_calls: int = 150,
+) -> BudgetedLLM:
+    """The writer client: owner's main model, key read at runtime, budget enforced."""
+    client = OpenAICompatLLMClient(
+        base_url=base_url,
+        model=model,
+        api_key=read_api_server_key(env_path) or None,
+        timeout=DEFAULT_TIMEOUT,
+    )
+    return BudgetedLLM(client, max_calls=max_calls, name="writer")

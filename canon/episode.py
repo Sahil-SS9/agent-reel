@@ -176,10 +176,19 @@ class TemplateDialogueWriter:
         return pool[index % len(pool)]
 
     def caption_for(self, panel: Mapping[str, Any]) -> str:
-        # R3-F4: prefer the composed sentence, never a bare summary fragment.
+        """The panel's fact sentence, or nothing (round 6).
+
+        A caller that supplies facts gets facts or silence - never a summary, which is
+        what produced "Kensei worked on ..." on the page.
+        """
         structured = str(panel.get("structured_caption", "")).strip()
         if structured:
             return structured
+        if panel.get("facts_only"):
+            return ""
+        return self._summary_caption(panel)
+
+    def _summary_caption(self, panel: Mapping[str, Any]) -> str:
         summary = str(panel.get("summary", "")).strip()
         if not summary:
             evidence = str(panel.get("evidence", "")).strip()
@@ -514,14 +523,21 @@ def plan_episode(
                 "summary": beat.summary if beat else "",
                 "evidence": _evidence_for(beat),
                 "cast": _cast_for(beat, canon, hero, cast_map),
-                "structured_caption": (
-                    facts_for(role)
-                    or (
-                        outcome_caption
-                        if role in {"climax", "win"} and outcome_caption
-                        else ""
-                    )
-                    or next(
+                # A caption comes from the fact list (round 6). The composed
+                # "actor + verb + object" sentence is not a caption source: it produced
+                # every template shape the audit refused.
+                "structured_caption": facts_for(role)
+                or (
+                    outcome_caption
+                    if role in {"climax", "win"} and outcome_caption
+                    else ""
+                )
+                # Only a caller that supplies no facts at all may fall back to the
+                # composed sentence; the pipeline always supplies them.
+                or (
+                    ""
+                    if facts
+                    else next(
                         (
                             structured.get(event_id, "")
                             for event_id in (beat.event_ids if beat else ())
@@ -530,6 +546,7 @@ def plan_episode(
                         "",
                     )
                 ),
+                "facts_only": bool(facts),
                 "actors": [],
                 "format": format,
             }
@@ -631,8 +648,10 @@ def plan_episode(
             trimmed = trim_caption(model_caption)
             if acceptable(trimmed):
                 caption = trimmed
-        if not caption:
-            # Last resort: the beat's own summary, under the same policy and the same gate.
+        if not caption and not facts:
+            # Last resort for a caller that supplies no facts: the beat's own summary. The
+            # pipeline always supplies facts, so this cannot put a composer sentence on the
+            # page in a real run.
             fallback = TemplateDialogueWriter(cast_names, hero=hero).caption_for(spec)
             for candidate_text in (fallback, trim_caption(fallback)):
                 if acceptable(candidate_text, composed=True):

@@ -207,3 +207,21 @@ def rules_from_snapshot(snapshot: dict | None = None) -> tuple[Rule, ...]:
 
 #: Category labels that count as "hard secrets" for the benchmark gate.
 SECRET_CATEGORIES = frozenset({"secret"})
+
+
+#: Public mode always masks these (round 5, R4-F6, decision D13). The private mode is
+#: unchanged: the owner's own history keeps its plain money figures.
+_PUBLIC_RULES = (
+    Rule("financial", "money", re.compile(r"(?:[$\u00a3\u20ac]\s?\d[\d,]*(?:\.\d+)?)")),
+    Rule(
+        "financial",
+        "money_word",
+        re.compile(r"\b\d[\d,]*(?:\.\d+)?\s?(?:usd|gbp|eur|dollars?|pounds?|euros?)\b", re.I),
+    ),
+    Rule("health", "nhs_number", re.compile(r"(?<![\d.])\d{3}[ \-]\d{3}[ \-]\d{4}(?![\d.])")),
+)
+
+
+def public_rules() -> tuple[Rule, ...]:
+    """Extra deterministic rules applied only in public mode."""
+    return _PUBLIC_RULES

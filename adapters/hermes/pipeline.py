@@ -63,7 +63,7 @@ from adapters.hermes import leakscan
 from adapters.hermes.evidence import EvidenceLeak, write_json, write_text
 from adapters.hermes.history import HermesHistorySource
 from adapters.hermes.llm import FallbackLLM, OpenAICompatLLMClient
-from adapters.hermes.redact_source import rules_from_snapshot
+from adapters.hermes.redact_source import public_rules, rules_from_snapshot
 from adapters.hermes.snapshot import SnapshotStore, build_snapshot
 
 #: People and tools that may appear by name in the comic.
@@ -126,6 +126,7 @@ class PipelineConfig:
     max_text_chars: int = MAX_TEXT_CHARS
     max_text_events: int = MAX_TEXT_EVENTS
     max_vocabulary: int = 400
+    privacy: str = "private"
     episodes: int = 1
     writer_llm: Any = None
     max_writer_calls: int = 150
@@ -351,7 +352,10 @@ def run_pipeline(
             else cached
         )
 
-        redactor = DeterministicRedactor(rules_from_snapshot())
+        rule_set = list(rules_from_snapshot())
+        if getattr(config, "privacy", "private") == "public":
+            rule_set.extend(public_rules())
+        redactor = DeterministicRedactor(rule_set)
         # Agent/profile names are the cast, not internal projects: keep them out of the
         # learned-sensitive vocabulary or every character turns into "Agent N".
         cast_allowlist = tuple(sorted({*config.allowlist, *(p.name for p in source.info().profiles)}))
@@ -360,6 +364,7 @@ def run_pipeline(
         )
         gate = RedactionGate(
             redactor,
+            privacy=getattr(config, "privacy", "private"),
             model_gate=model_gate,
             allowlist=cast_allowlist,
             max_chars=config.max_text_chars,
@@ -515,6 +520,7 @@ def run_pipeline(
         episodes: list[dict[str, Any]] = []
         ir: EpisodeIR | None = None
         skipped: list[dict[str, str]] = []
+        used_anchors: set[str] = set()
         for candidate in selected:
             if len(episodes) >= max(1, config.episodes):
                 break
@@ -548,6 +554,18 @@ def run_pipeline(
                 arc, story_beats = build_brief_arc(brief, thread_event_map)
             if arc is None:
                 skipped.append({"key": candidate.key, "reason": "no arc"})
+                continue
+            # R4-F5: two episodes in one run must not stand on the same events.
+            beat_index = {beat.id: beat for beat in (story_beats or thread_beats)}
+            anchor_events = {
+                event_id
+                for beat_id in arc.roles.values()
+                for event_id in (beat_index.get(beat_id).event_ids if beat_index.get(beat_id) else ())
+            }
+            if anchor_events & used_anchors:
+                skipped.append(
+                    {"key": candidate.key, "reason": "shares anchor events with an earlier episode"}
+                )
                 continue
             owner_texts = tuple(
                 str((event.payload or {}).get("text", ""))
@@ -614,6 +632,9 @@ def run_pipeline(
                     "thread_kind": arc.thread_kind,
                     "thread_label": arc.thread_label,
                     "title": title,
+                    "title_words": len(title.split()),
+                    "header_title": episode_ir.logline,
+                    "header_title_words": len(episode_ir.logline.split()),
                     "title_source": title_source,
                     "panels": len(episode_ir.panels),
                     "cliffhanger": episode_ir.cliffhanger,
@@ -622,6 +643,7 @@ def run_pipeline(
                     "ir": episode_ir,
                 }
             )
+            used_anchors |= anchor_events
             if index == 1:
                 ir = episode_ir
                 result.title = title
@@ -747,6 +769,8 @@ def run_pipeline(
                     "skipped_stories": result.skipped_stories,
                     "threads": result.threads,
                     "title": result.title,
+                    "header_title": ir.logline if ir is not None else "",
+                    "header_title_words": len(ir.logline.split()) if ir is not None else 0,
                     "title_source": result.title_source,
                     "cast": result.cast,
                     "quarantine_rate": round(result.quarantine_rate, 4),
@@ -864,6 +888,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=1,
         help="how many threads to turn into scripts (each from a different thread)",
     )
+    parser.add_argument(
+        "--privacy",
+        choices=("private", "public"),
+        default="private",
+        help="public masks money and health (D13); private is the owner's own view",
+    )
     parser.add_argument("--json", action="store_true", help="print the metrics JSON")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
@@ -911,6 +941,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         max_deep_events=args.max_deep_events,
         max_text_events=args.max_text_events,
         max_vocabulary=args.max_vocabulary,
+        privacy=args.privacy,
         episodes=max(1, args.episodes),
         writer_llm=writer_llm,
         state_dir=Path(args.state_dir).expanduser() if args.state_dir else None,

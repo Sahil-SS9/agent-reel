@@ -4,8 +4,11 @@ Rework of the M1 audit findings (docs/reviews/M1-AUDIT.md). Verdict first: all f
 P0/P1 findings are fixed and re-verified; two P2s are fixed; one honest quality gap
 (see "Known gaps") is stated rather than papered over.
 
-Commit: written into this line after the rework commit, then committed again.
-Branch: `main`. Nothing pushed, nothing installed in Hermes.
+Commit: `a6e9d89` (latest; rework commits `fcc29fd` F4, `7b2ef57` F1, `2ff28fa` F2,
+`645924d` F3, `61356e8` F5/F6/F7, `59faaf5` one-thread strips, `c67e382` gated cast
+names, `7985dd4` this report, `a6e9d89` state-dir guard). Branch: `main`. Nothing
+pushed, nothing installed in Hermes.
+203 tests pass at this commit.
 
 ## Plain-English summary
 
@@ -102,6 +105,9 @@ separately, and the gate fails if more than 5% of a run is quarantined.
    writer refused the output. The writer was right; the rule was too loose.
 6. **The memory snapshot lives outside evidence** in `$REEL_STATE_DIR` (default
    `~/.local/state/scrollback-reel`), mode 600; `plugin_data_dir` in the live plugin.
+   During the rework I passed a state dir *inside* build-evidence and put the snapshot
+   back next to the evidence; it is deleted and `run_pipeline` now refuses any
+   `state_dir` under `data_dir` (`a6e9d89`).
 
 ## Known gaps (stated, not hidden)
 

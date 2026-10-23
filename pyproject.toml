@@ -1,3 +1,15 @@
+[project]
+name = "scrollback-reel"
+version = "0.1.0"
+description = "Hermes Scrollback Reel plugin: planner and canon library (stdlib only at runtime)"
+requires-python = ">=3.12"
+# Runtime dependencies: none. canon/ and the adapter use the standard library plus the
+# host plugin API. Dev tooling lives in the sections below, not in the install path.
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"

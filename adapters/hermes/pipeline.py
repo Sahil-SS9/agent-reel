@@ -593,9 +593,13 @@ def run_pipeline(
             )
             # R5-F4: if the model title fails grounding, fall back to the thread title
             # shortened on a word boundary - never to the owner's own message.
-            derived_title = trim_caption(
-                str(candidate.title or arc.title or "").strip(), max_words=6
-            )
+            raw_title = str(candidate.title or arc.title or "").strip()
+            # R5-F4: the title is never the owner's own message. When the thread's only
+            # title is that message, name the kind of work instead.
+            owner_haystack = " ".join(owner_texts).lower()
+            if raw_title and raw_title.lower()[:24] in owner_haystack:
+                raw_title = "A session" if candidate.kind == "session" else "A task"
+            derived_title = trim_caption(raw_title, max_words=6)
             title, title_source = write_title(
                 writer_cached if config.use_model else None,
                 beats=story_beats or thread_beats,

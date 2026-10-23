@@ -30,7 +30,7 @@ from canon.gate import GatedEvent
 
 #: Short by construction: a fact must not read as a quote of the owner's message
 #: (the caption policy refuses an owner echo over eight words).
-MAX_OBJECT_WORDS = 10
+MAX_OBJECT_WORDS = 7
 MAX_RESULT_WORDS = 8
 
 _NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")

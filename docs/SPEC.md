@@ -63,7 +63,33 @@ Prior art to study (not copy):
 
 Ingest → Redact (hard gate) → Beats → Arcs → Canon update → Episode plan → Script IR.
 
-The schemas from v1 are kept, with two additions:
+The schemas from v1 are kept (copied verbatim below from the owner's 21/10/26 spec; added at the M0 audit because the pack had only referenced them):
+
+```
+Event:    {id, source, source_ref, ts, actor, kind, payload_redacted, privacy}
+Beat:     {id, type, summary, intensity: 1-5, event_ids[], ts}
+          type ∈ struggle, breakthrough, failure, decision, level-up, joke, cameo
+Arc:      {id, title, type, status: open|resolved, beat_ids[], stakes, opened, resolved}
+          type ∈ struggle-to-resolution, pivot, rivalry, mystery, training-montage
+Entity:   {id, kind: hero|agent|nemesis|place|artifact|running_joke, name,
+           canon_facts[{fact, event_ids[]}], ref_sheet?, voice?}
+          nemesis = a recurring problem promoted to villain after 3+ arcs
+Episode:  {id, season, number, format_hints[], arc_ids[], logline}
+ScriptIR: {episode_id, scenes[{id, setting, cast[], shots[{visual, caption?,
+           lines[{speaker, text, source_event_ids[]}]}]}]}
+```
+
+M0's `canon/events.py` is a superset of v1 Event except for `privacy`, and its `payload` is pre-redaction. M1 must:
+- add `privacy` (private|internal|public, default private)
+- make the post-gate payload the only one later stages can see (v1 `payload_redacted`)
+
+v1 also states:
+- inputs are read-only
+- nothing reaches beats/arcs/renderers before passing the redaction gate
+- every generated line carries its source event ids
+- canon never overwrites a fact silently; it logs a retcon
+
+The schemas are kept, with two additions:
 - **Panel** in Script IR: `{id, shot: wide|medium|close|insert, cast[], pose, expression, setting, caption?, lines[{speaker, text, source_event_ids[]}]}`. Lettering stays separate from the art.
 - **Cache**: every model call is keyed by `(stage, model, prompt-hash, input-hash)`. The same input gives the same canon. This replaces the v1 promise, which no model can keep without a cache.
 

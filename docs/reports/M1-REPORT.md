@@ -8,7 +8,7 @@
 - Determinism is proven twice: byte-identical canon and IR on a re-run in deterministic mode (pinned window) **and** in model mode (cache reuse).
 - Nothing was installed in Hermes, no push, no images (0/40 used in M1 — script only, as specified).
 
-Commit: `c855bd4` (this report; engine `0c9041f`, refinements and report in the same commit).
+Commit: `d416d27` (latest; engine `0c9041f`, refinements `c855bd4`, signal cleanup `d416d27`).
 Audit fixes: `a37fca9` (F1), `ed872ae` (F2), `c8d54d9` (F3), `66fd89f` (F4). Branch: `main`.
 
 ## Gate results
@@ -25,7 +25,7 @@ Audit fixes: `a37fca9` (F1), `ed872ae` (F2), `c8d54d9` (F3), `66fd89f` (F4). Bra
 | Ingest idempotent on re-run | **VERIFIED** — same event ids, no duplicates, second run byte-identical | determinism evidence above |
 | Beats → arcs, canon with retcon log, episode planner, Script IR, cache | **VERIFIED** | `canon/beats.py`, `arcs.py`, `canon.py`, `episode.py`, `cache.py` |
 | F1 privacy + post-gate payload | **VERIFIED** — 13 tests | commit `a37fca9`, `tests/test_gate.py` |
-| F2 no leaked copies | **VERIFIED** — 7 tests; the default snapshot root stays empty after a full run, including a failing one | commit `ed872ae`, `tests/test_snapshot_cleanup.py` |
+| F2 no leaked copies | **VERIFIED** — 8 tests; the default snapshot root stays empty after a full run, a failing one, and after SIGTERM | commits `ed872ae`, `d416d27`, `tests/test_snapshot_cleanup.py` |
 | F3 exact read-only wording | **VERIFIED** — 5 tests | commit `c8d54d9`, `tests/test_docs_claims.py` |
 | F4 `$TMPDIR` | **VERIFIED** — 2 tests | commit `66fd89f`, `tests/test_docs_claims.py` |
 | Images generated | **NOT APPLICABLE** — 0/40 (script only in M1) | — |
@@ -88,7 +88,7 @@ it (`redaction-benchmark-deterministic.txt`).
 cd /home/kensei/repos/hermes-scrollback-reel
 export TMPDIR="${TMPDIR:-$HOME/.hermes/cache/scratch}"   # rig convention: scratch, not the system temp dir
 
-# tests: expect "155 passed"
+# tests: expect "156 passed"
 .venv/bin/python -m pytest
 
 # the redaction gate (deterministic only)
@@ -111,12 +111,12 @@ export TMPDIR="${TMPDIR:-$HOME/.hermes/cache/scratch}"   # rig convention: scrat
 
 ## Tests
 
-155 passed, 0 failed. New in M1:
+156 passed, 0 failed. New in M1:
 
 | File | Covers |
 |---|---|
 | `tests/test_gate.py` (13) | F1: privacy defaults/validation, JSONL roundtrip, the seal, no direct construction, no double gating, downstream refusal |
-| `tests/test_snapshot_cleanup.py` (7) | F2: close, GC, interpreter exit without close, a full adapter run, a failing run, env-var root |
+| `tests/test_snapshot_cleanup.py` (8) | F2: close, GC, interpreter exit without close, SIGTERM (child copies a DB, kills itself, exits 143, root empty), a full adapter run, a failing run, env-var root |
 | `tests/test_docs_claims.py` (7) | F3 exact wording everywhere it is claimed; F4 no system-temp paths in docs |
 | `tests/test_redaction_gate.py` (23) | deterministic shapes, no double masking, timestamps survive, residue fails closed, quarantine on model error, vocabulary learned/masked/cached, allowlist, fail-closed classifier |
 | `tests/test_m1_engine.py` (22) | beats, beat types, determinism, tool calls are not beats, arc roles chronological and distinct, rivalry arc, canon facts with event ids, retcon log, nemesis promotion, strip vs chapter, IR traceability, staging, LLM writer fallback |

@@ -36,6 +36,7 @@ from canon.beats import Beat, beats_from_events
 from canon.cache import ModelCache
 from canon.aliases import AliasBook, apply_to_ir, masks_in
 from canon.canon import Canon, build_canon
+from canon.caption import compose_caption
 from canon.casting import build_cast_map, summarise as summarise_cast
 from canon.episode import (
     EpisodeIR,
@@ -210,7 +211,10 @@ def evidence_by_event(gated: Iterable[GatedEvent]) -> dict[str, str]:
     for event in gated:
         # The event's own identity is part of its evidence: a beat that names the
         # kind or the actor is repeating the record, not inventing.
-        parts: list[str] = [f"event: {event.kind} {event.subject} {event.actor} {event.profile}".strip()]
+        # R3-F4: no provenance in the evidence either - a model shown a record dump
+        # writes one back. The structured sentence is the event's own fact.
+        composed = compose_caption(event)
+        parts: list[str] = [composed] if composed else []
         text = event.payload.get("text")
         if isinstance(text, str) and text:
             parts.append(text)
@@ -481,6 +485,9 @@ def run_pipeline(
                 evidence=title_evidence,
                 alias=alias_book.resolve,
             )
+            structured_captions = {
+                event.id: compose_caption(event) for event in gated
+            }
             episode_ir = plan_episode(
                 arc,
                 beats,
@@ -492,6 +499,7 @@ def run_pipeline(
                 hero=config.hero,
                 grounder=grounder,
                 evidence=evidence_map,
+                structured_captions=structured_captions,
                 actors_by_event=actors_by_event,
                 cast_map=cast_map,
                 title=title,

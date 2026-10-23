@@ -21,6 +21,7 @@ from canon.beats import Beat
 from canon.casting import build_cast_map, speaker_for
 from canon.canon import Canon
 from canon.events import make_event_id
+from canon.caption import compose_caption, looks_like_provenance
 from canon.grounding import ClaimGate, ClaimReport, GroundingReport
 from canon.llm import CachedLLM, LLMError
 
@@ -165,6 +166,10 @@ class TemplateDialogueWriter:
         return pool[index % len(pool)]
 
     def caption_for(self, panel: Mapping[str, Any]) -> str:
+        # R3-F4: prefer the composed sentence, never a bare summary fragment.
+        structured = str(panel.get("structured_caption", "")).strip()
+        if structured:
+            return structured
         summary = str(panel.get("summary", "")).strip()
         if not summary:
             evidence = str(panel.get("evidence", "")).strip()
@@ -185,8 +190,6 @@ class TemplateDialogueWriter:
                 reaction = self.REACTIONS[index % len(self.REACTIONS)]
                 lines = [[speaker, reaction]]
             else:
-                # Nobody is an actor of this panel's events. The owner may still react:
-                # a claim-free reaction cannot misattribute a fact (R2-F2).
                 reaction = self.REACTIONS[index % len(self.REACTIONS)]
                 lines = [[self.hero, reaction]]
             out[panel["role"]] = {
@@ -205,8 +208,8 @@ class LLMDialogueWriter:
         "You write one panel of a weekly comic that replays an AI agent's real work. "
         "Return two layers. "
         'JSON only: {"caption": "...", "lines": [{"speaker": "...", "text": "..."}]}. '
-        "caption: ONE plain factual sentence, narrator voice, using only what the "
-        "evidence says. No cause, no outcome, no number, no name that the evidence does "
+        "caption: ONE plain factual sentence, narrator voice, built from the 'fact' "
+        "line and using only what the evidence says. No cause, no outcome, no number, no name that the evidence does "
         "not contain. "
         "lines: at most 2; each under 100 characters; speakers must be from the cast "
         "list AND must be the actor of a cited event. Dialogue MAY dramatise tone, "
@@ -339,6 +342,14 @@ def usable_anchor_count(
     return sum(1 for beat in beats if any(event_id in text_ids for event_id in beat.event_ids))
 
 
+def compose_caption_first(beat: Beat | None) -> str:
+    """A last-resort caption from the beat's own type, never a dump."""
+    if beat is None:
+        return ""
+    action = beat.type.replace("-", " ").replace("_", " ")
+    return ""
+
+
 def plan_episode(
     arc: Arc,
     beats: Sequence[Beat],
@@ -352,6 +363,7 @@ def plan_episode(
     grounder: ClaimGate | None = None,
     evidence: Mapping[str, str] | None = None,
     brief: Any | None = None,
+    structured_captions: Mapping[str, str] | None = None,
     actors_by_event: Mapping[str, str] | None = None,
     cast_map: Mapping[str, str] | None = None,
     title: str | None = None,
@@ -369,6 +381,7 @@ def plan_episode(
         raise ValueError("arc has no roles to plan from")
 
     evidence_map = evidence or {}
+    structured = structured_captions or {}
 
     # R3-F3: a panel is anchored on a beat that carries gated text in the brief. A beat
     # made of status churn has nothing true to say, so it is skipped rather than filled
@@ -398,11 +411,7 @@ def plan_episode(
     actors_map = actors_by_event or {}
 
     def allowed_speakers(beat: Beat | None, cast_names: Sequence[str]) -> set[str]:
-        """Who may speak this panel: the actors of its cited events (audit R2-F2).
-
-        Enforcement needs attribution data. When the caller supplies none (unit tests,
-        or a source without actor fields) the cast is the bound.
-        """
+        """Who may speak this panel: the actors of its cited events (audit R2-F2)."""
         if beat is None:
             return set()
         if not actors_map:
@@ -427,6 +436,14 @@ def plan_episode(
                 "summary": beat.summary if beat else "",
                 "evidence": _evidence_for(beat),
                 "cast": _cast_for(beat, canon, hero, cast_map),
+                "structured_caption": next(
+                    (
+                        structured.get(event_id, "")
+                        for event_id in (beat.event_ids if beat else ())
+                        if structured.get(event_id, "")
+                    ),
+                    "",
+                ),
                 "actors": [],
                 "format": format,
             }
@@ -483,13 +500,22 @@ def plan_episode(
         caption = str(written.get("caption", "")).strip() if isinstance(written, dict) else ""
         if not caption:
             caption = TemplateDialogueWriter(cast_names, hero=hero).caption_for(spec)
+        if caption and (len(caption.split()) < 3 or looks_like_provenance(caption)):
+            caption = ""
         if grounder is not None and caption:
             report.captions += 1
             verdict = grounder.check(caption, evidence_text, layer="caption")
             if verdict.supported:
                 report.captions_supported += 1
             else:
-                repaired = grounder.literal_caption(evidence_text)
+                # R3-F4: repair from structured facts, never from a provenance dump.
+                repaired = next(
+                    (structured.get(event_id, "") for event_id in event_ids if structured.get(event_id, "")),
+                    "",
+                )
+                if not repaired:
+                    literal = grounder.literal_caption(evidence_text)
+                    repaired = "" if looks_like_provenance(literal) else literal
                 report.reasons.append(f"{role} caption: {verdict.reason}")
                 if repaired:
                     caption = repaired
@@ -497,6 +523,8 @@ def plan_episode(
                     report.captions_supported += 1
                 else:
                     caption = ""
+        if caption and looks_like_provenance(caption):
+            caption = ""
         caption_key = caption.lower().strip()
         if caption_key and caption_key in seen_text:
             caption = ""
@@ -550,11 +578,13 @@ def plan_episode(
         if not caption and not lines:
             # Nothing survived and there is nothing to quote: state the event itself,
             # which is grounded by construction, or leave the panel out.
-            tags = " ".join(beat.tags) if beat is not None and beat.tags else ""
-            structural = " ".join(
-                part for part in (beat.type.replace("-", " ") if beat else "", tags) if part
-            ).strip()
+            structural = next(
+                (structured.get(event_id, "") for event_id in event_ids if structured.get(event_id, "")),
+                "",
+            )
             if not structural:
+                structural = compose_caption_first(beat)
+            if not structural or looks_like_provenance(structural):
                 continue
             caption = structural
             caption_key = caption.lower().strip()

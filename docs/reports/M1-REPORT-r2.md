@@ -81,9 +81,11 @@ The full script text lives in the evidence folder, not in the repo:
 
 Throughput: the held-out cold run did 36 items in 21.9 s (1.6 items/s); the dev run
 reported 222 items/s on a warm cache. The pipeline gated 83,253 events in 158 s. Both
-deep benchmarks were re-run at the rework HEAD (14:16) and still report 100% on every
-category with 0 leaked; those re-runs were served from the model cache, which is the
-SPEC §4 guarantee, so the throughput line above quotes the cold numbers.
+deep benchmarks were re-run at the rework HEAD and still report 100% on every category
+with 0 leaked. Those re-runs were served from the model cache, which is the SPEC §4
+guarantee but proves the cache rather than the rules, so the held-out set was run again
+with an empty cache: 36 items in 25.5 s (1.4 items/s), 17/17 secrets, names 7/7, 0
+leaked, 0 quarantined (`benchmark-heldout-deep-cold.txt`).
 
 Recall is measured as *not leaked*; a quarantine counts as safe and is reported
 separately, and the gate fails if more than 5% of a run is quarantined.

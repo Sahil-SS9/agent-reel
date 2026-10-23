@@ -10,7 +10,7 @@ same template reaction panel after panel. The audit's human-readability spot che
 not pass that, so this stage is PARTIAL rather than PASS.
 
 Commit: written into this line after the r3 commits. Branch `main`. Nothing pushed,
-nothing installed in Hermes. 241 tests pass.
+nothing installed in Hermes. 228 tests pass.
 
 ## What is done, item by item
 
@@ -86,7 +86,7 @@ solved: the mechanism is right, the writing is not there yet.
 ```bash
 cd /home/kensei/repos/hermes-scrollback-reel
 export TMPDIR="${TMPDIR:-$HOME/.hermes/cache/scratch}"
-.venv/bin/python -m pytest                              # 241 passed
+.venv/bin/python -m pytest                              # 228 passed
 .venv/bin/python eval/threads/run.py                     # 30 threads, GATE PASSED
 .venv/bin/python eval/grounding/run.py                   # 32 cases, 0 released
 .venv/bin/python -m adapters.hermes.pipeline --data-dir "$TMPDIR/r3" --days 7 \

@@ -529,9 +529,18 @@ def plan_episode(
         written = dialogue.get(role, {})
 
         # ---- layer 1: the fact caption -----------------------------------
-        caption = str(written.get("caption", "")).strip() if isinstance(written, dict) else ""
-        if not caption:
-            caption = TemplateDialogueWriter(cast_names, hero=hero).caption_for(spec)
+        # R3-F4: the caption is composed from structured facts. A model caption is an
+        # improvement only when it passes the strict caption check; otherwise the
+        # composed sentence stands and nothing is counted as a repair.
+        structured_caption = str(spec.get("structured_caption", "")).strip()
+        model_caption = str(written.get("caption", "")).strip() if isinstance(written, dict) else ""
+        caption = structured_caption
+        if model_caption and grounder is not None and structured_caption:
+            candidate = grounder.check(model_caption, evidence_text, layer="caption")
+            if candidate.supported and not looks_like_provenance(model_caption):
+                caption = model_caption
+        elif model_caption and structured_caption == "":
+            caption = model_caption
         if caption and (len(caption.split()) < 3 or looks_like_provenance(caption)):
             caption = ""
         if grounder is not None and caption:
@@ -540,12 +549,13 @@ def plan_episode(
             if verdict.supported:
                 report.captions_supported += 1
             else:
-                # R3-F4: repair from structured facts, never from a provenance dump.
+                # A composed sentence that fails its own evidence check is a genuine
+                # repair: fall back to the beat's structured line, then to a short quote.
                 repaired = next(
                     (structured.get(event_id, "") for event_id in event_ids if structured.get(event_id, "")),
                     "",
                 )
-                if not repaired:
+                if not repaired or repaired == caption:
                     literal = grounder.literal_caption(evidence_text)
                     repaired = "" if looks_like_provenance(literal) else literal
                 report.reasons.append(f"{role} caption: {verdict.reason}")

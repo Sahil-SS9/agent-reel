@@ -70,7 +70,9 @@ def looks_like_provenance(text: str) -> bool:
 
 def _object_from(text: str) -> str:
     """The first clause of a text, short enough to be an object."""
-    clause = re.split(r"[.;\n]", " ".join((text or "").split()), maxsplit=1)[0]
+    cleaned = re.sub(r"https?://\S+", "a link", text or "")
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    clause = re.split(r"[.;\n]", cleaned.strip(), maxsplit=1)[0]
     clause = clause.strip(" ,:-\u2014")
     words = clause.split()
     if len(words) > MAX_OBJECT_WORDS:

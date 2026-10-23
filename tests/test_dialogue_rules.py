@@ -6,6 +6,7 @@ from canon.arcs import build_arcs
 from canon.beats import beats_from_events
 from canon.brief import build_brief
 from canon.canon import build_canon
+from canon.caption import compose_caption
 from canon.episode import TemplateDialogueWriter, plan_episode, validate_ir
 from canon.events import KIND_TASK_CREATED, KIND_TASK_STATUS, build_event
 from canon.gate import seal
@@ -52,6 +53,7 @@ def plan(writer=None):
         arc, beats, canon,
         writer=writer or TemplateDialogueWriter(("Sahil", "Wesker", "Octacon", "Quan")),
         evidence=evidence, brief=brief, cast_map=cast_map,
+        structured_captions={event.id: compose_caption(event) for event in events},
         thread_evidence="\n".join(evidence.values()),
     )
     return ir

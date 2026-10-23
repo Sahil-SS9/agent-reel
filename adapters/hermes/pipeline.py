@@ -34,6 +34,7 @@ from typing import Any, Iterable, Sequence
 from canon.arcs import build_arcs
 from canon.beats import Beat, beats_from_events
 from canon.cache import ModelCache
+from canon.aliases import AliasBook, apply_to_ir, masks_in
 from canon.canon import Canon, build_canon
 from canon.casting import build_cast_map, summarise as summarise_cast
 from canon.episode import (
@@ -190,6 +191,11 @@ def render_script_markdown(ir: EpisodeIR) -> str:
             lines.append(f"- {line.speaker}: \u201c{line.text}\u201d  [{', '.join(line.source_event_ids)}]")
         lines.append("")
     return "\n".join(lines)
+
+
+def markdown_of(ir: EpisodeIR) -> str:
+    """The rendered script, used for checks that must see exactly what is written."""
+    return render_script_markdown(ir)
 
 
 def evidence_by_event(gated: Iterable[GatedEvent]) -> dict[str, str]:
@@ -466,6 +472,15 @@ def run_pipeline(
             cast_map=cast_map,
             title=title,
         )
+        # Round 3 item 3: a script never shows a redaction marker. Every masked value
+        # gets a stable fictional alias from the private alias book.
+        alias_book = AliasBook.load(snapshot_store.root / "aliases.json")
+        ir = apply_to_ir(ir, alias_book)
+        alias_book.save()
+        stray_masks = masks_in(markdown_of(ir))
+        if stray_masks:
+            result.problems.append(f"script still shows {len(stray_masks)} redaction marker(s)")
+
         result.grounding = dict(ir.grounding)
         result.cast = summarise_cast(cast_map)
         result.ir = ir

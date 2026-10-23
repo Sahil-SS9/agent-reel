@@ -114,7 +114,7 @@ def test_gate_event_releases_a_gated_event_with_text():
     gate = make_gate()
     sealed = gate.gate_event(_event(), text="ring 07700 900123 about the build")
     assert sealed is not None
-    assert sealed.payload["text"].startswith("ring [REDACTED:phone]")
+    assert sealed.payload["text"].startswith("ring [REDACTED:phone#")
     assert sealed.payload["text_digest"].startswith("sha256:")
     assert "phone" in sealed.payload["gate"]["findings"]
 
@@ -152,8 +152,8 @@ def test_unstructured_payload_strings_are_redacted_too():
     event = _event(owner_email="sahil@example.com", nested={"ip": "10.0.0.17"})
     sealed = gate.gate_event(event)
     assert sealed is not None
-    assert "[REDACTED:email]" in sealed.payload["owner_email"]
-    assert "[REDACTED:ip]" in sealed.payload["nested"]["ip"]
+    assert "[REDACTED:email#" in sealed.payload["owner_email"]
+    assert "[REDACTED:ip#" in sealed.payload["nested"]["ip"]
 
 
 def test_privacy_rides_along_to_the_gated_event():
@@ -211,7 +211,7 @@ def test_vocabulary_pass_masks_names_found_by_the_model(tmp_path):
     gate = make_gate(model_gate=model_gate, allowlist=("Sahil",))
     gate.learn_vocabulary(["Priya Raman signed off", "Sahil asked for it"])
     redacted, findings = gate.redact_text("Priya Raman signed off and Sahil asked")
-    assert "[REDACTED:person_name]" in redacted
+    assert "[REDACTED:person_name#" in redacted
     assert "Sahil" in redacted
     assert "person_name" in {finding.category for finding in findings}
 

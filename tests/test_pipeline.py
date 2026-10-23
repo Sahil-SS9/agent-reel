@@ -116,7 +116,7 @@ def test_memory_snapshot_is_private_and_evidence_gets_counts_only(hermes_env, tm
     assert payload["files"]
     stored = json.dumps(payload)
     assert "jane.doe@example.com" not in stored, "raw memory text reached the snapshot"
-    assert "[REDACTED:email]" in stored, "the snapshot should hold the gated form"
+    assert "[REDACTED:email#" in stored, "the snapshot should hold the gated form"
     assert "jane.doe@example.com" not in blob
 
 

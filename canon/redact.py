@@ -21,6 +21,7 @@ The gate returns :class:`canon.gate.GatedEvent` objects and a quarantine list.
 
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, Protocol, Sequence
@@ -29,7 +30,11 @@ from canon.events import Event, PRIVACY_LEVELS, text_digest
 from canon.gate import GatedEvent, seal
 from canon.llm import CachedLLM, LLMError
 
-MASK_TEMPLATE = "[REDACTED:{category}]"
+#: The mask carries a short digest of the value it replaced: the same project gets the
+#: same id every run, which is what lets the writer give it a stable fictional alias
+#: instead of printing a marker (audit R2-F1 / round 3 item 3).
+MASK_TEMPLATE = "[REDACTED:{category}#{digest}]"
+MASK_TEMPLATE_NO_DIGEST = "[REDACTED:{category}]"
 
 #: Categories the deterministic pass owns.
 DETERMINISTIC_CATEGORIES = frozenset(
@@ -110,9 +115,12 @@ class DeterministicRedactor:
         self.rules = tuple(rules)
         self.mask_template = mask_template
 
-    def mask(self, category: str) -> str:
-        """The replacement token for a category."""
-        return self.mask_template.format(category=category)
+    def mask(self, category: str, value: str = "") -> str:
+        """The replacement token for a category, tagged with the value's digest."""
+        if not value:
+            return MASK_TEMPLATE_NO_DIGEST.format(category=category)
+        digest = hashlib.sha256(value.encode("utf-8", "replace")).hexdigest()[:6]
+        return self.mask_template.format(category=category, digest=digest)
 
     def findings(self, text: str) -> list[Finding]:
         found: list[Finding] = []
@@ -159,8 +167,9 @@ class DeterministicRedactor:
         findings: list[Finding] = []
         cursor = 0
         for start, end, category, rule_name in merged:
+            matched = text[start:end]
             out.append(text[cursor:start])
-            out.append(self.mask(category))
+            out.append(self.mask(category, matched))
             findings.append(Finding(category, rule_name, start, end))
             cursor = end
         out.append(text[cursor:])
@@ -443,7 +452,7 @@ class RedactionGate:
             if start < cursor:
                 continue
             out.append(text[cursor:start])
-            out.append(self.redactor.mask(category))
+            out.append(self.redactor.mask(category, text[start:end]))
             findings.append(Finding(category, rule_name, start, end))
             cursor = end
         out.append(text[cursor:])
@@ -472,7 +481,7 @@ class RedactionGate:
             if start < cursor:
                 continue
             out.append(text[cursor:start])
-            out.append(self.redactor.mask(category))
+            out.append(self.redactor.mask(category, text[start:end]))
             findings.append(Finding(category, "model_span", start, end))
             cursor = end
         out.append(text[cursor:])

@@ -120,6 +120,7 @@ def _episode(writer):
             ("kanban.task.status", "blocked after 2 failures"),
             ("message.tool_result", "error: timeout talking to the runner"),
             ("kanban.task.status", "completed"),
+            ("kanban.task.status", "blocked"),
         ]
     ):
         event = build_event(
@@ -128,7 +129,7 @@ def _episode(writer):
             ts=float(index + 1),
             profile="wesker",
             subject=str(index),
-            payload={"kind": "blocked" if index == 0 else "completed", "text": text},
+            payload={"kind": "blocked" if index in (0, 3) else "completed", "text": text},
             store="main",
             table="messages",
             pk=str(index),

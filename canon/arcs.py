@@ -25,6 +25,9 @@ from canon.threads import Thread, beats_by_thread, causal_check, thread_index
 ARC_ROLES = ("setup", "hidden_problem", "diagnosis", "climax", "aftermath", "win")
 ARC_TYPES = ("struggle-to-resolution", "pivot", "rivalry", "mystery", "training-montage")
 
+#: A weekly strip has 4-6 panels, so a thread needs at least this many beats.
+MIN_BEATS_PER_ARC = 4
+
 
 @dataclass(frozen=True, slots=True)
 class Arc:
@@ -138,6 +141,20 @@ def _chain(beats: Sequence[Beat]) -> dict[str, str]:
         win = take(after)
     commit("win", win)
 
+    # A weekly strip wants 4-6 panels. If the chain is short, fill the remaining roles
+    # with this thread's own unused beats - never another thread's - and lay the
+    # selected beats out in time so the roles stay chronological.
+    selected = [beat for beat in ordered if beat.id in used]
+    if len(selected) < 4:
+        extras = [beat for beat in ordered if beat.id not in used]
+        filled = list(selected)
+        while extras and len(filled) < 6:
+            filled.append(extras.pop(0))
+        # Only re-lay the roles if that actually gives a strip; a three-beat thread
+        # keeps its chain (and its climax) rather than being renamed into nothing.
+        if len(filled) >= 4:
+            filled.sort(key=lambda beat: (beat.ts, beat.id))
+            roles = {role: beat.id for role, beat in zip(ARC_ROLES, filled)}
     return roles
 
 
@@ -244,12 +261,14 @@ def build_arcs(
     session and task titles, not from tool names.
     """
     grouped = beats_by_thread(beats, threads)
-    by_id = {thread.id: thread for thread in threads}
     arcs: list[Arc] = []
-    for thread_id, thread_beats in grouped.items():
-        if len(thread_beats) < 3:
+    # ``threads`` arrive best-first (text before size before recency), so the first
+    # thread with enough beats is the story, not whichever thread happened to be
+    # seen first.
+    for thread in threads:
+        thread_beats = grouped.get(thread.id, [])
+        if len(thread_beats) < MIN_BEATS_PER_ARC:
             continue
-        thread = by_id[thread_id]
         arc = build_arc(
             thread_beats,
             arc_type="struggle-to-resolution",

@@ -55,6 +55,7 @@ def _episode(**kwargs):
             ("default", "blocked", "the build blocked after 2 failures"),
             ("default", "blocked", "the build blocked again on the runner"),
             ("default", "completed", "the build completed after the fix"),
+            ("default", "completed", "the build stayed green"),
         ]
     ):
         payload = {"kind": kind_field, "text": text, "task_id": "t_a", "chars": len(text)}

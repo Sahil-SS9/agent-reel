@@ -40,8 +40,17 @@ def rules_from_snapshot(snapshot: dict | None = None) -> tuple[Rule, ...]:
     rules: list[Rule] = []
 
     # ---- secrets: vendor token prefixes (verbatim from Hermes) -----------
+    # Hermes' patterns carry no left boundary, so "sk-" also matches inside an
+    # ordinary identifier ("kanban-blocked-task-resolution"). Requiring a token
+    # boundary keeps real keys ("Bearer sk-proj-...") and stops the false positive.
     for index, prefix in enumerate(snap["prefix_patterns"]):
-        rules.append(Rule("secret", f"hermes_prefix_{index}", re.compile(prefix)))
+        rules.append(
+            Rule(
+                "secret",
+                f"hermes_prefix_{index}",
+                re.compile(rf"(?<![A-Za-z0-9_\-])(?:{prefix})"),
+            )
+        )
 
     # ---- secrets: credentials in assignments and headers -----------------
     env_names = snap["secret_env_names"]

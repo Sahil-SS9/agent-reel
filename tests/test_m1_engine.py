@@ -160,10 +160,10 @@ def test_arcs_are_built_only_from_one_thread():
 
     events = [
         gated("kanban.task.status", float(index * 10), kind="blocked", subject=f"t{index}", task_id="t_a")
-        for index in range(3)
+        for index in range(4)
     ] + [
         gated("kanban.task.status", 100.0 + index, kind="completed", subject=f"u{index}", task_id="t_b")
-        for index in range(3)
+        for index in range(4)
     ]
     threads = build_threads(events)
     assert len(threads) == 2

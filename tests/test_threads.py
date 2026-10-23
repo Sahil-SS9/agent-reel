@@ -129,7 +129,8 @@ def test_unrelated_events_never_form_one_arc():
             [
                 gated("kanban.task.status", index * day + 10, task_id=task, kind_field="blocked", profile="wesker"),
                 gated("kanban.task.status", index * day + 20, task_id=task, kind_field="blocked", profile="octacon"),
-                gated("kanban.task.status", index * day + 30, task_id=task, kind_field="completed", profile="quan"),
+                gated("kanban.task.status", index * day + 30, task_id=task, kind_field="blocked", profile="quan"),
+                gated("kanban.task.status", index * day + 40, task_id=task, kind_field="completed", profile="quan"),
             ]
         )
     threads = build_threads(events)
@@ -152,6 +153,7 @@ def test_arcs_carry_their_thread():
         gated("kanban.task.status", 10.0, task_id="t_a", kind_field="blocked", text="the build blocked after 2 failures"),
         gated("kanban.task.status", 20.0, task_id="t_a", kind_field="blocked", text="the build blocked again"),
         gated("kanban.task.status", 30.0, task_id="t_a", kind_field="completed", text="the build completed"),
+        gated("kanban.task.status", 40.0, task_id="t_a", kind_field="completed", text="the build stayed green"),
     ]
     threads = build_threads(events)
     arcs = build_arcs(threads, beats_from_events(events), events_by_id={event.id: event for event in events})

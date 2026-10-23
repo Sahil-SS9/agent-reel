@@ -30,6 +30,7 @@ Branch: `main`
 
 ```bash
 cd /home/kensei/repos/hermes-scrollback-reel
+export TMPDIR="${TMPDIR:-$HOME/.hermes/cache/scratch}"   # rig convention: scratch, not the system temp dir
 
 # venv (Python 3.12; pillow, pytest, jsonschema, pyyaml)
 uv venv .venv --python 3.12
@@ -46,11 +47,11 @@ uv pip install --python .venv/bin/python pillow pytest jsonschema pyyaml
 bash scripts/readonly_proof.sh
 
 # 4. synthetic home + adapter against it
-.venv/bin/python -m fixtures.build_synthetic_home /tmp/reel-synthetic --seed 7
-HERMES_HOME=/tmp/reel-synthetic .venv/bin/python -m adapters.hermes.history --days 7 --summary
+.venv/bin/python -m fixtures.build_synthetic_home "$TMPDIR/reel-synthetic" --seed 7
+HERMES_HOME="$TMPDIR/reel-synthetic" .venv/bin/python -m adapters.hermes.history --days 7 --summary
 
 # 5. write an event stream (refuses any path inside the repo)
-.venv/bin/python -m adapters.hermes.history --days 7 --out /tmp/reel-events.jsonl
+.venv/bin/python -m adapters.hermes.history --days 7 --out "$TMPDIR/reel-events.jsonl"
 ```
 
 ## State verification (HANDOFF §3)
@@ -111,7 +112,7 @@ None of P1–P4 are exercised in M0 (no storage, styles, cast or privacy levels 
 
 ## Known gaps / not checked
 
-- No real event stream was materialised from real history. By design: M0 produces a summary only, so no real text left the databases. The JSONL writer exists and is exercised against the synthetic home and `/tmp` only.
+- No real event stream was materialised from real history. By design: M0 produces a summary only, so no real text left the databases. The JSONL writer exists and is exercised against the synthetic home and `$TMPDIR` only.
 - Skill backfill granularity is limited to milestones (see deviations).
 - `~/.hermes/a2a_audit.jsonl` is absent on this rig, so the A2A source is untested (SPEC lists it as optional).
 - Performance is measured for a 7-day window only: 3.2 s wall, 36 MB peak RSS. A 30-day window and the M1 ingest of full text are unmeasured.

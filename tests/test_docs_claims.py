@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
@@ -42,6 +43,36 @@ def test_proof_script_states_the_exact_claim():
     text = _read("scripts/readonly_proof.sh")
     assert "no file is created, renamed, truncated or deleted" in text
     assert WAL_INDEX_PHRASE in text
+
+
+# ---------------------------------------------------------------- F4: $TMPDIR
+
+DOC_FILES = (
+    "README.md",
+    "canon/HERMES_SCHEMA.md",
+    "docs/reports/M0-REPORT.md",
+    "scripts/readonly_proof.sh",
+)
+
+
+#: The system temp dir as a path, but not `$SCRATCH/tmp` or `tmp_path`.
+_SYSTEM_TMP = re.compile(r"(?<![\w$])/tmp(?:/|\"|\s|$)")
+
+
+def test_docs_and_examples_use_tmpdir_not_slash_tmp():
+    """The rig convention is $TMPDIR; the system temp dir is never for scratch work."""
+    offenders = []
+    for rel in DOC_FILES:
+        for number, line in enumerate(_read(rel).splitlines(), start=1):
+            if _SYSTEM_TMP.search(line):
+                offenders.append(f"{rel}:{number}: {line.strip()}")
+    assert offenders == [], "use $TMPDIR instead of the system temp dir:\n" + "\n".join(offenders)
+
+
+def test_examples_export_tmpdir_with_the_rig_default():
+    text = _read("docs/reports/M0-REPORT.md")
+    assert 'export TMPDIR="${TMPDIR:-$HOME/.hermes/cache/scratch}"' in text
+    assert "$TMPDIR/reel-synthetic" in text
 
 
 def test_no_overclaim_remains():

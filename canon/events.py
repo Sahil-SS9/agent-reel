@@ -18,7 +18,14 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Iterator, Mapping
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+
+#: Privacy levels (SPEC §4). Default is ``private``: nothing is shareable until
+#: the owner approves named entities and the redaction scan is clean.
+PRIVACY_PRIVATE = "private"
+PRIVACY_INTERNAL = "internal"
+PRIVACY_PUBLIC = "public"
+PRIVACY_LEVELS = (PRIVACY_PRIVATE, PRIVACY_INTERNAL, PRIVACY_PUBLIC)
 
 # --------------------------------------------------------------------------- #
 # Sources and kinds
@@ -147,7 +154,12 @@ def text_digest(text: str) -> str:
 
 @dataclass(frozen=True, slots=True)
 class Event:
-    """One normalised thing that happened, from any source."""
+    """One normalised thing that happened, from any source.
+
+    ``payload`` is the *pre-gate* structure: counts, digests, structural keys.
+    ``payload_redacted`` is filled in by the redaction gate (``canon.redact``) and
+    is the only payload later stages are allowed to see, via ``GatedEvent``.
+    """
 
     id: str
     ts: float
@@ -160,12 +172,18 @@ class Event:
     ref: Mapping[str, str] = field(default_factory=dict)
     content_ref: ContentRef | None = None
     derived_from: tuple[str, ...] = ()
+    privacy: str = PRIVACY_PRIVATE
+    payload_redacted: Mapping[str, Any] | None = None
 
     def __post_init__(self) -> None:
         if self.source not in ALL_SOURCES:
             raise ValueError(f"unknown event source: {self.source!r}")
         if not self.kind:
             raise ValueError("event kind is required")
+        if self.privacy not in PRIVACY_LEVELS:
+            raise ValueError(
+                f"unknown privacy level: {self.privacy!r} (expected one of {PRIVACY_LEVELS})"
+            )
 
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {
@@ -179,11 +197,14 @@ class Event:
             "subject": self.subject,
             "payload": dict(self.payload),
             "ref": dict(self.ref),
+            "privacy": self.privacy,
         }
         if self.content_ref is not None:
             out["content_ref"] = self.content_ref.as_dict()
         if self.derived_from:
             out["derived_from"] = list(self.derived_from)
+        if self.payload_redacted is not None:
+            out["payload_redacted"] = dict(self.payload_redacted)
         return out
 
     @classmethod
@@ -201,6 +222,10 @@ class Event:
             ref=dict(data.get("ref") or {}),
             content_ref=ContentRef.from_dict(cref) if cref else None,
             derived_from=tuple(data.get("derived_from") or ()),
+            privacy=str(data.get("privacy", PRIVACY_PRIVATE)),
+            payload_redacted=(
+                dict(data["payload_redacted"]) if data.get("payload_redacted") is not None else None
+            ),
         )
 
 
@@ -219,6 +244,7 @@ def build_event(
     content_column: str | None = "content",
     discriminator: str = "",
     derived_from: Iterable[str] = (),
+    privacy: str = PRIVACY_PRIVATE,
 ) -> Event:
     """Convenience constructor that derives the id from the provenance."""
     ref: dict[str, str] = {}
@@ -244,6 +270,7 @@ def build_event(
             else None
         ),
         derived_from=tuple(derived_from),
+        privacy=privacy,
     )
 
 

@@ -499,7 +499,11 @@ def plan_episode(
         spec["speakers"] = sorted(
             {
                 name
-                for name in (spec["cast"] + tuple(cast_map.values()) if thread_haystack else spec["cast"])
+                for name in (
+                    spec["cast"] + tuple((cast_map or {}).values())
+                    if thread_haystack
+                    else spec["cast"]
+                )
                 if in_thread_evidence(name) or not thread_haystack
             }
             or set(spec["actors"])

@@ -304,3 +304,71 @@ class ArcLedger:
 
     def as_dict(self) -> dict[str, Any]:
         return {"arcs": [arc.as_dict() for arc in self.arcs]}
+
+
+def build_brief_arc(
+    brief: Any,
+    events_by_id: Mapping[str, Any],
+    *,
+    thread_kind: str = "brief",
+    thread_label: str = "",
+) -> "tuple[Arc | None, tuple[Any, ...]]":
+    """An arc built from a thread brief (round 4).
+
+    Kanban lifecycle beats describe churn; a session's story is its goal, its turns and
+    its outcome. Each brief line becomes one beat, and the roles are assigned by
+    position - the arc is chronological by construction, and a three-turn brief still
+    fills three panels instead of being dropped for having no "climax".
+    """
+    from canon.beats import Beat
+    from canon.events import make_event_id
+
+    turns = list(getattr(brief, "turns", ()) or ())
+    if not turns:
+        return None, ()
+
+    beats: list[Beat] = []
+    for index, turn in enumerate(turns):
+        event = events_by_id.get(turn.event_id)
+        ts = float(getattr(event, "ts", float(index)))
+        last = index == len(turns) - 1
+        beat_type = "decision" if index == 0 else ("breakthrough" if last else "struggle")
+        beats.append(
+            Beat(
+                id=make_event_id("beat", beat_type, ts, {"event": turn.event_id}),
+                type=beat_type,
+                summary=turn.text,
+                intensity=3,
+                event_ids=(turn.event_id,),
+                ts=ts,
+                profile=turn.actor,
+                tags=("brief",),
+            )
+        )
+
+    # Assign roles by position so every brief turn becomes a panel.
+    count = len(beats)
+    if count >= len(ARC_ROLES):
+        roles_list = list(ARC_ROLES)
+    elif count >= 4:
+        roles_list = ["setup", "hidden_problem", "climax", "win"]
+    else:
+        roles_list = ["setup", "hidden_problem", "climax"][-count:] if count < 3 else ["setup", "hidden_problem", "climax"]
+    roles = {role: beat.id for role, beat in zip(roles_list, beats)}
+
+    completed = bool(getattr(brief, "outcome", ""))
+    arc = Arc(
+        id=make_event_id("arc", "brief", beats[0].ts, {"thread": getattr(brief, "thread_key", "")}),
+        title=str(getattr(brief, "goal", "") or getattr(brief, "thread_key", "")),
+        type="struggle-to-resolution",
+        status="resolved" if completed else "open",
+        roles=roles,
+        beat_ids=tuple(beat.id for beat in beats),
+        stakes=str(getattr(brief, "goal", "")),
+        opened=beats[0].ts,
+        resolved=beats[-1].ts,
+        thread_id=str(getattr(brief, "thread_key", "")),
+        thread_kind=thread_kind,
+        thread_label=thread_label or str(getattr(brief, "thread_key", "")),
+    )
+    return arc, tuple(beats)

@@ -31,6 +31,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
+from canon.brief import build_brief
+from canon.selection import select_stories
+from canon.threads import beats_by_thread
+from canon.arcs import build_brief_arc
 from canon.arcs import build_arcs
 from canon.beats import Beat, beats_from_events
 from canon.cache import ModelCache
@@ -43,6 +47,7 @@ from canon.episode import (
     LLMDialogueWriter,
     TemplateDialogueWriter,
     plan_episode,
+    usable_anchor_count,
     validate_ir,
 )
 from canon.events import Event
@@ -151,6 +156,8 @@ class PipelineResult:
     cast: list[dict[str, Any]] = field(default_factory=list)
     episodes: list[dict[str, Any]] = field(default_factory=list)
     llm_usage: dict[str, Any] = field(default_factory=dict)
+    stories: list[dict[str, Any]] = field(default_factory=list)
+    skipped_stories: list[dict[str, str]] = field(default_factory=list)
     timings: dict[str, float] = field(default_factory=dict)
     artifacts: dict[str, str] = field(default_factory=dict)
 
@@ -478,30 +485,75 @@ def run_pipeline(
             actors_by_event[event.id] = who
 
         evidence_map = evidence_by_event(gated)
+        structured_captions = {event.id: compose_caption(event) for event in gated}
+
+        # R3-F1: pick stories by meaning (sessions with a goal and an outcome, or task
+        # families whose titles describe real work). Bookkeeping is never a story.
+        selected, all_candidates = select_stories(gated, limit=max(4, config.episodes * 4))
+        result.stories = [candidate.as_dict() for candidate in all_candidates[:12]]
+        threads_index = {thread.key: thread for thread in threads}
+        grouped_beats = beats_by_thread(beats, threads)
+        thread_events: dict[str, list[GatedEvent]] = {}
+        for event in gated:
+            for thread in threads:
+                if event.id in thread.event_ids:
+                    thread_events.setdefault(thread.id, []).append(event)
+                    break
+
         episodes: list[dict[str, Any]] = []
         ir: EpisodeIR | None = None
-        for index, arc in enumerate(arcs[: max(1, config.episodes)], start=1):
-            thread_beats = [beat for beat in beats if beat.id in set(arc.beat_ids)]
-            title_evidence = "\n".join(
-                evidence_map.get(event_id, "")
-                for beat in (thread_beats or beats)
-                for event_id in beat.event_ids
+        skipped: list[dict[str, str]] = []
+        for candidate in selected:
+            if len(episodes) >= max(1, config.episodes):
+                break
+            thread = threads_index.get(candidate.key)
+            if thread is None:
+                skipped.append({"key": candidate.key, "reason": "no thread for this story"})
+                continue
+            # R3-F2: the brief is the story spine, built from the thread's own text.
+            brief = build_brief(
+                thread.key,
+                thread.kind,
+                thread_events.get(thread.id, []),
+                gate=grounder if config.use_model else None,
+            )
+            if not brief.ok:
+                skipped.append(
+                    {"key": candidate.key, "reason": f"brief not usable ({len(brief.turns)} turns)"}
+                )
+                continue
+            thread_beats = grouped_beats.get(thread.id, [])
+            thread_event_map = {event.id: event for event in thread_events.get(thread.id, [])}
+            # R3-F3: panels are anchored on beats that carry gated text. A kanban thread
+            # has lifecycle beats; a session thread usually has too few, so its beats
+            # are built from the brief itself (round 4).
+            if usable_anchor_count(thread_beats, brief=brief, evidence=evidence_map) >= 3:
+                arc = build_arc(
+                    thread_beats, thread=thread, events_by_id=thread_event_map
+                )
+                story_beats = thread_beats
+            else:
+                arc, story_beats = build_brief_arc(brief, thread_event_map)
+            if arc is None:
+                skipped.append({"key": candidate.key, "reason": "no arc"})
+                continue
+            thread_evidence_text = "\n".join(
+                [brief.text()]
+                + [evidence_map.get(event_id, "") for event_id in candidate.event_ids]
             )
             title, title_source = write_title(
                 writer_cached if config.use_model else None,
-                beats=thread_beats or beats,
+                beats=story_beats or thread_beats,
                 derived=arc.title,
                 hero=config.hero,
                 gate=grounder,
-                evidence=title_evidence,
+                evidence=brief.text(),
                 alias=alias_book.resolve,
             )
-            structured_captions = {
-                event.id: compose_caption(event) for event in gated
-            }
+            index = len(episodes) + 1
             episode_ir = plan_episode(
                 arc,
-                beats,
+                story_beats or thread_beats,
                 canon,
                 format=config.format,
                 season=config.season,
@@ -510,11 +562,16 @@ def run_pipeline(
                 hero=config.hero,
                 grounder=grounder,
                 evidence=evidence_map,
+                brief=brief,
                 structured_captions=structured_captions,
                 actors_by_event=actors_by_event,
                 cast_map=cast_map,
+                thread_evidence=thread_evidence_text,
                 title=title,
             )
+            if len(episode_ir.panels) < 3:
+                skipped.append({"key": candidate.key, "reason": "fewer than three panels"})
+                continue
             episode_ir = apply_to_ir(episode_ir, alias_book)
             stray = masks_in(markdown_of(episode_ir))
             if stray:
@@ -524,6 +581,8 @@ def run_pipeline(
             episodes.append(
                 {
                     "number": index,
+                    "story_key": candidate.key,
+                    "story_kind": candidate.kind,
                     "thread_kind": arc.thread_kind,
                     "thread_label": arc.thread_label,
                     "title": title,
@@ -531,6 +590,7 @@ def run_pipeline(
                     "panels": len(episode_ir.panels),
                     "cliffhanger": episode_ir.cliffhanger,
                     "grounding": dict(episode_ir.grounding),
+                    "brief": brief.as_dict(),
                     "ir": episode_ir,
                 }
             )
@@ -538,16 +598,23 @@ def run_pipeline(
                 ir = episode_ir
                 result.title = title
                 result.title_source = title_source
+        result.skipped_stories = skipped
         alias_book.save()
         if ir is None:
+            # Honest empty run: no story could be told, but the run still reports its
+            # gate, its stories and its skips so the reason is visible.
             result.problems.append("no episode could be planned")
-            return result
+            result.episodes = []
+            result.skipped_stories = skipped
+            result.timings["episode_s"] = round(time.time() - started, 2)
+            result.timings["writer"] = "none"
         result.episodes = [
             {key: value for key, value in row.items() if key != "ir"} for row in episodes
         ]
-        result.grounding = dict(ir.grounding)
-        result.cast = summarise_cast(cast_map)
-        result.ir = ir
+        if ir is not None:
+            result.grounding = dict(ir.grounding)
+            result.cast = summarise_cast(cast_map)
+            result.ir = ir
         result.timings["episode_s"] = round(time.time() - started, 2)
         result.llm_usage = {
             "redaction": getattr(client, "usage", lambda: {})(),
@@ -560,8 +627,14 @@ def run_pipeline(
 
         # ---- gates on the output ----------------------------------------
         known = set(gated_by_id)
-        result.problems.extend(validate_ir(ir, known_event_ids=known))
-        markdown = render_script_markdown(ir)
+        if ir is None:
+            # Nothing was written, so there is nothing to validate or scan. The run has
+            # already reported why in problems.
+            result.problems.extend([])
+            markdown = ""
+        else:
+            result.problems.extend(validate_ir(ir, known_event_ids=known))
+            markdown = render_script_markdown(ir)
         hits = leakscan.scan_text(markdown)
         if hits:
             result.problems.append(
@@ -569,7 +642,7 @@ def run_pipeline(
                 + ", ".join(sorted({hit.pattern for hit in hits}))
                 + " in the rendered script"
             )
-        for panel in ir.panels:
+        for panel in (ir.panels if ir is not None else ()):
             for line in panel.lines:
                 name_hits = leakscan.scan_text(f"{line.speaker}: {line.text}")
                 if any(hit.pattern == "high_entropy" for hit in name_hits):
@@ -605,7 +678,8 @@ def run_pipeline(
             )
             write_json(config.data_dir / "arcs.json", {"arcs": [arc.as_dict() for arc in arcs]}, gate)
             write_json(config.data_dir / "canon.json", canon.as_dict(), gate)
-            write_json(config.data_dir / "script-ir.json", ir.as_dict(), gate)
+            if ir is not None:
+                write_json(config.data_dir / "script-ir.json", ir.as_dict(), gate)
             for row in episodes:
                 episode_ir = row["ir"]
                 write_json(
@@ -636,11 +710,13 @@ def run_pipeline(
                     "quarantined": result.quarantined,
                     "beats": len(beats),
                     "arcs": len(arcs),
-                    "panels": len(ir.panels),
-                    "writer": ir.writer,
+                    "panels": len(ir.panels) if ir is not None else 0,
+                    "writer": ir.writer if ir is not None else "",
                     "grounding": result.grounding,
                     "episodes": result.episodes,
                     "llm_usage": result.llm_usage,
+                    "stories": result.stories,
+                    "skipped_stories": result.skipped_stories,
                     "threads": result.threads,
                     "title": result.title,
                     "title_source": result.title_source,

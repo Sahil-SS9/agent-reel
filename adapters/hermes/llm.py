@@ -39,7 +39,8 @@ class OpenAICompatLLMClient:
         timeout: float = DEFAULT_TIMEOUT,
         retries: int = DEFAULT_RETRIES,
         temperature: float = 0.0,
-        max_tokens: int = 900,
+        max_tokens: int = 1200,
+        extra_body: Mapping[str, Any] | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
@@ -48,13 +49,23 @@ class OpenAICompatLLMClient:
         self.retries = retries
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.extra_body = dict(extra_body or {})
         self.name = f"openai-compat:{model}"
         self.calls = 0
 
     @classmethod
     def local(cls, model: str = "auto", port: int = 8091) -> "OpenAICompatLLMClient":
-        """The rig's local serving route (Turbofit), no key involved."""
-        return cls(base_url=f"http://127.0.0.1:{port}/v1", model=model)
+        """The rig's local serving route (Turbofit), no key involved.
+
+        Thinking is disabled: a reasoning model here spends the whole token budget
+        on ``reasoning_content`` and returns ``content: null``, which looks like an
+        empty answer and fails the call. JSON tasks do not need it.
+        """
+        return cls(
+            base_url=f"http://127.0.0.1:{port}/v1",
+            model=model,
+            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+        )
 
     # -- internals ---------------------------------------------------------
     def _post(self, body: Mapping[str, Any]) -> dict[str, Any]:
@@ -100,7 +111,7 @@ class OpenAICompatLLMClient:
             user_content += (
                 f"\n\nResponse shape:\n{json.dumps(schema_hint, sort_keys=True)}"
             )
-        body = {
+        body: dict[str, Any] = {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": "You return JSON only. No prose, no markdown."},
@@ -109,6 +120,7 @@ class OpenAICompatLLMClient:
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,
         }
+        body.update(self.extra_body)
         response = self._post(body)
         try:
             content = response["choices"][0]["message"]["content"]

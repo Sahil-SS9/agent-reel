@@ -1,0 +1,170 @@
+{
+ "key": "redact.vocabulary|openai-compat:auto|ddb3e97e941e6133fd6ba47fab27f902|6aa9dcb055043b7688491565d36460a8",
+ "model": "openai-compat:auto",
+ "stage": "redact.vocabulary",
+ "v": 1,
+ "value": {
+  "results": [
+   {
+    "category": "person_name",
+    "name": "Amara Diallo"
+   },
+   {
+    "category": "safe",
+    "name": "Amz"
+   },
+   {
+    "category": "person_name",
+    "name": "Aoife Byrne"
+   },
+   {
+    "category": "safe",
+    "name": "Api"
+   },
+   {
+    "category": "person_name",
+    "name": "Arjun Mehta"
+   },
+   {
+    "category": "client_name",
+    "name": "Ashgrove Legal"
+   },
+   {
+    "category": "project_name",
+    "name": "Atlas Rebuild"
+   },
+   {
+    "category": "safe",
+    "name": "Authorization"
+   },
+   {
+    "category": "safe",
+    "name": "Basic"
+   },
+   {
+    "category": "safe",
+    "name": "Bearer"
+   },
+   {
+    "category": "client_name",
+    "name": "Bluepeak Analytics"
+   },
+   {
+    "category": "person_name",
+    "name": "Chen Wei"
+   },
+   {
+    "category": "safe",
+    "name": "Client"
+   },
+   {
+    "category": "safe",
+    "name": "Deploy"
+   },
+   {
+    "category": "person_name",
+    "name": "Dmitri Volkov"
+   },
+   {
+    "category": "safe",
+    "name": "Documents"
+   },
+   {
+    "category": "person_name",
+    "name": "Elena Petrova"
+   },
+   {
+    "category": "safe",
+    "name": "Environment"
+   },
+   {
+    "category": "safe",
+    "name": "Escalate"
+   },
+   {
+    "category": "person_name",
+    "name": "Fatima Al"
+   },
+   {
+    "category": "safe",
+    "name": "Gateway"
+   },
+   {
+    "category": "person_name",
+    "name": "Halden"
+   },
+   {
+    "category": "safe",
+    "name": "Header"
+   },
+   {
+    "category": "safe",
+    "name": "Here"
+   },
+   {
+    "category": "person_name",
+    "name": "Hiroshi Tanaka"
+   },
+   {
+    "category": "person_name",
+    "name": "Ingrid Larsson"
+   },
+   {
+    "category": "project_name",
+    "name": "Initiative Redshift"
+   },
+   {
+    "category": "person_name",
+    "name": "Jonas Weber"
+   },
+   {
+    "category": "client_name",
+    "name": "Kestrel Labs"
+   },
+   {
+    "category": "safe",
+    "name": "Key"
+   },
+   {
+    "category": "person_name",
+    "name": "Kwame Mensah"
+   },
+   {
+    "category": "safe",
+    "name": "Link"
+   },
+   {
+    "category": "person_name",
+    "name": "Lucia Fernandez"
+   },
+   {
+    "category": "person_name",
+    "name": "Mike Harrington"
+   },
+   {
+    "category": "person_name",
+    "name": "Nnenna Okafor"
+   },
+   {
+    "category": "client_name",
+    "name": "Northwind Traders"
+   },
+   {
+    "category": "person_name",
+    "name": "Oluwaseun Adeyemi"
+   },
+   {
+    "category": "safe",
+    "name": "Open"
+   },
+   {
+    "category": "project_name",
+    "name": "Operation Tinderbox"
+   },
+   {
+    "category": "safe",
+    "name": "Pasted"
+   }
+  ]
+ }
+}

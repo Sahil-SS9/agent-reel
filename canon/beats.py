@@ -9,6 +9,7 @@ A beat is v1's shape: ``{id, type, summary, intensity, event_ids[], ts}``.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -139,8 +140,27 @@ def _hits(haystack: str, words: Sequence[str]) -> int:
     return sum(1 for word in words if word in haystack)
 
 
+_JSON_KEY_RE = re.compile(r'"([A-Za-z_]{3,30})"\s*:')
+
+
+def _clean_text(text: str) -> str:
+    """Turn raw text into something a comic can use.
+
+    Tool output and kanban payloads are often JSON or JSON-ish; pasting that into a
+    caption is how a script ends up reading like a stack trace.
+    """
+    value = " ".join(text.split())
+    if not value:
+        return ""
+    if value[0] in "{[" or value.count('"') >= 4:
+        # JSON-ish: a field list is not a caption. Return nothing and let the
+        # structural fallback describe the event instead.
+        return ""
+    return value
+
+
 def _summary_for(event: GatedEvent, beat_type: str) -> str:
-    text = _text_of(event).strip().replace("\n", " ")
+    text = _clean_text(_text_of(event))
     if len(text) > 140:
         text = text[:137].rstrip() + "..."
     who = event.profile or event.actor or "the rig"

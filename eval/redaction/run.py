@@ -223,7 +223,13 @@ def main(argv: list[str] | None = None) -> int:
         if not args.llm_url:
             print("--llm local needs --llm-url", file=sys.stderr)
             return 2
-        client = OpenAICompatLLMClient(base_url=args.llm_url, model=args.llm_model)
+        # Same reasoning-model caveat as the pipeline: without this the model
+        # spends the budget on reasoning_content and returns content: null.
+        client = OpenAICompatLLMClient(
+            base_url=args.llm_url,
+            model=args.llm_model,
+            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+        )
     else:
         client = NullLLM()
 

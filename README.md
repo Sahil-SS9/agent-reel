@@ -2,7 +2,7 @@
 
 Turns your AI agent's real history into a weekly comic strip with continuing characters and storylines.
 
-Status: M0 complete (read-only history adapter, normalised event stream, synthetic fixture). M1 and M2 not started; nothing is installed in Hermes.
+Status: M1 complete (redaction gate, beats, arcs, canon, episode plan, Script IR). M2 not started; nothing is installed in Hermes.
 
 ## Document map (read in this order)
 
@@ -17,13 +17,25 @@ Status: M0 complete (read-only history adapter, normalised event stream, synthet
 ## Code map
 
 ```
-canon/                  pure core, no Hermes imports (events.py, source.py, HERMES_SCHEMA.md)
-adapters/hermes/        the only Hermes-aware code: history.py (ingest + CLI), ro.py and
-                        stores.py (read-only access), paths.py, leakscan.py
+canon/                  pure core, no Hermes imports
+  events.py             the Event model (privacy, payload / payload_redacted)
+  gate.py               GatedEvent: the only thing later stages may see
+  redact.py             the redaction gate (deterministic + model passes)
+  beats.py arcs.py      beats and the arc template
+  canon.py              entities, facts with event ids, retcon log
+  episode.py            strip + chapter planners and the Script IR
+  cache.py llm.py       (stage, model, prompt, input) cache and the LLM seam
+  HERMES_SCHEMA.md      table/field -> Event map and the read-only guarantee
+adapters/hermes/        the only Hermes-aware code: history.py (ingest + CLI), pipeline.py
+                        (M1 orchestration), ro.py + stores.py (read-only access),
+                        redact_source.py (Hermes' patterns), llm.py, leakscan.py
+eval/redaction/         232 labelled synthetic items + the benchmark runner
 fixtures/               synthetic Hermes home generator (4 profiles, 4 weeks)
-tests/                  67 tests, pytest, no network and no real history
-scripts/readonly_proof.sh   strace-based proof that no file is created, renamed,
-                            truncated or deleted under ~/.hermes
+tests/                  155 tests, pytest, no network and no real history
+scripts/                readonly_proof.sh (strace proof: no file is created, renamed,
+                        truncated or deleted under ~/.hermes; existing -shm wal-index
+                        pages are updated by normal SQLite read locking)
+                        extract_hermes_redact.py
 ```
 
 Run it:
@@ -33,6 +45,15 @@ uv venv .venv --python 3.12 && uv pip install --python .venv/bin/python pillow p
 .venv/bin/python -m adapters.hermes.history --days 7 --summary
 .venv/bin/python -m pytest
 bash scripts/readonly_proof.sh
+
+# M1: ingest -> gate -> beats -> arcs -> canon -> episode script
+.venv/bin/python -m adapters.hermes.pipeline --data-dir "$TMPDIR/reel" --days 7
+# ...with the model pass on the rig's local route (no keys)
+REEL_LLM_BASE_URL=http://127.0.0.1:8091/v1 .venv/bin/python -m adapters.hermes.pipeline \
+  --data-dir "$TMPDIR/reel" --days 7 --llm local
+
+# the redaction gate
+.venv/bin/python eval/redaction/run.py --llm local --llm-url http://127.0.0.1:8091/v1
 ```
 
 Evidence for real-data runs lives outside the repo, in

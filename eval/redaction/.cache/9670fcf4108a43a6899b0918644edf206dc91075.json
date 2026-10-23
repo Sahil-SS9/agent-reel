@@ -1,0 +1,82 @@
+{
+ "key": "redact.vocabulary|openai-compat:auto|ddb3e97e941e6133fd6ba47fab27f902|54caf4ceb6364114e81e7403ed9009bb",
+ "model": "openai-compat:auto",
+ "stage": "redact.vocabulary",
+ "v": 1,
+ "value": {
+  "results": [
+   {
+    "category": "client_name",
+    "name": "Pinewood Motors"
+   },
+   {
+    "category": "safe",
+    "name": "Private"
+   },
+   {
+    "category": "person_name",
+    "name": "Priya Raman"
+   },
+   {
+    "category": "project_name",
+    "name": "Project Nightjar"
+   },
+   {
+    "category": "person_name",
+    "name": "Rafael Mendoza"
+   },
+   {
+    "category": "safe",
+    "name": "Reply"
+   },
+   {
+    "category": "safe",
+    "name": "Rook"
+   },
+   {
+    "category": "person_name",
+    "name": "Sayed"
+   },
+   {
+    "category": "safe",
+    "name": "Session"
+   },
+   {
+    "category": "safe",
+    "name": "Signature"
+   },
+   {
+    "category": "person_name",
+    "name": "Sofia Rossi"
+   },
+   {
+    "category": "safe",
+    "name": "St Mary"
+   },
+   {
+    "category": "safe",
+    "name": "The Hollow Crown"
+   },
+   {
+    "category": "person_name",
+    "name": "Tomasz Nowak"
+   },
+   {
+    "category": "safe",
+    "name": "Users"
+   },
+   {
+    "category": "client_name",
+    "name": "Verdant Systems"
+   },
+   {
+    "category": "safe",
+    "name": "Waiting"
+   },
+   {
+    "category": "person_name",
+    "name": "Zara Hussain"
+   }
+  ]
+ }
+}

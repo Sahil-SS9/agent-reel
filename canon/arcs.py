@@ -59,85 +59,93 @@ class Arc:
 
 
 def _chain(beats: Sequence[Beat]) -> dict[str, str]:
-    """Assign beats to arc roles so each role is caused by the previous one."""
+    """Assign beats to arc roles so each role is caused by the previous one.
+
+    Selection is chronological by construction: each role only looks at beats that
+    come after the last one chosen, so a six-panel strip is filled whenever the
+    week has enough material instead of silently losing panels to a re-sort.
+    """
     ordered = sorted(beats, key=lambda beat: (beat.ts, beat.id))
-    struggles = [beat for beat in ordered if beat.type in {"struggle", "failure"}]
-    wins = [beat for beat in ordered if beat.type == "breakthrough"]
-    decisions = [beat for beat in ordered if beat.type == "decision"]
-    levelups = [beat for beat in ordered if beat.type == "level-up"]
+    if not ordered:
+        return {}
 
     roles: dict[str, str] = {}
-    if not ordered:
-        return roles
+    used: set[str] = set()
+    cursor = float("-inf")
 
+    def take(candidates: Sequence[Beat]) -> Beat | None:
+        for beat in candidates:
+            if beat.id in used or beat.ts < cursor:
+                continue
+            return beat
+        return None
+
+    def commit(role: str, beat: Beat | None) -> None:
+        nonlocal cursor
+        if beat is None:
+            return
+        roles[role] = beat.id
+        used.add(beat.id)
+        cursor = beat.ts
+
+    struggles = [beat for beat in ordered if beat.type in {"struggle", "failure"}]
     climax = max(struggles or ordered, key=lambda beat: (beat.intensity, beat.ts))
-    roles["climax"] = climax.id
-
+    # Everything before the climax, in timeline order.
     before = [beat for beat in ordered if beat.ts <= climax.ts and beat.id != climax.id]
     after = [beat for beat in ordered if beat.ts > climax.ts]
 
-    setup_pool = [beat for beat in before if beat.type in {"decision", "level-up", "joke"}]
-    setup = setup_pool[0] if setup_pool else (before[0] if before else None)
-    if setup is not None:
-        roles["setup"] = setup.id
+    setup = take([beat for beat in before if beat.type in {"decision", "level-up", "joke"}])
+    if setup is None:
+        setup = take(before)
+    commit("setup", setup)
 
-    hidden_pool = [
-        beat
-        for beat in before
-        if beat.type in {"struggle", "failure"}
-        and beat.id != climax.id
-        and beat.id != roles.get("setup")
-    ]
-    if hidden_pool:
-        roles["hidden_problem"] = hidden_pool[0].id
+    hidden = take([beat for beat in before if beat.type in {"struggle", "failure"}])
+    commit("hidden_problem", hidden)
 
-    diagnosis_pool = [
-        beat
-        for beat in before
-        if beat.id not in {roles.get("hidden_problem"), climax.id}
-        and beat.type in {"struggle", "failure", "decision"}
-    ]
-    if diagnosis_pool:
-        roles["diagnosis"] = diagnosis_pool[-1].id
+    diagnosis = take(
+        [beat for beat in before if beat.type in {"struggle", "failure", "decision"}]
+    )
+    if diagnosis is None:
+        diagnosis = take([beat for beat in after if beat.type in {"struggle", "failure"}])
+    commit("diagnosis", diagnosis)
 
-    # aftermath and win must happen *after* the climax, or the chain reads as a
-    # flashback. A role with no beat after the climax stays empty.
-    aftermath_pool = [
-        beat
-        for beat in after
-        if beat.type in {"breakthrough", "decision"} and beat.ts >= climax.ts
-    ]
-    if aftermath_pool:
-        roles["aftermath"] = aftermath_pool[0].id
+    if climax.ts >= cursor:
+        commit("climax", climax)
 
-    win_pool = [
-        beat
-        for beat in after
-        if beat.ts > climax.ts and beat.id != roles.get("aftermath")
-    ]
-    if win_pool:
-        roles["win"] = win_pool[-1].id
+    aftermath = take([beat for beat in after if beat.type in {"breakthrough", "decision"}])
+    if aftermath is None:
+        aftermath = take([beat for beat in after if beat.type in {"struggle", "failure"}])
+    if aftermath is None:
+        aftermath = take(after)
+    commit("aftermath", aftermath)
 
-    # Enforce chronological order across the chain.
-    order = [role for role in ARC_ROLES if role in roles]
-    last_ts = float("-inf")
-    for role in order:
-        beat = next((item for item in ordered if item.id == roles[role]), None)
-        if beat is None or beat.ts < last_ts:
-            roles.pop(role, None)
-            continue
-        last_ts = beat.ts
+    win = take(
+        [beat for beat in after if beat.type in {"breakthrough", "decision", "level-up"}]
+    )
+    if win is None:
+        win = take([beat for beat in after if beat.type == "joke"])
+    if win is None:
+        win = take(after)
+    commit("win", win)
+
     return roles
 
 
 def _title(beats: Iterable[Beat]) -> str:
-    for beat in beats:
+    ordered = list(beats)
+    for beat in ordered:
+        if "fields:" in beat.summary:
+            continue
         cleaned = " ".join(
             word.strip(" .,:;!?\u2014-") for word in beat.summary.split()
         )
         words = [word for word in cleaned.split() if len(word) > 3 and not word.startswith("ev_")]
         if len(words) >= 3:
             return " ".join(words[:6])
+    # Nothing readable: name the agents involved rather than dumping field lists.
+    profiles = sorted({beat.profile for beat in ordered if beat.profile})
+    if profiles:
+        return "The week " + ", ".join(profiles[:3]) + " had"
     return "A week on the rig"
 
 
@@ -145,9 +153,15 @@ def _stakes(roles: dict[str, str], by_id: dict[str, Beat]) -> str:
     climax = by_id.get(roles.get("climax", ""))
     if climax is None:
         return "the week's work"
-    text = " ".join(
-        word.strip(" .,:;!?\u2014-") for word in climax.summary.split()
-    )
+    source = climax.summary
+    if "fields:" in source:
+        # Fall back to another role's summary that reads like a sentence.
+        for role in ("hidden_problem", "aftermath", "setup", "win"):
+            beat = by_id.get(roles.get(role, ""))
+            if beat is not None and "fields:" not in beat.summary:
+                source = beat.summary
+                break
+    text = " ".join(word.strip(" .,:;!?\u2014-") for word in source.split())
     words = [word for word in text.split() if word]
     return " ".join(words[:14]) if words else "the week's work"
 

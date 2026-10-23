@@ -99,6 +99,7 @@ TEXT_PRIORITY: dict[str, int] = {
 class PipelineConfig:
     data_dir: Path
     days: float = 7.0
+    since: float | None = None
     until: float | None = None
     profiles: tuple[str, ...] | None = None
     format: str = "strip"
@@ -110,6 +111,7 @@ class PipelineConfig:
     max_deep_events: int = MAX_DEEP_EVENTS
     max_text_chars: int = MAX_TEXT_CHARS
     max_text_events: int = MAX_TEXT_EVENTS
+    max_vocabulary: int = 400
     snapshot_root: Path | None = None
     llm: LLMClient | None = None
 
@@ -241,8 +243,10 @@ def run_pipeline(
         )
 
     try:
+        # A pinned window is what makes "the same input twice" meaningful on a live
+        # system: without it, two runs minutes apart look at different weeks.
         now = config.until or datetime.now(tz=timezone.utc).timestamp()
-        window = Window(since=now - config.days * 86400, until=config.until)
+        window = Window(since=config.since if config.since is not None else now - config.days * 86400, until=config.until)
 
         # ---- ingest ------------------------------------------------------
         events = list(source.events(window))
@@ -287,7 +291,7 @@ def run_pipeline(
         )
 
         if model_gate is not None and texts:
-            gate.learn_vocabulary(texts.values())
+            gate.learn_vocabulary(texts.values(), max_candidates=config.max_vocabulary)
         result.timings["vocabulary_s"] = round(time.time() - started, 2)
 
         gated: list[GatedEvent] = []
@@ -443,6 +447,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument("--data-dir", required=True, help="where artifacts and the cache live")
     parser.add_argument("--days", type=float, default=7.0)
+    parser.add_argument(
+        "--since",
+        type=float,
+        default=None,
+        help="pin the window start (epoch seconds); also freezes determinism",
+    )
+    parser.add_argument(
+        "--until", type=float, default=None, help="pin the window end (epoch seconds)"
+    )
     parser.add_argument("--profile", action="append", default=None)
     parser.add_argument("--format", choices=("strip", "chapter"), default="strip")
     parser.add_argument("--number", type=int, default=1)
@@ -457,6 +470,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--llm-model", default=os.environ.get("REEL_LLM_MODEL", "auto"))
     parser.add_argument("--max-deep-events", type=int, default=MAX_DEEP_EVENTS)
     parser.add_argument(
+        "--max-vocabulary",
+        type=int,
+        default=400,
+        help="cap on distinct name candidates sent to the model (most frequent first)",
+    )
+    parser.add_argument(
         "--max-text-events",
         type=int,
         default=MAX_TEXT_EVENTS,
@@ -469,11 +488,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.llm == "local":
         if not args.llm_url:
             parser.error("--llm local needs --llm-url or REEL_LLM_BASE_URL")
-        client = OpenAICompatLLMClient(base_url=args.llm_url, model=args.llm_model)
+        # Reasoning models spend the whole budget on reasoning_content and return
+        # content: null, which looks like an empty answer. Off for JSON tasks.
+        client = OpenAICompatLLMClient(
+            base_url=args.llm_url,
+            model=args.llm_model,
+            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+        )
 
     config = PipelineConfig(
         data_dir=Path(args.data_dir).expanduser(),
         days=args.days,
+        since=args.since,
+        until=args.until,
         profiles=tuple(args.profile) if args.profile else None,
         format=args.format,
         season=args.season,
@@ -481,6 +508,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         use_model=args.llm != "none",
         max_deep_events=args.max_deep_events,
         max_text_events=args.max_text_events,
+        max_vocabulary=args.max_vocabulary,
         llm=client,
     )
     result = run_pipeline(config)

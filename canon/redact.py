@@ -218,6 +218,46 @@ def candidate_names(text: str, allowlist: Iterable[str]) -> list[str]:
     return list(seen)
 
 
+#: Model answers drift in wording ("private_person", "customer", "internal").
+#: Anything unrecognised fails closed to ``person_name``: an unclassified name is
+#: treated as private rather than released.
+_CATEGORY_HINTS: tuple[tuple[str, str], ...] = (
+    ("financ", "financial"),
+    ("money", "financial"),
+    ("amount", "financial"),
+    ("health", "health"),
+    ("medical", "health"),
+    ("diagnos", "health"),
+    ("client", "client_name"),
+    ("customer", "client_name"),
+    ("organis", "client_name"),
+    ("organiz", "client_name"),
+    ("company", "client_name"),
+    ("project", "project_name"),
+    ("internal", "project_name"),
+    ("person", "person_name"),
+    ("people", "person_name"),
+    ("individual", "person_name"),
+    ("private", "person_name"),
+    ("name", "person_name"),
+)
+_SAFE_HINTS = ("safe", "public", "owner", "tool", "product", "allowlisted", "not_private")
+
+
+def normalise_category(answer: str) -> str:
+    """Map a model's wording onto a category, failing closed when unsure."""
+    text = (answer or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if not text:
+        return "person_name"
+    for hint in _SAFE_HINTS:
+        if text == hint or text.startswith(hint):
+            return SAFE
+    for hint, category in _CATEGORY_HINTS:
+        if hint in text:
+            return category
+    return "person_name"
+
+
 class ModelEntityGate:
     """The model pass: vocabulary once, spans for the story subset."""
 
@@ -275,17 +315,30 @@ class ModelEntityGate:
                 self.calls += 1
                 continue
             self.calls += 1
-            for row in response.get("results", []):
+            rows = response.get("results")
+            if not isinstance(rows, list):
+                # No usable structure: fail closed for the batch.
+                for name in batch:
+                    verdicts[name] = "person_name"
+                continue
+            answered: set[str] = set()
+            for row in rows:
                 if not isinstance(row, Mapping):
                     continue
-                name = str(row.get("name", "")).strip()
-                category = str(row.get("category", "")).strip().lower()
+                name = str(
+                    row.get("name") or row.get("candidate") or row.get("text") or ""
+                ).strip()
+                answer = str(
+                    row.get("category") or row.get("classification") or row.get("label") or ""
+                )
                 if not name:
                     continue
-                if category in MODEL_CATEGORIES:
-                    verdicts[name] = category
-                elif category == SAFE:
-                    verdicts[name] = SAFE
+                answered.add(name)
+                verdicts[name] = normalise_category(answer)
+            # A candidate the model skipped is not safe, it is unanswered.
+            for name in batch:
+                if name not in answered:
+                    verdicts.setdefault(name, "person_name")
         return verdicts
 
     # -- spans -------------------------------------------------------------
@@ -303,12 +356,17 @@ class ModelEntityGate:
             raise
         self.calls += 1
         spans: list[dict[str, str]] = []
-        for row in response.get("spans", []):
+        rows = response.get("spans")
+        if not isinstance(rows, list):
+            raise LLMError("span pass returned no spans array")
+        for row in rows:
             if not isinstance(row, Mapping):
                 continue
-            piece = str(row.get("text", ""))
-            category = str(row.get("category", "")).strip().lower()
-            if piece and category in MODEL_CATEGORIES:
+            piece = str(row.get("text") or row.get("span") or "").strip()
+            category = normalise_category(
+                str(row.get("category") or row.get("classification") or "")
+            )
+            if piece:
                 spans.append({"text": piece, "category": category})
         return spans
 
@@ -337,13 +395,24 @@ class RedactionGate:
         self._name_patterns: tuple[tuple[re.Pattern[str], str], ...] = ()
 
     # -- vocabulary --------------------------------------------------------
-    def learn_vocabulary(self, texts: Iterable[str]) -> dict[str, str]:
-        """Classify every distinct candidate once, then mask it everywhere."""
+    def learn_vocabulary(
+        self, texts: Iterable[str], *, max_candidates: int = 500
+    ) -> dict[str, str]:
+        """Classify the distinct candidates once, then mask them everywhere.
+
+        ``max_candidates`` is a hard cost bound: a week of history can produce
+        thousands of proper-noun candidates, and one model call per 40 of them adds
+        up. The most frequent names are the ones that matter for a week's story, so
+        the budget goes to them (deterministic tie-break by name).
+        """
         if self.model_gate is None:
             return {}
-        candidates: list[str] = []
+        counts: dict[str, int] = {}
         for text in texts:
-            candidates.extend(candidate_names(text, self.allowlist))
+            for name in candidate_names(text, self.allowlist):
+                counts[name] = counts.get(name, 0) + 1
+        ranked = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+        candidates = [name for name, _ in ranked[:max_candidates]]
         verdicts = self.model_gate.classify_vocabulary(candidates)
         self._vocabulary = {name: category for name, category in verdicts.items() if category != SAFE}
         self.report.vocabulary_size = len(self._vocabulary)

@@ -45,7 +45,10 @@ def _clean(title: str) -> str:
 
 
 def _grounded(title: str, beats: Sequence[Beat]) -> bool:
-    """A title may only use words the beats contain, plus glue."""
+    """A title may only use words the beats contain, plus glue.
+
+    This is the cheap pre-filter; claims are checked separately by the gate.
+    """
     haystack = " ".join(beat.summary.lower() for beat in beats)
     for word in re.findall(r"[A-Za-z][A-Za-z'\-]+", title.lower()):
         if len(word) < 3 or word in _ALLOWED:
@@ -83,7 +86,9 @@ def write_title(
         if len(candidate.split()) > MAX_TITLE_WORDS:
             return False
         if gate is not None and evidence:
-            verdict = gate.check(candidate, evidence, layer="caption")
+            # A title may compress what happened; it may not claim a name, a number, an
+            # outcome or a cause the thread does not contain.
+            verdict = gate.check(candidate, evidence, layer="dialogue")
             if not verdict.supported:
                 return False
         return _grounded(candidate, beats)

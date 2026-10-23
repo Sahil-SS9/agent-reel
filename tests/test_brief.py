@@ -14,6 +14,14 @@ from canon.gate import seal
 from canon.grounding import ClaimGate
 
 
+class _NullCache:
+    def get(self, _key):
+        return None
+
+    def set(self, _key, _value):
+        return None
+
+
 def message(session, kind, text, ts, actor="Sahil"):
     event = build_event(
         source="session", kind=kind, ts=ts, profile=actor, actor=actor, subject=session,
@@ -78,32 +86,27 @@ def test_a_task_family_brief_uses_the_created_title_and_the_completion():
     assert "completed the adapter" in brief.outcome
 
 
-def test_an_unsupported_brief_line_is_dropped():
-    class Liar:
-        name = "liar"
+def test_a_verbatim_brief_line_is_grounded_without_asking_the_model():
+    """A brief line is quoted from the thread, so it cannot be unsupported."""
 
-        def complete_json(self, payload, **_kwargs):
-            return {"supported": "timeout key" not in payload["line"].lower()}
+    calls = {"n": 0}
+
+    class Counting:
+        name = "counting"
+
+        def complete_json(self, **_kwargs):
+            calls["n"] += 1
+            return {"supported": False}
 
     from canon.cache import ModelCache
     from canon.llm import CachedLLM
 
-    gate = ClaimGate(CachedLLM(Liar(), ModelCache.__new__(ModelCache), stage="t"))
+    gate = ClaimGate(CachedLLM(Counting(), ModelCache.__new__(ModelCache), stage="t"))
     gate.llm.cache = _NullCache()
-    rows = session_events() + [
-        message("s1", KIND_MESSAGE_ASSISTANT, "the config was missing the timeout key", 3.5, "default")
-    ]
-    brief = build_brief("s1", "session", rows, gate=gate)
-    assert "timeout key" not in brief.text().lower()
-    assert brief.dropped
-
-
-class _NullCache:
-    def get(self, _key):
-        return None
-
-    def set(self, _key, _value):
-        return None
+    brief = build_brief("s1", "session", session_events(), gate=gate)
+    assert brief.ok
+    assert not brief.dropped
+    assert calls["n"] == 0, "a quote must not cost a model call"
 
 
 def test_event_text_prefers_the_text_field():

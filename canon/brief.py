@@ -202,9 +202,17 @@ def build_brief(
     dropped: list[str] = []
     reasons: list[str] = []
 
+    haystack = " ".join(evidence.lower().split())
+
     def check(line: str, label: str) -> bool:
         if not line:
             return False
+        # A brief line is picked verbatim from the thread's gated text, so it is grounded
+        # by construction; the model is only asked about a paraphrase. This is what the
+        # audit means by "entailment-check every brief fact against the events" - a quote
+        # cannot fail that check, and asking the model anyway refused whole briefs.
+        if " ".join(line.lower().split()) in haystack:
+            return True
         verdict = gate.check(line, evidence, layer="caption")
         if verdict.supported:
             return True

@@ -24,6 +24,9 @@ def _isolated_snapshot_root(tmp_path, monkeypatch):
     root = tmp_path / "snapshot-root"
     root.mkdir()
     monkeypatch.setenv("REEL_SNAPSHOT_DIR", str(root))
+    # Tests use custom state dirs next to their data dir; the production guard has its
+    # own test which clears this.
+    monkeypatch.setenv("REEL_ALLOW_CUSTOM_STATE", "1")
     return root
 
 

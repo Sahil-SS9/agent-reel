@@ -514,6 +514,20 @@ class RedactionGate:
             )
         return current, tuple(findings)
 
+    def scan(self, text: str) -> tuple[Finding, ...]:
+        """Report leaks in ``text`` without modifying it (no clipping, no masking).
+
+        Used by the evidence writer: it needs to know whether a value would leak, not
+        what the redacted form looks like.
+        """
+        if not text:
+            return ()
+        found: list[Finding] = list(self.redactor.findings(text))
+        for pattern, category in self._name_patterns:
+            for match in pattern.finditer(text):
+                found.append(Finding(category, f"vocabulary:{category}", match.start(), match.end()))
+        return tuple(found)
+
     def gate_event(
         self,
         event: Event,

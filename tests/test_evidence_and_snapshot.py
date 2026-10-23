@@ -161,10 +161,11 @@ def test_snapshot_ignores_an_older_version(tmp_path):
     assert store.load() is None
 
 
-def test_state_dir_inside_evidence_is_refused(hermes_env, tmp_path):
+def test_state_dir_inside_evidence_is_refused(hermes_env, tmp_path, monkeypatch):
     """The private snapshot may never be placed inside an evidence folder."""
     from adapters.hermes.pipeline import PipelineConfig, run_pipeline
 
+    monkeypatch.delenv("REEL_ALLOW_CUSTOM_STATE", raising=False)
     with pytest.raises(ValueError) as excinfo:
         run_pipeline(
             PipelineConfig(
@@ -174,4 +175,4 @@ def test_state_dir_inside_evidence_is_refused(hermes_env, tmp_path):
                 use_model=False,
             )
         )
-    assert "state_dir must not be inside data_dir" in str(excinfo.value)
+    assert "state_dir must not sit inside the evidence folder" in str(excinfo.value)

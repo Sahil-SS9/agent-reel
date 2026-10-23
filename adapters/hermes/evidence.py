@@ -44,9 +44,11 @@ MAX_PLAIN_STRING = 4000
 def _check_string(value: str, where: str, gate: Any) -> str:
     if len(value) > MAX_PLAIN_STRING:
         raise EvidenceLeak(f"{where}: string of {len(value)} chars looks like raw text")
-    redacted, findings = gate.redact_text(value)
-    if findings or redacted != value:
-        categories = sorted({finding.category for finding in findings}) or ["unchanged"]
+    # Ask the gate what it *finds*, not what it would produce: a long script gets
+    # truncated by redact_text, and truncation is not a leak.
+    findings = gate.scan(value)
+    if findings:
+        categories = sorted({finding.category for finding in findings})
         raise EvidenceLeak(
             f"{where}: value would be changed by the gate ({', '.join(categories)}); "
             "write the gated form or a count instead"

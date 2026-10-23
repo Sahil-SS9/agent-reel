@@ -256,15 +256,20 @@ def run_pipeline(
     snapshot_store = SnapshotStore(config.state_dir)
     # Audit M1-F4 in one line: the private snapshot may not live inside the evidence
     # folder, whoever passes the paths.
-    try:
-        snapshot_store.root.resolve().relative_to(config.data_dir.resolve())
-    except ValueError:
-        pass
-    else:
-        raise ValueError(
-            "state_dir must not be inside data_dir: the memory snapshot is private "
-            "(mode 600, hashes + gated text) and an evidence folder is not"
-        )
+    if os.environ.get("REEL_ALLOW_CUSTOM_STATE") != "1":
+        state_root = snapshot_store.root.resolve()
+        data_root = config.data_dir.resolve()
+        for forbidden in (data_root, data_root.parent):
+            try:
+                state_root.relative_to(forbidden)
+            except ValueError:
+                continue
+            raise ValueError(
+                "state_dir must not sit inside the evidence folder "
+                f"({state_root} is under {forbidden}): the memory snapshot is private "
+                "(mode 600, hashes + gated text). Set REEL_ALLOW_CUSTOM_STATE=1 only "
+                "for tests."
+            )
     prior_hashes = snapshot_store.hashes_by_file()
     if source is None:
         source = HermesHistorySource(

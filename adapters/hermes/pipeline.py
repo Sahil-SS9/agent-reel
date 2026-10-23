@@ -44,6 +44,7 @@ from canon.episode import (
 )
 from canon.events import Event
 from canon.gate import GatedEvent
+from canon.grounding import GroundingGate
 from canon.llm import CachedLLM, LLMClient, NullLLM
 from canon.redact import DeterministicRedactor, ModelEntityGate, RedactionGate
 from canon.source import Window
@@ -134,6 +135,7 @@ class PipelineResult:
     gate_report: dict[str, Any] = field(default_factory=dict)
     cache_stats: dict[str, int] = field(default_factory=dict)
     problems: list[str] = field(default_factory=list)
+    grounding: dict[str, Any] = field(default_factory=dict)
     timings: dict[str, float] = field(default_factory=dict)
     artifacts: dict[str, str] = field(default_factory=dict)
 
@@ -180,6 +182,31 @@ def render_script_markdown(ir: EpisodeIR) -> str:
             lines.append(f"- {line.speaker}: \u201c{line.text}\u201d  [{', '.join(line.source_event_ids)}]")
         lines.append("")
     return "\n".join(lines)
+
+
+def evidence_by_event(gated: Iterable[GatedEvent]) -> dict[str, str]:
+    """The gated text each event can ground a line with.
+
+    Text plus its string fields: a line may only repeat what is in here, so a beat
+    built from a tool name can only be talked about in those terms.
+    """
+    evidence: dict[str, str] = {}
+    for event in gated:
+        # The event's own identity is part of its evidence: a beat that names the
+        # kind or the actor is repeating the record, not inventing.
+        parts: list[str] = [f"event: {event.kind} {event.subject} {event.actor} {event.profile}".strip()]
+        text = event.payload.get("text")
+        if isinstance(text, str) and text:
+            parts.append(text)
+        for key, value in sorted(event.payload.items()):
+            if key in {"text", "gate"}:
+                continue
+            if isinstance(value, str) and value:
+                parts.append(f"{key}: {value}")
+            elif isinstance(value, list) and value and all(isinstance(item, str) for item in value):
+                parts.append(f"{key}: {', '.join(value)}")
+        evidence[event.id] = "\n".join(parts)
+    return evidence
 
 
 def _story_subset(beats: Sequence[Beat], limit: int) -> list[str]:
@@ -350,6 +377,12 @@ def run_pipeline(
         else:
             writer = TemplateDialogueWriter(cast, hero=config.hero)
 
+        # Audit M1-F1: every factual claim must be supported by the gated content of
+        # the events the line cites. Terms always, entailment when a model is present.
+        grounder = GroundingGate(
+            cached if config.use_model else None,
+            allow=tuple(cast) + tuple(config.allowlist) + (config.hero,),
+        )
         ir = plan_episode(
             arcs[0],
             beats,
@@ -359,7 +392,10 @@ def run_pipeline(
             number=config.number,
             writer=writer,
             hero=config.hero,
+            grounder=grounder,
+            evidence=evidence_by_event(gated),
         )
+        result.grounding = dict(ir.grounding)
         result.ir = ir
         result.timings["episode_s"] = round(time.time() - started, 2)
 
@@ -431,6 +467,7 @@ def run_pipeline(
                     "arcs": len(arcs),
                     "panels": len(ir.panels),
                     "writer": ir.writer,
+                    "grounding": result.grounding,
                     "gate": result.gate_report,
                     "cache": result.cache_stats,
                     "timings": result.timings,
@@ -579,6 +616,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "arcs": result.arc_count,
         "panels": len(result.ir.panels) if result.ir else 0,
         "writer": result.ir.writer if result.ir else "",
+        "grounding": result.grounding,
         "gate": result.gate_report,
         "cache": result.cache_stats,
         "timings": result.timings,

@@ -1,0 +1,10 @@
+{
+ "cases": 32,
+ "failures": 0,
+ "grounded_lines_passed": 32,
+ "invented_lines_refused": 32,
+ "model_calls": 0,
+ "ok": true,
+ "rejected_supported": [],
+ "released_unsupported": []
+}

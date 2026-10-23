@@ -20,6 +20,7 @@ from canon.arcs import ARC_ROLES, Arc
 from canon.beats import Beat
 from canon.canon import Canon
 from canon.events import make_event_id
+from canon.grounding import GroundingGate, GroundingReport
 from canon.llm import CachedLLM, LLMError
 
 SHOTS = ("wide", "medium", "close", "insert")
@@ -93,6 +94,7 @@ class EpisodeIR:
     logline: str
     panels: tuple[Panel, ...]
     writer: str
+    grounding: Mapping[str, Any] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
         scene = {
@@ -110,6 +112,7 @@ class EpisodeIR:
             "arc_ids": list(self.arc_ids),
             "logline": self.logline,
             "writer": self.writer,
+            "grounding": dict(self.grounding),
             "panels": [panel.as_dict() for panel in self.panels],
             "scenes": [scene],
         }
@@ -175,8 +178,11 @@ class LLMDialogueWriter:
     PROMPT = (
         "You write one panel of a weekly comic that replays an AI agent's real work. "
         "Hard rules: at most 2 speech lines per panel; each line at most 100 characters; "
-        "speakers must come from the cast list; the panel must show the consequence of the "
-        "previous panel; no text inside the image, dialogue only. "
+        "speakers must come from the cast list; no text inside the image, dialogue only. "
+        "GROUNDING: you may only use facts that appear in the beat and evidence text. Do "
+        "not invent a cause, a component, a fix, a number, a name or an outcome, even if "
+        "it would make the line funnier. If the evidence is thin, write a short reactive "
+        "line instead of a factual one. "
         'Answer with JSON only: {"lines": [{"speaker": "...", "text": "..."}]}.'
     )
 
@@ -202,6 +208,7 @@ class LLMDialogueWriter:
                 "role": panel["role"],
                 "cast": list(self.cast),
                 "beat": panel.get("summary", ""),
+                "evidence": panel.get("evidence", ""),
                 "previous": context[-1] if context else "",
                 "setting": panel.get("setting", ""),
                 "format": panel.get("format", "strip"),
@@ -275,6 +282,8 @@ def plan_episode(
     number: int = 1,
     writer: DialogueWriter | None = None,
     hero: str = "Sahil",
+    grounder: GroundingGate | None = None,
+    evidence: Mapping[str, str] | None = None,
 ) -> EpisodeIR:
     """Plan an episode from one arc.
 
@@ -287,6 +296,14 @@ def plan_episode(
     roles = [role for role in STRIP_ROLES if role in arc.roles]
     if not roles:
         raise ValueError("arc has no roles to plan from")
+
+    evidence_map = evidence or {}
+
+    def _evidence_for(beat: Beat | None) -> str:
+        if beat is None:
+            return ""
+        chunks = [str(evidence_map.get(event_id, "")) for event_id in beat.event_ids]
+        return "\n".join(chunk for chunk in chunks if chunk)
 
     panel_specs: list[dict[str, Any]] = []
     for role in roles:
@@ -301,6 +318,7 @@ def plan_episode(
                 "expression": expression,
                 "setting": setting,
                 "summary": beat.summary if beat else "",
+                "evidence": _evidence_for(beat),
                 "format": format,
             }
         )
@@ -328,6 +346,8 @@ def plan_episode(
     active_writer = writer or TemplateDialogueWriter(cast, hero=hero)
     dialogue = active_writer.write(panel_specs)
 
+    report = GroundingReport()
+    seen_text: set[str] = set()
     panels: list[Panel] = []
     for index, spec in enumerate(panel_specs, start=1):
         beat: Beat | None = spec["beat"]
@@ -337,17 +357,64 @@ def plan_episode(
             continue
         cast_names = _cast_for(beat, canon, hero)
         speakers = dialogue.get(role, [])
+        evidence_text = str(spec.get("evidence", ""))
         lines: list[Line] = []
+        duplicates: list[Line] = []
+
+        def add(speaker: str, text: str) -> bool:
+            """Keep a line unless it repeats one already used, unless that silences."""
+            key = text.lower().strip()
+            if not key:
+                report.dropped += 1
+                return False
+            line = Line(speaker=speaker, text=text, source_event_ids=event_ids)
+            if key in seen_text:
+                # Audit M1-F6: no duplicate lines across panels - but a silent panel
+                # is worse than one echo, so remember it as a fallback.
+                duplicates.append(line)
+                report.dropped += 1
+                return False
+            seen_text.add(key)
+            lines.append(line)
+            return True
+
         for speaker, text in speakers:
             if speaker not in cast_names:
                 continue
-            lines.append(Line(speaker=speaker, text=text, source_event_ids=event_ids))
+            candidate = text
+            if grounder is not None:
+                report.lines += 1
+                verdict = grounder.check(candidate, evidence_text)
+                if verdict.supported:
+                    report.supported += 1
+                else:
+                    # Rewrite literally from the evidence, or drop the line.
+                    replacement = grounder.literal_line(evidence_text)
+                    report.reasons.append(f"{role}: {verdict.reason}")
+                    if replacement:
+                        candidate = replacement
+                        report.rewritten += 1
+                        report.supported += 1
+                    else:
+                        report.dropped += 1
+                        continue
+            add(speaker, candidate)
         if not lines:
             # A panel with no line is still a panel (silent beat), but every panel
             # that has text must trace to events, so the template fills the gap.
             fallback = TemplateDialogueWriter(cast_names, hero=hero).write([spec]).get(role, [])
             for speaker, text in fallback:
-                lines.append(Line(speaker=speaker, text=text, source_event_ids=event_ids))
+                if grounder is not None:
+                    report.lines += 1
+                    verdict = grounder.check(text, evidence_text)
+                    if not verdict.supported:
+                        report.dropped += 1
+                        report.reasons.append(f"{role} (fallback): {verdict.reason}")
+                        continue
+                    report.supported += 1
+                add(speaker, text)
+        if not lines and duplicates:
+            lines.append(duplicates[0])
         panels.append(
             Panel(
                 id=f"{arc.id[-12:]}-p{index}",
@@ -373,6 +440,7 @@ def plan_episode(
         logline=logline,
         panels=tuple(panels),
         writer=getattr(active_writer, "name", "unknown"),
+        grounding=report.as_dict(),
     )
 
 

@@ -199,7 +199,8 @@ def render_script_markdown(ir: EpisodeIR) -> str:
     ]
     for number, panel in enumerate(ir.panels, start=1):
         lines.append(f"## Panel {number} - {panel.role} ({panel.shot})")
-        lines.append(f"*{panel.caption}*")
+        if panel.caption:
+            lines.append(f"*{panel.caption}*")
         lines.append(f"setting: {panel.setting} | cast: {', '.join(panel.cast)} | pose: {panel.pose} | expression: {panel.expression}")
         for line in panel.lines:
             lines.append(f"- {line.speaker}: \u201c{line.text}\u201d  [{', '.join(line.source_event_ids)}]")

@@ -207,7 +207,9 @@ class TemplateDialogueWriter:
         body = " ".join(body.split()[:7]).strip(" ,;:-")
         if len(body.split()) < 2:
             return ""
-        text = f"That {body}." if not body[0].isupper() else f"{body}."
+        text = f"{body[0].upper()}{body[1:]}."
+        if len(text.split()) < 3:
+            return ""
         return text if text.lower() not in self.used else ""
 
     def write(self, panels: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -607,10 +609,11 @@ def plan_episode(
         model_caption = str(written.get("caption", "")).strip() if isinstance(written, dict) else ""
         owner_texts = tuple(str(t) for t in (owner_texts or ()) if str(t).strip())
 
-        def acceptable(text: str) -> bool:
+        def acceptable(text: str, *, composed: bool = False) -> bool:
             if not text:
                 return False
-            if caption_problem(text, owner_texts=owner_texts):
+            limit = 3 if composed else 8
+            if caption_problem(text, owner_texts=owner_texts, max_owner_quote=limit):
                 return False
             if grounder is not None:
                 verdict = grounder.check(text, evidence_text, layer="caption")
@@ -622,11 +625,11 @@ def plan_episode(
         caption = ""
         if acceptable(model_caption):
             caption = model_caption
-        elif acceptable(structured_caption):
+        elif acceptable(structured_caption, composed=True):
             caption = structured_caption
         elif structured_caption:
             trimmed = trim_caption(structured_caption)
-            if acceptable(trimmed):
+            if acceptable(trimmed, composed=True):
                 caption = trimmed
         elif model_caption:
             trimmed = trim_caption(model_caption)
@@ -636,7 +639,7 @@ def plan_episode(
             # Last resort: the beat's own summary, under the same policy and the same gate.
             fallback = TemplateDialogueWriter(cast_names, hero=hero).caption_for(spec)
             for candidate_text in (fallback, trim_caption(fallback)):
-                if acceptable(candidate_text):
+                if acceptable(candidate_text, composed=True):
                     caption = candidate_text
                     break
         if caption and (len(caption.split()) < 3 or looks_like_provenance(caption)):

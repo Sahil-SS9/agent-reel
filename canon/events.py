@@ -66,6 +66,7 @@ KIND_TOOL_CALL = "tool.call"
 
 KIND_TASK_CREATED = "kanban.task.created"
 KIND_TASK_COMMENT = "kanban.comment"
+KIND_TASK_LINK = "kanban.task.link"
 KIND_TASK_STATUS = "kanban.task.status"
 KIND_TASK_CLAIMED = "kanban.task.claimed"
 KIND_TASK_FINISHED = "kanban.task.finished"

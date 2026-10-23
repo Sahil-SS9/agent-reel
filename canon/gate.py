@@ -49,6 +49,8 @@ class GatedEvent:
     privacy: str
     payload: Mapping[str, Any] = field(default_factory=dict)
     derived_from: tuple[str, ...] = ()
+    #: Logical provenance ({store, table, pk}); logical names only, never a path.
+    ref: Mapping[str, str] = field(default_factory=dict)
     _seal: Any = None
 
     def __post_init__(self) -> None:
@@ -76,6 +78,7 @@ class GatedEvent:
             "privacy": self.privacy,
             "payload_redacted": dict(self.payload),
             "derived_from": list(self.derived_from),
+            "ref": dict(self.ref),
         }
 
 
@@ -94,6 +97,7 @@ def seal(event: Event, payload_redacted: Mapping[str, Any]) -> GatedEvent:
         privacy=event.privacy,
         payload=dict(payload_redacted),
         derived_from=event.derived_from,
+        ref=dict(event.ref),
         _seal=_SEAL,
     )
 

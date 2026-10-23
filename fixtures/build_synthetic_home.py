@@ -128,6 +128,7 @@ def _kanban_db(path: Path) -> sqlite3.Connection:
             body TEXT NOT NULL,
             created_at INTEGER NOT NULL
         );
+        CREATE TABLE task_links (parent_id TEXT, child_id TEXT);
         """
     )
     return conn
@@ -362,6 +363,13 @@ def build(target: Path, *, seed: int = 20261023, days: int = DAYS) -> Path:
             ),
         )
         kanban.execute("UPDATE task_events SET run_id = ? WHERE task_id = ?", (cur.lastrowid, task_id))
+        # A task family every third day, so threads can be built from links.
+        if task_counter > 1 and task_counter % 3 == 1:
+            parent_id = f"t_synthetic{task_counter - 1:04d}"
+            kanban.execute(
+                "INSERT INTO task_links (parent_id, child_id) VALUES (?,?)",
+                (parent_id, task_id),
+            )
         kanban.execute(
             "INSERT INTO task_comments (task_id, author, body, created_at) VALUES (?,?,?,?)",
             (

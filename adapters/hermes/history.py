@@ -57,6 +57,7 @@ from canon.events import (
     KIND_SKILL_USED,
     KIND_TASK_CLAIMED,
     KIND_TASK_COMMENT,
+    KIND_TASK_LINK,
     KIND_TASK_CREATED,
     KIND_TASK_FINISHED,
     KIND_TASK_STATUS,
@@ -659,6 +660,8 @@ class HermesHistorySource:
                 yield event
             for event in self._kanban_comments(conn, window, allowed):
                 yield event
+            for event in self._kanban_links(conn, window, allowed):
+                yield event
         finally:
             ro.safe_close(conn)
 
@@ -980,6 +983,56 @@ class HermesHistorySource:
                 table="task_comments",
                 pk=str(_row_get(row, "id")),
                 content_column="body",
+            )
+            self._count(SOURCE_KANBAN, emitted=1)
+
+    def _kanban_links(
+        self, conn: sqlite3.Connection, window: Window, allowed: set[str] | None = None
+    ) -> Iterator[Event]:
+        """Task parent/child links: the spine of a kanban thread (audit M1-F2).
+
+        The table has no timestamps, so a link is emitted at the parent task's
+        creation time when that is in the window.
+        """
+        if not ro.table_exists(conn, "task_links") or not ro.table_exists(conn, "tasks"):
+            return
+        cols = ro.filter_columns(conn, "task_links", ("parent_id", "child_id"))
+        if len(cols) < 2:
+            return
+        sql = (
+            "SELECT l.parent_id AS parent_id, l.child_id AS child_id, "
+            "p.created_at AS created_at, p.assignee AS parent_assignee, "
+            "c.assignee AS child_assignee "
+            "FROM task_links l "
+            "LEFT JOIN tasks p ON p.id = l.parent_id "
+            "LEFT JOIN tasks c ON c.id = l.child_id "
+            "WHERE COALESCE(p.created_at, 0) >= ? OR COALESCE(c.created_at, 0) >= ? "
+            "ORDER BY l.parent_id ASC, l.child_id ASC"
+        )
+        for row in conn.execute(sql, (window.since, window.since)):
+            parent = str(_row_get(row, "parent_id") or "")
+            child = str(_row_get(row, "child_id") or "")
+            if not parent or not child:
+                continue
+            assignees = {
+                str(_row_get(row, "parent_assignee") or "").strip(),
+                str(_row_get(row, "child_assignee") or "").strip(),
+            } - {""}
+            if allowed is not None and not (assignees & allowed):
+                continue
+            ts = _epoch(_row_get(row, "created_at")) or window.since
+            yield build_event(
+                source=SOURCE_KANBAN,
+                kind=KIND_TASK_LINK,
+                ts=ts,
+                profile=sorted(assignees)[0] if assignees else "",
+                actor="",
+                subject=parent,
+                payload={"parent_id": parent, "child_id": child},
+                store=STORE_KANBAN,
+                table="task_links",
+                pk=f"{parent}>{child}",
+                content_column=None,
             )
             self._count(SOURCE_KANBAN, emitted=1)
 

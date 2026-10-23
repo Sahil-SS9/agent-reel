@@ -154,15 +154,24 @@ def test_arc_is_deterministic():
     assert build_arc(beats).as_dict() == build_arc(beats).as_dict()
 
 
-def test_arcs_include_a_rivalry_when_a_problem_repeats():
+def test_arcs_are_built_only_from_one_thread():
+    """Audit M1-F2: two task families never share an arc."""
+    from canon.threads import build_threads
+
     events = [
-        gated("kanban.task.status", float(index * 10), kind="blocked", subject="blocked")
-        for index in range(4)
-    ] + [gated("kanban.task.status", 100.0, kind="completed", subject="completed")]
-    arcs = build_arcs(beats_from_events(events))
+        gated("kanban.task.status", float(index * 10), kind="blocked", subject=f"t{index}", task_id="t_a")
+        for index in range(3)
+    ] + [
+        gated("kanban.task.status", 100.0 + index, kind="completed", subject=f"u{index}", task_id="t_b")
+        for index in range(3)
+    ]
+    threads = build_threads(events)
+    assert len(threads) == 2
+    arcs = build_arcs(threads, beats_from_events(events))
     assert arcs
-    assert arcs[0].type == "struggle-to-resolution"
-    assert all(arc.type in {"struggle-to-resolution", "rivalry", "training-montage"} for arc in arcs)
+    for arc in arcs:
+        event_threads = {event.payload.get("task_id") for event in events if event.id in set(arc.beat_ids) | set(arc.roles.values())}
+        assert len(event_threads) <= 1, f"arc {arc.id} mixed threads: {event_threads}"
 
 
 # --------------------------------------------------------------------------- #

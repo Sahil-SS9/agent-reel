@@ -48,6 +48,7 @@ from canon.grounding import GroundingGate
 from canon.llm import CachedLLM, LLMClient, NullLLM
 from canon.redact import DeterministicRedactor, ModelEntityGate, RedactionGate
 from canon.source import Window
+from canon.threads import build_threads
 
 from adapters.hermes import leakscan
 from adapters.hermes.evidence import EvidenceLeak, write_json, write_text
@@ -136,6 +137,7 @@ class PipelineResult:
     cache_stats: dict[str, int] = field(default_factory=dict)
     problems: list[str] = field(default_factory=list)
     grounding: dict[str, Any] = field(default_factory=dict)
+    threads: int = 0
     timings: dict[str, float] = field(default_factory=dict)
     artifacts: dict[str, str] = field(default_factory=dict)
 
@@ -351,7 +353,15 @@ def run_pipeline(
         result.cache_stats = cache.stats()
 
         # ---- arcs, canon, episode ---------------------------------------
-        arcs = build_arcs(beats, window_start=window.since)
+        # Audit M1-F2: an arc comes from ONE linked thread, never from stitched events.
+        threads = build_threads(gated)
+        arcs = build_arcs(
+            threads,
+            beats,
+            events_by_id=gated_by_id,
+            window_start=window.since,
+        )
+        result.threads = len(threads)
         result.arc_count = len(arcs)
         canon = build_canon(gated, beats, hero_names=(config.hero,), window_start=window.since)
         result.canon = canon
@@ -468,6 +478,9 @@ def run_pipeline(
                     "panels": len(ir.panels),
                     "writer": ir.writer,
                     "grounding": result.grounding,
+                    "threads": result.threads,
+                    "primary_thread": (arcs[0].as_dict()["thread_kind"] if arcs else ""),
+                    "causation_verified": (arcs[0].causation.get("verified") if arcs else None),
                     "gate": result.gate_report,
                     "cache": result.cache_stats,
                     "timings": result.timings,
@@ -617,6 +630,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "panels": len(result.ir.panels) if result.ir else 0,
         "writer": result.ir.writer if result.ir else "",
         "grounding": result.grounding,
+        "threads": result.threads,
         "gate": result.gate_report,
         "cache": result.cache_stats,
         "timings": result.timings,

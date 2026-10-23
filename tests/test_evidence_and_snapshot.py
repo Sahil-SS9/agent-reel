@@ -113,7 +113,7 @@ def test_assert_no_raw_text_scans_existing_files(tmp_path):
 
 def test_snapshot_stores_hashes_and_gated_text_but_never_raw_text(tmp_path):
     facts = {"default/MEMORY.md": [RAW_MEMORY, "a harmless fact"]}
-    gated = {gate().redact_text(RAW_MEMORY)[0], "a harmless fact"}
+    gated = [gate().redact_text(RAW_MEMORY)[0], "a harmless fact"]
     snapshot = build_snapshot(
         facts,
         captured_at=1.0,

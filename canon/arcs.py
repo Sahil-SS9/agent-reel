@@ -15,10 +15,12 @@ Recurring problems become villains (an entity promoted after 3+ arcs); a
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 from canon.beats import Beat
 from canon.events import make_event_id
+from canon.gate import GatedEvent
+from canon.threads import Thread, beats_by_thread, causal_check, thread_index
 
 ARC_ROLES = ("setup", "hidden_problem", "diagnosis", "climax", "aftermath", "win")
 ARC_TYPES = ("struggle-to-resolution", "pivot", "rivalry", "mystery", "training-montage")
@@ -36,6 +38,10 @@ class Arc:
     opened: float
     resolved: float | None
     cliffhanger: str = ""
+    thread_id: str = ""
+    thread_kind: str = ""
+    thread_label: str = ""
+    causation: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.type not in ARC_TYPES:
@@ -55,6 +61,10 @@ class Arc:
             "opened": round(self.opened, 6),
             "resolved": round(self.resolved, 6) if self.resolved else None,
             "cliffhanger": self.cliffhanger,
+            "thread_id": self.thread_id,
+            "thread_kind": self.thread_kind,
+            "thread_label": self.thread_label,
+            "causation": dict(self.causation),
         }
 
 
@@ -171,6 +181,8 @@ def build_arc(
     *,
     arc_type: str = "struggle-to-resolution",
     window_start: float = 0.0,
+    thread: Thread | None = None,
+    events_by_id: Mapping[str, GatedEvent] | None = None,
 ) -> Arc | None:
     if not beats:
         return None
@@ -193,6 +205,12 @@ def build_arc(
             cliffhanger = later[0].summary
     else:
         cliffhanger = climax.summary
+    causation: dict[str, Any] = {}
+    if thread is not None:
+        index = {event_id: thread for event_id in thread.event_ids}
+        causation = causal_check(
+            ARC_ROLES, roles, list(beats), index, events_by_id or {}
+        )
     return Arc(
         id=make_event_id("arc", arc_type, opened, {"beats": list(ordered_ids)}),
         title=_title(by_id[beat_id] for beat_id in ordered_ids),
@@ -204,50 +222,44 @@ def build_arc(
         opened=opened,
         resolved=resolved if status == "resolved" else None,
         cliffhanger=cliffhanger,
+        thread_id=thread.id if thread else "",
+        thread_kind=thread.kind if thread else "",
+        thread_label=thread.label if thread else "",
+        causation=causation,
     )
 
 
 def build_arcs(
+    threads: Sequence[Thread],
     beats: Sequence[Beat],
     *,
+    events_by_id: Mapping[str, GatedEvent] | None = None,
     max_arcs: int = 3,
     window_start: float = 0.0,
 ) -> list[Arc]:
-    """One primary arc, plus a rivalry arc when the same problem keeps returning."""
-    arcs: list[Arc] = []
-    primary = build_arc(beats, arc_type="struggle-to-resolution", window_start=window_start)
-    if primary is None:
-        return arcs
-    arcs.append(primary)
+    """One arc per qualifying thread, best thread first (audit M1-F2).
 
-    # Rivalry: the same struggle signature appearing three or more times.
-    signatures: dict[str, list[Beat]] = {}
-    for beat in beats:
-        if beat.type not in {"struggle", "failure"}:
+    A thread must carry at least three beats to become a story, and a thread with
+    real gated text always beats one without: the bake-off's working story came from
+    session and task titles, not from tool names.
+    """
+    grouped = beats_by_thread(beats, threads)
+    by_id = {thread.id: thread for thread in threads}
+    arcs: list[Arc] = []
+    for thread_id, thread_beats in grouped.items():
+        if len(thread_beats) < 3:
             continue
-        signature = beat.tags[-1] if beat.tags else beat.type
-        signatures.setdefault(signature, []).append(beat)
-    rival = sorted(
-        ((signature, group) for signature, group in signatures.items() if len(group) >= 3),
-        key=lambda item: (-len(item[1]), item[0]),
-    )
-    if rival and len(arcs) < max_arcs:
-        signature, group = rival[0]
-        arc = build_arc(group, arc_type="rivalry", window_start=window_start)
+        thread = by_id[thread_id]
+        arc = build_arc(
+            thread_beats,
+            arc_type="struggle-to-resolution",
+            window_start=window_start,
+            thread=thread,
+            events_by_id=events_by_id,
+        )
         if arc is not None:
             arcs.append(arc)
-
-    # Training montage: a day with many level-ups and no big struggle.
-    by_day: dict[int, list[Beat]] = {}
-    for beat in beats:
-        by_day.setdefault(int(beat.ts // 86400), []).append(beat)
-    for day, group in sorted(by_day.items()):
-        levelups = [beat for beat in group if beat.type == "level-up"]
-        struggles = [beat for beat in group if beat.type in {"struggle", "failure"}]
-        if len(levelups) >= 3 and len(struggles) <= 1 and len(arcs) < max_arcs:
-            arc = build_arc(group, arc_type="training-montage", window_start=window_start)
-            if arc is not None:
-                arcs.append(arc)
+        if len(arcs) >= max_arcs:
             break
     return arcs
 

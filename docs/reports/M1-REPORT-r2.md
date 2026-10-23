@@ -49,8 +49,8 @@ files created, renamed, truncated or deleted under `~/.hermes`); dev benchmark 2
 ## Real-data dry run (script only, last 7 days)
 
 ```
-events ingested          82,540
-gated                    82,540   (deep-gated subset: 14 events)
+events ingested          83,253
+gated                    83,253   (deep-gated subset: 14 events)
 quarantined                   0   → quarantine rate 0.0% (threshold 5%)
 beats                       400
 threads                     451
@@ -62,11 +62,11 @@ causation verified          yes
 grounding        8/8 lines, rate 1.0, 0 rewritten, 0 dropped
 title     "Implement approved next Modernisation Engine slice" (derived; the model
            title was refused as ungrounded, which is the gate working)
-wall clock                 174 s
+wall clock                 159 s
 ```
 
-Redaction findings in that week: `path` 3,999 · `project_name` 527 · `secret` 391
-· `ip` 199 · `person_name` 173 · `email` 138 · `health` 1.
+Redaction findings in that week: `path` 3,559 · `secret` 375 · `ip` 196 · `project_name`
+160 · `email` 137 · `person_name` 36 · `health` 1.
 
 The full script text lives in the evidence folder, not in the repo:
 `build-evidence/M1-r2/run-live/episode-script.md` (ground rule 5).
@@ -80,7 +80,7 @@ The full script text lives in the evidence folder, not in the repo:
 | held-out | deterministic only | 36 | **17/17** | n/a | 0 | 0 |
 
 Throughput: the held-out cold run did 36 items in 21.9 s (1.6 items/s); the dev run
-reported 222 items/s on a warm cache. The pipeline gated 82,540 events in 167 s. Both
+reported 222 items/s on a warm cache. The pipeline gated 83,253 events in 158 s. Both
 deep benchmarks were re-run at the rework HEAD (14:16) and still report 100% on every
 category with 0 leaked; those re-runs were served from the model cache, which is the
 SPEC §4 guarantee, so the throughput line above quotes the cold numbers.
@@ -125,7 +125,7 @@ separately, and the gate fails if more than 5% of a run is quarantined.
 - **The title is the derived one.** The model's title was refused as ungrounded, which
   is the gate working; a title prompt that quotes the thread's own words would land.
 - Deep-gate coverage is still bounded (14 events), and the local model is slow under
-  load (the run took 174 s for 82,540 events, most of it the model pass).
+  load (the run took 159 s for 83,253 events, most of it the model pass).
 
 ## Commands to reproduce
 

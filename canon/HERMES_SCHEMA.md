@@ -214,3 +214,10 @@ and are deleted when the run closes the reader.
 parts: a live strace run (data files `O_RDONLY`, no creation, no mutating
 syscalls), a strict run against a read-only-locked copy of a live profile (every
 write-flag open denied), and the same on the read-only-locked synthetic home.
+
+**Exact claim (audit F3).** No files created, renamed, truncated or deleted
+under the Hermes home; existing `-shm` wal-index pages are updated by normal
+SQLite read locking, in place, in files that already exist. Every SQLite reader
+does this, Hermes' own processes included. So the guarantee is "adds nothing,
+removes nothing, changes no database content", not "touches not one byte of any
+file".

@@ -22,7 +22,8 @@ adapters/hermes/        the only Hermes-aware code: history.py (ingest + CLI), r
                         stores.py (read-only access), paths.py, leakscan.py
 fixtures/               synthetic Hermes home generator (4 profiles, 4 weeks)
 tests/                  67 tests, pytest, no network and no real history
-scripts/readonly_proof.sh   strace-based proof that nothing under ~/.hermes is written
+scripts/readonly_proof.sh   strace-based proof that no file is created, renamed,
+                            truncated or deleted under ~/.hermes
 ```
 
 Run it:

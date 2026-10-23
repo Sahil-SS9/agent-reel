@@ -3,7 +3,7 @@
 ## Plain-English summary
 
 - The read-only history adapter works. It reads all 65 Hermes profiles plus the fleet-wide kanban, cron, skills and memory stores, and turns them into one clean event stream: **78,883 events over the last 7 days in 3.2 seconds**, using 36 MB of memory.
-- **Nothing under `~/.hermes` is written.** `strace` shows every data file opened `O_RDONLY`, zero files created, zero rename/unlink/mkdir/chmod. Getting there needed a real fix: SQLite creates `-wal`/`-shm` sidecar files even for a read-only connection, so the adapter now reads the SQLite header first and reads a private copy whenever creating sidecars would otherwise happen.
+- **No files are created, renamed, truncated or deleted under `~/.hermes`.** `strace` shows every data file opened `O_RDONLY`, zero creations, zero rename/unlink/mkdir/chmod. The exact claim matters (audit F3): existing `-shm` wal-index pages are updated by normal SQLite read locking, as they are for any SQLite reader. No database content changes. Getting to "creates nothing" needed a real fix: SQLite creates `-wal`/`-shm` sidecar files even for a read-only connection, so the adapter now reads the SQLite header first and reads a private copy whenever creating sidecars would otherwise happen.
 - The synthetic 4-week, 4-profile fixture is built and the adapter reads it as if it were a real Hermes home. Tests are green: **67 passed**, no network, no real history in the repo.
 - Real history stayed out of the repo: the only real-data output is a summary written to the evidence folder. It contains counts and session titles, and a pre-flight leak scan on it comes back **clean**.
 - Two things are honestly short of the letter of the handoff: memory *diffs* need a prior snapshot (Hermes keeps no memory history), and skill usage is collapsed to the latest timestamp per skill. Both are documented, with a fix path.
@@ -15,7 +15,7 @@ Branch: `main`
 
 | Gate item (HANDOFF §4, M0) | Result | Evidence |
 |---|---|---|
-| Read-only proof: no write opens under `~/.hermes`, or every DB opened `mode=ro` and nothing else opened for writing | **VERIFIED** (stronger than asked: also no file creation and no mutating syscall) | `build-evidence/M0/readonly-proof-verdict.txt`, `strace-openat.log`, `strace-strict.log`, `strace-strict-synthetic.log` |
+| Read-only proof: no write opens under `~/.hermes`, or every DB opened `mode=ro` and nothing else opened for writing | **VERIFIED** — no files created, renamed, truncated or deleted; existing `-shm` wal-index pages are updated by normal SQLite read locking (exact wording per audit F3) | `build-evidence/M0/readonly-proof-verdict.txt`, `strace-openat.log`, `strace-strict.log`, `strace-strict-synthetic.log` |
 | Real-data summary run | **VERIFIED** (7 days, 78,883 events, 3.2 s, 36 MB RSS) | `build-evidence/M0/real-data-summary.txt` |
 | Tests green | **VERIFIED** (67 passed, 0 failed, 19.4 s) | `build-evidence/M0/tests.txt` |
 | `adapters/hermes/history.py` reads sessions, messages, tool calls, kanban, skills, cron, memory into one `Event` stream | **VERIFIED** | `adapters/hermes/history.py`; per-source counts in the summary |

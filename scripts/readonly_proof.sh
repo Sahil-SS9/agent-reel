@@ -4,11 +4,12 @@
 # Three independent checks:
 #
 #   A. Live run under strace: every data file in the Hermes home is opened
-#      O_RDONLY; no file is created; no rename/unlink/mkdir/truncate/chmod/
-#      link/symlink happens under the home. SQLite's own -wal/-shm sidecars are
-#      reported separately, because a WAL database always has those opened by
-#      the library (this is SQLite behaviour for any read-only reader, the
-#      sqlite3 CLI included) - Part B proves the adapter does not need that.
+#      O_RDONLY; no file is created, renamed, truncated or deleted; no
+#      rename/unlink/mkdir/truncate/chmod/link/symlink happens under the home.
+#      SQLite's own -wal/-shm sidecars are reported separately: a WAL database
+#      always has those opened by the library, and existing -shm wal-index pages
+#      are updated by normal SQLite read locking (the sqlite3 CLI does the same).
+#      Part B proves the adapter does not need write access even for those.
 #
 #   B. Strict run: a read-only-locked copy (0444 files, 0555 dir) of one real
 #      profile store is read successfully. Every write-flag open under that copy
@@ -228,7 +229,8 @@ fi
 
 report ""
 if [[ $fail -eq 0 ]]; then
-  report "VERDICT: PASS - the adapter uses no write access to Hermes state and needs none"
+  report "VERDICT: PASS - no files created, renamed, truncated or deleted under the Hermes home"
+  report "              (existing -shm wal-index pages are updated by normal SQLite read locking)"
 else
   report "VERDICT: FAIL - see the FAIL lines above"
 fi

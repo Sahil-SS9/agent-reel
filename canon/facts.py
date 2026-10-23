@@ -28,8 +28,10 @@ from canon.events import (
 )
 from canon.gate import GatedEvent
 
-MAX_OBJECT_WORDS = 12
-MAX_RESULT_WORDS = 16
+#: Short by construction: a fact must not read as a quote of the owner's message
+#: (the caption policy refuses an owner echo over eight words).
+MAX_OBJECT_WORDS = 7
+MAX_RESULT_WORDS = 8
 
 _NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
 
@@ -50,7 +52,7 @@ _KIND_VERBS = {
     KIND_TASK_FINISHED: "completed",
     KIND_TASK_COMMENT: "noted",
     KIND_MESSAGE_USER: "wants",
-    KIND_MESSAGE_ASSISTANT: "reported",
+    KIND_MESSAGE_ASSISTANT: "described",
 }
 
 
@@ -99,13 +101,22 @@ class Fact:
 _BOUNDARY = re.compile(r"(?:;|\n|\.(?=\s|$))")
 
 
+#: Never end a shortened fact on one of these; it reads as a cut, not a sentence.
+_DANGLING = {
+    "a", "an", "and", "as", "at", "but", "by", "do", "for", "from", "in", "into", "is",
+    "it", "of", "on", "or", "please", "so", "that", "the", "then", "to", "with", "within",
+}
+
+
 def _first_clause(text: str, limit: int) -> str:
     clause = _BOUNDARY.split(" ".join((text or "").split()), maxsplit=1)[0]
     clause = clause.strip(" ,:-\u2014")
     words = clause.split()
     if len(words) > limit:
-        clause = " ".join(words[:limit])
-    return clause
+        words = words[:limit]
+    while words and words[-1].strip(" ,:.!?\u2014-").lower() in _DANGLING:
+        words.pop()
+    return " ".join(words).rstrip(" ,:;\u2014-")
 
 
 def _clauses(text: str) -> list[str]:

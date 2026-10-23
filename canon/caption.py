@@ -215,7 +215,7 @@ def longest_common_run(caption: str, source: str) -> int:
 #: The template shapes the audit refuses: "Sahil asked for ...", "Kensei reported ...".
 TEMPLATE_OPENING = re.compile(
     r"^\s*[A-Z][\w'\-]*(?:\s+[A-Z][\w'\-]*){0,2}\s+"
-    r"(?:asked(?:\s+for)?|reported)\b",
+    r"(?:asked(?:\s+for)?|reported|worked\s+on)\b",
     re.IGNORECASE,
 )
 

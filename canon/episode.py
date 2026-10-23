@@ -24,6 +24,8 @@ from canon.casting import build_cast_map, speaker_for
 from canon.canon import Canon
 from canon.events import make_event_id
 from canon.caption import (
+    MAX_OWNER_QUOTE_WORDS,
+    caption_problem,
     caption_problem,
     compose_caption,
     looks_like_provenance,
@@ -381,6 +383,50 @@ def _is_generic(line: str, evidence_text: str, caption: str) -> bool:
     return not any(word in haystack for word in words)
 
 
+def _policy_caption(
+    spec: Mapping[str, Any],
+    *,
+    fallback: str = "",
+    seen: set[str] | None = None,
+) -> str:
+    """The panel's fact sentence if it passes the caption policy, else the fallback.
+
+    Round 7: the repair path and the empty-panel path both come through here. Their only
+    source is the fact-list sentence (canon/facts.py); the per-event composer map
+    (compose_caption) is debug output and never reaches a page.
+    """
+    if not spec.get("facts_only"):
+        # A caller that supplies no fact list is outside the round-7 guarantee (the
+        # pipeline always supplies one); keep its previous caption source so older
+        # fixtures still produce a strip.
+        return str(spec.get("structured_caption") or fallback or "").strip()
+
+    candidates = [str(spec.get("fact_sentence") or "").strip(), fallback]
+    for candidate in candidates:
+        if not candidate:
+            continue
+        for text in (candidate, trim_caption(candidate)):
+            if not text or not acceptable_text(spec, text):
+                continue
+            if seen is not None and text.lower().strip() in seen:
+                continue
+            return text
+    return ""
+
+
+def acceptable_text(spec: Mapping[str, Any], text: str) -> bool:
+    """The caption policy, usable from the repair and fallback paths."""
+    if looks_like_provenance(text):
+        return False
+    if len(" ".join(text.split()).split()) < 3:
+        return False
+    return caption_problem(
+        text,
+        owner_texts=tuple(spec.get("owner_texts") or ()),
+        max_owner_quote=MAX_OWNER_QUOTE_WORDS,
+    ) == ""
+
+
 def _logline(title: str, panels: Sequence[Panel]) -> str:
     """The header line: the title only (R5-F4).
 
@@ -512,6 +558,7 @@ def plan_episode(
         if not usable(beat):
             continue
         shot, pose, expression, setting, _ = ROLE_STAGING[role]
+        fact_sentence = facts_for(role)
         panel_specs.append(
             {
                 "role": role,
@@ -526,7 +573,8 @@ def plan_episode(
                 # A caption comes from the fact list (round 6). The composed
                 # "actor + verb + object" sentence is not a caption source: it produced
                 # every template shape the audit refused.
-                "structured_caption": facts_for(role)
+                "fact_sentence": fact_sentence,
+                "structured_caption": fact_sentence
                 or (
                     outcome_caption
                     if role in {"climax", "win"} and outcome_caption
@@ -547,6 +595,7 @@ def plan_episode(
                     )
                 ),
                 "facts_only": bool(facts),
+                "owner_texts": tuple(owner_texts),
                 "actors": [],
                 "format": format,
             }
@@ -661,19 +710,19 @@ def plan_episode(
             caption = ""
         if grounder is not None and caption:
             report.captions += 1
-            verdict = grounder.check(caption, evidence_text, layer="caption")
+            # Round 7: the caption was checked against judge_text when it was chosen, so it
+            # must be re-checked against the same text. Re-checking a fact sentence against
+            # the long raw evidence failed it, which is what "repaired" the strip with the
+            # composer's "Kensei worked on ..." sentence on real runs.
+            verdict = grounder.check(caption, judge_text, layer="caption")
             if verdict.supported:
                 report.captions_supported += 1
             else:
-                # A composed sentence that fails its own evidence check is a genuine
-                # repair: fall back to the beat's structured line, then to a short quote.
-                repaired = next(
-                    (structured.get(event_id, "") for event_id in event_ids if structured.get(event_id, "")),
-                    "",
+                # A repair may only be the panel's own fact sentence, under the same
+                # caption policy as every other path.
+                repaired = _policy_caption(
+                    spec, fallback=grounder.literal_caption(judge_text), seen=seen_text
                 )
-                if not repaired or repaired == caption:
-                    literal = grounder.literal_caption(evidence_text)
-                    repaired = "" if looks_like_provenance(literal) else literal
                 report.reasons.append(f"{role} caption: {verdict.reason}")
                 if repaired:
                     caption = repaired
@@ -740,15 +789,13 @@ def plan_episode(
         if not lines and duplicates:
             lines.append(duplicates[0])
         if not caption and not lines:
-            # Nothing survived and there is nothing to quote: state the event itself,
-            # which is grounded by construction, or leave the panel out.
-            structural = next(
-                (structured.get(event_id, "") for event_id in event_ids if structured.get(event_id, "")),
-                "",
-            )
+            # Nothing survived. The only remaining source is the panel's fact sentence,
+            # and it has to pass the same policy as everything else. The composer's
+            # sentence is not a page source; if the fact does not pass, the panel is
+            # dropped rather than filled.
+            structural = _policy_caption(spec, seen=seen_text)
             if not structural:
-                structural = compose_caption_first(beat)
-            if not structural or looks_like_provenance(structural):
+                report.reasons.append(f"{role}: dropped, no caption or line survived")
                 continue
             caption = structural
             caption_key = caption.lower().strip()

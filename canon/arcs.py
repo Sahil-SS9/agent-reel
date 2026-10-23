@@ -163,8 +163,12 @@ def _title(beats: Iterable[Beat]) -> str:
     for beat in ordered:
         if "fields:" in beat.summary:
             continue
+        summary = beat.summary
+        if ": " in summary:
+            # Beat summaries are "profile: text"; a title should not start with an id.
+            summary = summary.split(": ", 1)[1]
         cleaned = " ".join(
-            word.strip(" .,:;!?\u2014-") for word in beat.summary.split()
+            word.strip(" .,:;!?\u2014-") for word in summary.split()
         )
         words = [word for word in cleaned.split() if len(word) > 3 and not word.startswith("ev_")]
         if len(words) >= 3:

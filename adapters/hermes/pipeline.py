@@ -413,6 +413,13 @@ def run_pipeline(
             hero=config.hero,
         )
         cast_map["default"] = cast_map.get("default", "Kensei")
+        # A character name is released in the evidence, so it must survive the gate:
+        # a profile whose name matches a learned sensitive term gets a neutral alias.
+        safe_cast: dict[str, str] = {}
+        for index, (profile, character) in enumerate(sorted(cast_map.items()), start=1):
+            redacted, findings = gate.redact_text(character)
+            safe_cast[profile] = character if not findings else f"Agent {index}"
+        cast_map = safe_cast
         # One cached title call, after grounding, and only kept when it is grounded.
         thread_beats = [beat for beat in beats if beat.id in set(arcs[0].beat_ids)]
         title, title_source = write_title(

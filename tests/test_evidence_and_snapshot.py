@@ -159,3 +159,19 @@ def test_snapshot_ignores_an_older_version(tmp_path):
     store.path.parent.mkdir(parents=True, exist_ok=True)
     store.path.write_text(json.dumps({"v": 1, "files": {}}), encoding="utf-8")
     assert store.load() is None
+
+
+def test_state_dir_inside_evidence_is_refused(hermes_env, tmp_path):
+    """The private snapshot may never be placed inside an evidence folder."""
+    from adapters.hermes.pipeline import PipelineConfig, run_pipeline
+
+    with pytest.raises(ValueError) as excinfo:
+        run_pipeline(
+            PipelineConfig(
+                data_dir=tmp_path / "evidence",
+                state_dir=tmp_path / "evidence" / ".state",
+                days=28,
+                use_model=False,
+            )
+        )
+    assert "state_dir must not be inside data_dir" in str(excinfo.value)

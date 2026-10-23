@@ -254,6 +254,17 @@ def run_pipeline(
 
     own_source = source is None
     snapshot_store = SnapshotStore(config.state_dir)
+    # Audit M1-F4 in one line: the private snapshot may not live inside the evidence
+    # folder, whoever passes the paths.
+    try:
+        snapshot_store.root.resolve().relative_to(config.data_dir.resolve())
+    except ValueError:
+        pass
+    else:
+        raise ValueError(
+            "state_dir must not be inside data_dir: the memory snapshot is private "
+            "(mode 600, hashes + gated text) and an evidence folder is not"
+        )
     prior_hashes = snapshot_store.hashes_by_file()
     if source is None:
         source = HermesHistorySource(

@@ -30,7 +30,7 @@ from canon.gate import GatedEvent
 
 #: Short by construction: a fact must not read as a quote of the owner's message
 #: (the caption policy refuses an owner echo over eight words).
-MAX_OBJECT_WORDS = 7
+MAX_OBJECT_WORDS = 10
 MAX_RESULT_WORDS = 8
 
 _NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
@@ -105,11 +105,17 @@ _BOUNDARY = re.compile(r"(?:;|\n|\.(?=\s|$))")
 _DANGLING = {
     "a", "an", "and", "as", "at", "but", "by", "do", "for", "from", "in", "into", "is",
     "it", "of", "on", "or", "please", "so", "that", "the", "then", "to", "with", "within",
+    "he", "she", "they", "we", "you", "i", "because", "if", "when", "while", "my", "our",
 }
 
 
+#: Internal identifiers (a session key, a store id) are not story material.
+_INTERNAL_ID = re.compile(r"\b(?:local|session|ev|thr)[-_][0-9a-f]{8,}\b", re.IGNORECASE)
+
+
 def _first_clause(text: str, limit: int) -> str:
-    clause = _BOUNDARY.split(" ".join((text or "").split()), maxsplit=1)[0]
+    clean = _INTERNAL_ID.sub("a session", " ".join((text or "").split()))
+    clause = _BOUNDARY.split(clean, maxsplit=1)[0]
     clause = clause.strip(" ,:-\u2014")
     words = clause.split()
     if len(words) > limit:

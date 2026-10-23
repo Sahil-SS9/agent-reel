@@ -321,6 +321,24 @@ def _label(role: str, beat: Beat | None) -> str:
     return f"{stamp} \u00b7 {label}"
 
 
+def usable_anchor_count(
+    beats: Sequence[Beat],
+    *,
+    brief: Any | None,
+    evidence: Mapping[str, str] | None = None,
+) -> int:
+    """How many of these beats carry gated text in the brief (R3-F3)."""
+    evidence_map = evidence or {}
+    if brief is None:
+        return len(beats)
+    ids = {
+        turn.get("event_id") if isinstance(turn, dict) else getattr(turn, "event_id", "")
+        for turn in (getattr(brief, "turns", ()) or ())
+    }
+    text_ids = {str(event_id) for event_id in ids if str(evidence_map.get(str(event_id), "")).strip()}
+    return sum(1 for beat in beats if any(event_id in text_ids for event_id in beat.event_ids))
+
+
 def plan_episode(
     arc: Arc,
     beats: Sequence[Beat],
@@ -333,6 +351,7 @@ def plan_episode(
     hero: str = "Sahil",
     grounder: ClaimGate | None = None,
     evidence: Mapping[str, str] | None = None,
+    brief: Any | None = None,
     actors_by_event: Mapping[str, str] | None = None,
     cast_map: Mapping[str, str] | None = None,
     title: str | None = None,
@@ -350,6 +369,25 @@ def plan_episode(
         raise ValueError("arc has no roles to plan from")
 
     evidence_map = evidence or {}
+
+    # R3-F3: a panel is anchored on a beat that carries gated text in the brief. A beat
+    # made of status churn has nothing true to say, so it is skipped rather than filled
+    # with a fallback.
+    brief_event_ids = {
+        str(turn.get("event_id"))
+        for turn in (getattr(brief, "turns", ()) or ())
+        if isinstance(turn, dict)
+    } or {turn.event_id for turn in (getattr(brief, "turns", ()) or ()) if not isinstance(turn, dict)}
+    brief_text_ids = {event_id for event_id in brief_event_ids if str(evidence_map.get(event_id, "")).strip()}
+
+    def usable(beat: Beat | None) -> bool:
+        if beat is None:
+            return False
+        if brief is None:
+            # Enforcement needs a brief. A caller that supplies none gets the old
+            # contract; the pipeline always passes one.
+            return True
+        return any(event_id in brief_text_ids for event_id in beat.event_ids)
 
     def _evidence_for(beat: Beat | None) -> str:
         if beat is None:
@@ -375,6 +413,8 @@ def plan_episode(
     panel_specs: list[dict[str, Any]] = []
     for role in roles:
         beat = by_id.get(arc.roles[role])
+        if not usable(beat):
+            continue
         shot, pose, expression, setting, _ = ROLE_STAGING[role]
         panel_specs.append(
             {
@@ -395,7 +435,11 @@ def plan_episode(
     if format == "chapter":
         # Detail panels: the arc's own beats that no role used, up to 12 panels.
         used = set(arc.roles.values())
-        extra = [beat for beat in beats if beat.id not in used and len(panel_specs) < 10]
+        extra = [
+            beat
+            for beat in beats
+            if beat.id not in used and usable(beat) and len(panel_specs) < 10
+        ]
         for beat in extra:
             panel_specs.insert(
                 max(1, len(panel_specs) - 2),

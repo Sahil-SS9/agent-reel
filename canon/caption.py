@@ -212,6 +212,13 @@ def longest_common_run(caption: str, source: str) -> int:
     return best
 
 
+#: The template shapes the audit refuses: "Sahil asked for ...", "Kensei reported ...".
+TEMPLATE_OPENING = re.compile(
+    r"^\s*[A-Z][\w'\-]*(?:\s+[A-Z][\w'\-]*){0,2}\s+(?:asked(?:\s+for)?|reported)\b",
+    re.IGNORECASE,
+)
+
+
 def caption_problem(
     caption: str,
     *,
@@ -219,7 +226,11 @@ def caption_problem(
     max_words: int = MAX_CAPTION_WORDS,
     max_owner_quote: int = MAX_OWNER_QUOTE_WORDS,
 ) -> str:
-    """Why this caption is not acceptable ('' when it is)."""
+    """Why this caption is not acceptable ('' when it is).
+
+    Every caption path - the model's paraphrase, a composed sentence, a trimmed variant,
+    the template fallback - goes through this one function (R5-F2).
+    """
     text = " ".join((caption or "").split())
     if not text:
         return "empty"
@@ -227,6 +238,8 @@ def caption_problem(
         return f"over {max_words} words ({len(text.split())})"
     if looks_like_provenance(text):
         return "provenance"
+    if TEMPLATE_OPENING.match(text):
+        return "template opening (asked for / reported)"
     for source in owner_texts:
         if longest_common_run(text, source) > max_owner_quote:
             return f"quotes the owner for more than {max_owner_quote} words"

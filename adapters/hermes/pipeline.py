@@ -591,10 +591,15 @@ def run_pipeline(
                 [brief.text()]
                 + [evidence_map.get(event_id, "") for event_id in candidate.event_ids]
             )
+            # R5-F4: if the model title fails grounding, fall back to the thread title
+            # shortened on a word boundary - never to the owner's own message.
+            derived_title = trim_caption(
+                str(candidate.title or arc.title or "").strip(), max_words=6
+            )
             title, title_source = write_title(
                 writer_cached if config.use_model else None,
                 beats=story_beats or thread_beats,
-                derived=arc.title,
+                derived=derived_title,
                 hero=config.hero,
                 gate=grounder,
                 evidence=brief.text(),

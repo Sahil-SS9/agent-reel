@@ -44,3 +44,13 @@ def test_trim_keeps_a_sentence_under_the_cap():
 
 def test_trim_leaves_a_short_caption_alone():
     assert trim_caption("Sahil asks for a true benchmark.") == "Sahil asks for a true benchmark."
+
+
+def test_a_template_opening_is_refused():
+    """R5-F2: the 'asked for' / 'reported' shapes are gone from every caption path."""
+    for caption in (
+        "Sahil asked for see document content = Project Lantern: Handoff Spec.",
+        "Kensei reported Go received.",
+        "The Reviewer reported a schema mismatch.",
+    ):
+        assert "template opening" in caption_problem(caption)

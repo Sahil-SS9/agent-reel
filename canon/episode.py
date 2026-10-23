@@ -373,23 +373,13 @@ def _is_generic(line: str, evidence_text: str, caption: str) -> bool:
 
 
 def _logline(title: str, panels: Sequence[Panel]) -> str:
-    """One short line for the script header: the title plus a brief where-we-ended."""
-    import re as _re
+    """The header line: the title only (R5-F4).
 
-    seed = ""
-    for panel in reversed(panels):
-        if panel.caption:
-            seed = panel.caption
-            break
-    seed = _re.sub(r"https?://\S+", "a link", seed)
-    seed = " ".join(seed.split())
-    words = seed.split()[:12]
-    while words and words[-1].lower().strip(".,;:-") in {"and", "or", "the", "a", "of", "to", "with"}:
-        words = words[:-1]
-    tail = " ".join(words).rstrip(" .,;:")
-    if title and tail:
-        return f"{title} \u2014 {tail}"
-    return title or tail
+    The header used to be the title plus a sentence lifted from the last panel, which made
+    a 10-18 word line and sometimes carried the owner's raw message. It is now the title,
+    and nothing else: if there is no title there is no header line.
+    """
+    return " ".join((title or "").split())
 
 
 def plan_episode(

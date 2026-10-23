@@ -81,5 +81,5 @@ def test_the_header_title_is_counted():
         evidence={row.id: str(row.payload.get("text", "")) for row in rows},
         brief=brief, cast_map={"owner": "Sahil", "denji": "Denji"},
     )
-    assert ir.logline
-    assert len(ir.logline.split()) == len(ir.logline.split())
+    # R5-F4: the header is the title alone, so an untitled episode has no header line.
+    assert ir.logline == "" or len(ir.logline.split()) <= 6

@@ -304,11 +304,16 @@ def run_pipeline(
         cached = CachedLLM(client, cache, stage="m1")
 
         redactor = DeterministicRedactor(rules_from_snapshot())
-        model_gate = ModelEntityGate(cached, allowlist=config.allowlist) if config.use_model else None
+        # Agent/profile names are the cast, not internal projects: keep them out of the
+        # learned-sensitive vocabulary or every character turns into "Agent N".
+        cast_allowlist = tuple(sorted({*config.allowlist, *(p.name for p in source.info().profiles)}))
+        model_gate = (
+            ModelEntityGate(cached, allowlist=cast_allowlist) if config.use_model else None
+        )
         gate = RedactionGate(
             redactor,
             model_gate=model_gate,
-            allowlist=config.allowlist,
+            allowlist=cast_allowlist,
             max_chars=config.max_text_chars,
         )
 

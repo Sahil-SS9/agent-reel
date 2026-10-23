@@ -170,6 +170,8 @@ def _title(beats: Iterable[Beat]) -> str:
         cleaned = " ".join(
             word.strip(" .,:;!?\u2014-") for word in summary.split()
         )
+        if ":" in cleaned:
+            cleaned = cleaned.split(":", 1)[0]
         words = [word for word in cleaned.split() if len(word) > 3 and not word.startswith("ev_")]
         if len(words) >= 3:
             return " ".join(words[:6])

@@ -28,6 +28,7 @@ import argparse
 import json
 import os
 import re
+import signal
 import sqlite3
 import sys
 from dataclasses import dataclass
@@ -1565,7 +1566,24 @@ def _summary_lines(
     return lines
 
 
+def _install_signal_cleanup() -> None:
+    """SIGTERM/SIGINT become a normal exit so snapshot copies are cleaned up."""
+
+    def _handler(signum: int, _frame: object) -> None:
+        raise SystemExit(128 + signum)
+
+    for name in ("SIGTERM", "SIGINT"):
+        signal_number = getattr(signal, name, None)
+        if signal_number is None:
+            continue
+        try:
+            signal.signal(signal_number, _handler)
+        except (ValueError, OSError):
+            continue
+
+
 def main(argv: Sequence[str] | None = None) -> int:
+    _install_signal_cleanup()
     parser = argparse.ArgumentParser(
         prog="python -m adapters.hermes.history",
         description="Read-only Hermes history adapter for the Scrollback Reel.",

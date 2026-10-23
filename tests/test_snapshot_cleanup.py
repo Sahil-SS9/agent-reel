@@ -108,6 +108,34 @@ def test_default_root_is_empty_after_a_failing_adapter_run(tmp_path, synthetic_h
     assert list(root.iterdir()) == []
 
 
+def test_sigterm_cleans_up_the_snapshot(tmp_path):
+    """A killed run must not leave a copy of the user's database behind.
+
+    weakref.finalize covers GC and a normal exit; a signal needs the CLI's handler
+    to turn it into a normal exit, so the whole stack is exercised here.
+    """
+    root = tmp_path / "root"
+    root.mkdir()
+    db = _wal_db_without_sidecars(tmp_path / "a.db")
+    code = (
+        "import os, signal, sys;"
+        "from pathlib import Path;"
+        "sys.path.insert(0, %r);"
+        "from adapters.hermes.pipeline import _install_signal_cleanup;"
+        "from adapters.hermes.stores import StoreReader;"
+        "_install_signal_cleanup();"
+        "r = StoreReader(snapshot_root=Path(%r));"
+        "r.open(Path(%r));"
+        "print('copied', len([p for p in Path(%r).iterdir() if p.name.startswith('reel-store')]))"
+        ";os.kill(os.getpid(), signal.SIGTERM)"
+        % (str(Path(__file__).resolve().parents[1]), str(root), str(db), str(root))
+    )
+    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert "copied 1" in result.stdout
+    assert result.returncode == 143, result.returncode  # 128 + SIGTERM
+    assert [p for p in root.iterdir() if p.name.startswith("reel-store")] == []
+
+
 def test_env_var_controls_the_default_root(tmp_path, monkeypatch):
     root = tmp_path / "env-root"
     monkeypatch.setenv("REEL_SNAPSHOT_DIR", str(root))

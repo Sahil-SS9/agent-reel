@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import signal
 import sys
 import time
 from dataclasses import dataclass, field
@@ -440,7 +441,29 @@ def run_pipeline(
 # --------------------------------------------------------------------------- #
 
 
+def _install_signal_cleanup() -> None:
+    """Turn SIGTERM/SIGINT into a normal exit so snapshot copies are removed.
+
+    ``weakref.finalize`` covers garbage collection and a normal interpreter exit,
+    but a process killed by a signal never unwinds - which is how private copies of
+    the user's databases end up lingering in the snapshot root.
+    """
+
+    def _handler(signum: int, _frame: object) -> None:
+        raise SystemExit(128 + signum)
+
+    for name in ("SIGTERM", "SIGINT"):
+        signal_number = getattr(signal, name, None)
+        if signal_number is None:
+            continue
+        try:
+            signal.signal(signal_number, _handler)
+        except (ValueError, OSError):  # not the main thread, or unsupported
+            continue
+
+
 def main(argv: Sequence[str] | None = None) -> int:
+    _install_signal_cleanup()
     parser = argparse.ArgumentParser(
         prog="python -m adapters.hermes.pipeline",
         description="Scrollback Reel M1 pipeline: ingest, gate, beats, arcs, canon, episode.",

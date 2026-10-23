@@ -1184,8 +1184,10 @@ class HermesHistorySource:
             prior = self._memory_snapshot.get(key)
             store = f"memory:{key}"
             if prior is not None:
-                prior_set = set(prior)
-                current_set = set(facts)
+                # The snapshot stores per-fact hashes, never text (audit M1-F4).
+                prior_set = {str(item) for item in prior}
+                current_hashes = [text_digest(fact) for fact in facts]
+                current_set = set(current_hashes)
                 # Always emit the current facts, so a re-run with no changes gives
                 # a byte-identical stream (and therefore identical canon). The
                 # added/removed events are the diff on top.
@@ -1213,7 +1215,7 @@ class HermesHistorySource:
                     )
                     self._count(SOURCE_MEMORY, emitted=1)
                 for index, fact in enumerate(facts):
-                    if fact in prior_set:
+                    if current_hashes[index] in prior_set:
                         continue
                     yield build_event(
                         source=SOURCE_MEMORY,
@@ -1235,9 +1237,11 @@ class HermesHistorySource:
                         discriminator="added",
                     )
                     self._count(SOURCE_MEMORY, emitted=1)
-                for index, fact in enumerate(prior):
-                    if fact in current_set:
+                for index, previous_hash in enumerate(prior):
+                    if previous_hash in current_set:
                         continue
+                    # The old text is gone from the file, so only the hash survives:
+                    # that is the honest record of a removed fact.
                     yield build_event(
                         source=SOURCE_MEMORY,
                         kind=KIND_MEMORY_REMOVED,
@@ -1247,14 +1251,13 @@ class HermesHistorySource:
                         subject=path.name,
                         payload={
                             "file": path.name,
-                            "fact_digest": text_digest(fact),
-                            "fact_chars": len(fact),
+                            "fact_digest": previous_hash,
                             "change": "removed",
                         },
                         store=store,
                         table="lines",
                         pk=str(index),
-                        content_column="line",
+                        content_column=None,
                         discriminator="removed",
                     )
                     self._count(SOURCE_MEMORY, emitted=1)

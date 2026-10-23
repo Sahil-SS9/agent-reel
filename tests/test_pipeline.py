@@ -15,6 +15,7 @@ def _run(tmp_path: Path, *, data_dir: Path, **kwargs):
         days=28,
         use_model=False,
         snapshot_root=tmp_path / "snapshots",
+        state_dir=tmp_path / "state",
         **kwargs,
     )
     return run_pipeline(config)
@@ -29,7 +30,15 @@ def test_pipeline_produces_an_episode(hermes_env, tmp_path):
     assert result.beats
     assert result.ir is not None
     assert result.ir.panels
-    for name in ("canon.json", "beats.json", "arcs.json", "script-ir.json", "episode-script.md", "metrics.json"):
+    for name in (
+        "canon.json",
+        "beats.json",
+        "arcs.json",
+        "script-ir.json",
+        "episode-script.md",
+        "memory.json",
+        "metrics.json",
+    ):
         assert (tmp_path / "data" / name).is_file(), name
 
 
@@ -71,12 +80,44 @@ def test_a_second_run_is_byte_identical(hermes_env, tmp_path):
     assert (data_dir / "beats.json").read_bytes() == beats_first
 
 
-def test_memory_snapshot_is_written_into_the_data_dir(hermes_env, tmp_path):
+def test_memory_snapshot_is_private_and_evidence_gets_counts_only(hermes_env, tmp_path):
+    """Audit M1-F4: the snapshot lives in the state dir; evidence gets counts/hashes."""
     data_dir = tmp_path / "data"
-    _run(tmp_path, data_dir=data_dir)
-    snapshot = json.loads((data_dir / "memory-facts.json").read_text(encoding="utf-8"))
-    assert snapshot, "no memory facts snapshot"
-    assert any(key.endswith("MEMORY.md") for key in snapshot)
+    # Plant a fact with a secret in it: the snapshot may keep *gated* text, never raw.
+    memory_file = hermes_env / "memories" / "MEMORY.md"
+    original_memory = memory_file.read_text(encoding="utf-8")
+    memory_file.write_text(
+        original_memory + "\n\u00a7\nReach the accountant on jane.doe@example.com please.\n",
+        encoding="utf-8",
+    )
+    try:
+        _run(tmp_path, data_dir=data_dir)
+    finally:
+        memory_file.write_text(original_memory, encoding="utf-8")
+
+    # Evidence: counts and hashes, never a facts dump.
+    evidence = json.loads((data_dir / "memory.json").read_text(encoding="utf-8"))
+    assert evidence["counts"]["files"] >= 1
+    blob = json.dumps(evidence)
+    assert "Synthetic fact" not in blob, "raw memory text reached the evidence folder"
+    assert all(str(value).startswith("sha256:") for hashes in evidence["hashes"].values() for value in hashes)
+
+    # Nowhere in evidence is the old snapshot file.
+    assert not (data_dir / "memory-facts.json").exists()
+
+    # The private snapshot exists, is mode 600 and holds no raw text either.
+    import os
+    import stat
+
+    snapshot_path = tmp_path / "state" / "memory-facts.json"
+    assert snapshot_path.is_file()
+    assert stat.S_IMODE(os.stat(snapshot_path).st_mode) == 0o600
+    payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    assert payload["files"]
+    stored = json.dumps(payload)
+    assert "jane.doe@example.com" not in stored, "raw memory text reached the snapshot"
+    assert "[REDACTED:email]" in stored, "the snapshot should hold the gated form"
+    assert "jane.doe@example.com" not in blob
 
 
 def test_second_run_uses_the_snapshot_for_the_diff(hermes_env, tmp_path):

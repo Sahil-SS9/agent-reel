@@ -175,11 +175,17 @@ def test_fetch_content_reads_kanban_title(synthetic_home):
 
 def test_memory_snapshot_diff_reports_added_and_removed(fresh_home):
     source = HermesHistorySource(root=fresh_home)
-    prior = source.current_memory_facts()
+    from canon.events import text_digest
+
+    # The snapshot holds per-fact hashes, not text (audit M1-F4).
+    prior = {
+        key: [text_digest(fact) for fact in facts]
+        for key, facts in source.current_memory_facts().items()
+    }
     assert prior
 
     key = "default/MEMORY.md"
-    old_facts = list(prior[key])
+    old_facts = source.current_memory_facts()[key]
     updated = [old_facts[0], "Synthetic fact NEW: added after the snapshot."] + old_facts[2:]
     (fresh_home / "memories" / "MEMORY.md").write_text("\n\u00a7\n".join(updated) + "\n", encoding="utf-8")
 

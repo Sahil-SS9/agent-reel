@@ -49,9 +49,11 @@ from canon.redact import DeterministicRedactor, ModelEntityGate, RedactionGate
 from canon.source import Window
 
 from adapters.hermes import leakscan
+from adapters.hermes.evidence import EvidenceLeak, write_json, write_text
 from adapters.hermes.history import HermesHistorySource
 from adapters.hermes.llm import OpenAICompatLLMClient
 from adapters.hermes.redact_source import rules_from_snapshot
+from adapters.hermes.snapshot import SnapshotStore, build_snapshot
 
 #: People and tools that may appear by name in the comic.
 DEFAULT_ALLOWLIST = (
@@ -114,6 +116,8 @@ class PipelineConfig:
     max_text_events: int = MAX_TEXT_EVENTS
     max_vocabulary: int = 400
     snapshot_root: Path | None = None
+    #: Where the private memory snapshot lives. Never the evidence folder (M1-F4).
+    state_dir: Path | None = None
     llm: LLMClient | None = None
 
 
@@ -143,26 +147,10 @@ class PipelineResult:
 # --------------------------------------------------------------------------- #
 
 
-def memory_snapshot_path(data_dir: Path) -> Path:
-    return data_dir / "memory-facts.json"
-
-
-def load_memory_snapshot(data_dir: Path) -> dict[str, Any] | None:
-    path = memory_snapshot_path(data_dir)
-    if not path.is_file():
-        return None
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    return payload if isinstance(payload, dict) else None
-
-
-def save_memory_snapshot(data_dir: Path, snapshot: dict[str, Any]) -> Path:
-    data_dir.mkdir(parents=True, exist_ok=True)
-    path = memory_snapshot_path(data_dir)
-    path.write_text(json.dumps(snapshot, indent=1, sort_keys=True), encoding="utf-8")
-    return path
+#: The memory snapshot never lives here. Audit M1-F4: raw MEMORY/USER text with 53
+#: emails and 25 absolute paths was written into the evidence folder. Snapshots are
+#: hashes plus gated text, in the plugin state dir, mode 600 - see
+#: adapters/hermes/snapshot.py and adapters/hermes/evidence.py.
 
 
 # --------------------------------------------------------------------------- #
@@ -172,11 +160,6 @@ def save_memory_snapshot(data_dir: Path, snapshot: dict[str, Any]) -> Path:
 
 def _now_iso() -> str:
     return datetime.now(tz=timezone.utc).isoformat(timespec="seconds")
-
-
-def _write_json(path: Path, payload: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=1, sort_keys=True), encoding="utf-8")
 
 
 def render_script_markdown(ir: EpisodeIR) -> str:
@@ -235,11 +218,12 @@ def run_pipeline(
     config.data_dir.mkdir(parents=True, exist_ok=True)
 
     own_source = source is None
-    prior_snapshot = load_memory_snapshot(config.data_dir)
+    snapshot_store = SnapshotStore(config.state_dir)
+    prior_hashes = snapshot_store.hashes_by_file()
     if source is None:
         source = HermesHistorySource(
             profiles=config.profiles,
-            memory_snapshot=prior_snapshot,
+            memory_snapshot=prior_hashes or None,
             snapshot_root=config.snapshot_root,
         )
 
@@ -254,11 +238,13 @@ def run_pipeline(
         result.events_ingested = len(events)
         result.timings["ingest_s"] = round(time.time() - started, 2)
 
-        # Memory facts snapshot for the *next* run's diff (decision 2).
+        # Memory facts snapshot for the *next* run's diff (decision 2). Hashes and
+        # gated text only, in the private state dir, never in evidence (M1-F4).
         try:
-            save_memory_snapshot(config.data_dir, source.current_memory_facts())
+            current_facts = source.current_memory_facts()
         except Exception as exc:  # noqa: BLE001
-            result.problems.append(f"memory snapshot failed: {type(exc).__name__}: {exc}")
+            current_facts = {}
+            result.problems.append(f"memory read failed: {type(exc).__name__}: {exc}")
 
         # ---- text --------------------------------------------------------
         candidates = [event for event in events if event.kind in TEXT_PRIORITY]
@@ -394,40 +380,79 @@ def run_pipeline(
                 if any(hit.pattern == "high_entropy" for hit in name_hits):
                     result.problems.append(f"high-entropy token in {panel.id}")
 
-        # ---- artifacts ---------------------------------------------------
-        _write_json(config.data_dir / "beats.json", {"beats": [beat.as_dict() for beat in beats]})
-        _write_json(config.data_dir / "arcs.json", {"arcs": [arc.as_dict() for arc in arcs]})
-        _write_json(config.data_dir / "canon.json", canon.as_dict())
-        _write_json(config.data_dir / "script-ir.json", ir.as_dict())
-        script_path = config.data_dir / "episode-script.md"
-        script_path.parent.mkdir(parents=True, exist_ok=True)
-        script_path.write_text(markdown, encoding="utf-8")
-        _write_json(
-            config.data_dir / "metrics.json",
-            {
-                "generated_at": _now_iso(),
-                "window": {"since": window.since, "until": window.until, "days": config.days},
-                "events_ingested": result.events_ingested,
-                "events_with_text": result.events_with_text,
-                "gated": result.gated,
-                "quarantined": result.quarantined,
-                "beats": len(beats),
-                "arcs": len(arcs),
-                "panels": len(ir.panels),
-                "writer": ir.writer,
-                "gate": result.gate_report,
-                "cache": result.cache_stats,
-                "timings": result.timings,
-                "problems": result.problems,
-            },
-        )
+        # ---- private memory snapshot (never evidence) --------------------
+        memory_counts: dict[str, Any] = {"files": 0, "facts": 0}
+        memory_hashes: dict[str, list[str]] = {}
+        try:
+            gated_by_file: dict[str, list[str]] = {}
+            for key, facts in current_facts.items():
+                values: list[str] = []
+                for fact in facts:
+                    try:
+                        redacted, _ = gate.redact_text(fact)
+                    except Exception:  # noqa: BLE001 - quarantine, do not store raw
+                        redacted = "[REDACTED:health]"
+                    values.append(redacted)
+                gated_by_file[key] = values
+            snapshot = build_snapshot(current_facts, captured_at=now, gated_text=gated_by_file)
+            snapshot_store.save(snapshot)
+            memory_counts = snapshot.counts()
+            memory_hashes = snapshot.hashes_by_file()
+        except Exception as exc:  # noqa: BLE001
+            result.problems.append(f"memory snapshot failed: {type(exc).__name__}: {exc}")
+
+        # ---- artifacts (every value re-checked by the evidence writer) ----
+        try:
+            write_json(
+                config.data_dir / "beats.json",
+                {"beats": [beat.as_dict() for beat in beats]},
+                gate,
+            )
+            write_json(config.data_dir / "arcs.json", {"arcs": [arc.as_dict() for arc in arcs]}, gate)
+            write_json(config.data_dir / "canon.json", canon.as_dict(), gate)
+            write_json(config.data_dir / "script-ir.json", ir.as_dict(), gate)
+            write_json(
+                config.data_dir / "memory.json",
+                {"counts": memory_counts, "hashes": memory_hashes},
+                gate,
+            )
+            script_path = config.data_dir / "episode-script.md"
+            write_text(script_path, markdown, gate)
+            write_json(
+                config.data_dir / "metrics.json",
+                {
+                    "generated_at": _now_iso(),
+                    "window": {"since": window.since, "until": window.until, "days": config.days},
+                    "events_ingested": result.events_ingested,
+                    "events_with_text": result.events_with_text,
+                    "gated": result.gated,
+                    "quarantined": result.quarantined,
+                    "beats": len(beats),
+                    "arcs": len(arcs),
+                    "panels": len(ir.panels),
+                    "writer": ir.writer,
+                    "gate": result.gate_report,
+                    "cache": result.cache_stats,
+                    "timings": result.timings,
+                    "problems": result.problems,
+                    "memory": memory_counts,
+                },
+                gate,
+            )
+        except EvidenceLeak as exc:
+            result.problems.append(f"evidence refused: {exc}")
+
         result.artifacts = {
-            "canon": str(config.data_dir / "canon.json"),
-            "beats": str(config.data_dir / "beats.json"),
-            "arcs": str(config.data_dir / "arcs.json"),
-            "script_ir": str(config.data_dir / "script-ir.json"),
-            "script_md": str(script_path),
-            "metrics": str(config.data_dir / "metrics.json"),
+            name: name
+            for name in (
+                "canon.json",
+                "beats.json",
+                "arcs.json",
+                "script-ir.json",
+                "episode-script.md",
+                "memory.json",
+                "metrics.json",
+            )
         }
         result.timings["total_s"] = round(time.time() - started, 2)
         return result
@@ -504,6 +529,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=MAX_TEXT_EVENTS,
         help="cap on events whose text is fetched and gated (priority ordered)",
     )
+    parser.add_argument(
+        "--state-dir",
+        default=None,
+        help=(
+            "private state dir for the memory snapshot (mode 600, outside evidence); "
+            "defaults to $REEL_STATE_DIR or ~/.local/state/scrollback-reel"
+        ),
+    )
     parser.add_argument("--json", action="store_true", help="print the metrics JSON")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
@@ -532,6 +565,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         max_deep_events=args.max_deep_events,
         max_text_events=args.max_text_events,
         max_vocabulary=args.max_vocabulary,
+        state_dir=Path(args.state_dir).expanduser() if args.state_dir else None,
         llm=client,
     )
     result = run_pipeline(config)

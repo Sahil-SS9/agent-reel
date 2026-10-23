@@ -257,6 +257,7 @@ class HermesHistorySource:
         profiles: Sequence[str] | None = None,
         include_main: bool = True,
         memory_snapshot: Mapping[str, Any] | None = None,
+        snapshot_root: Path | str | None = None,
     ) -> None:
         self.paths = HermesPaths.resolve(root if root is not None else None)
         self._profile_filter = tuple(profiles) if profiles else None
@@ -265,7 +266,7 @@ class HermesHistorySource:
         self._counters: dict[str, ReadCounts] = {}
         # All database access goes through this: it refuses to create anything
         # inside the Hermes home (see adapters/hermes/stores.py).
-        self._stores = StoreReader()
+        self._stores = StoreReader(snapshot_root=snapshot_root)
         self._stores_closed = False
 
     def close(self) -> None:

@@ -18,6 +18,15 @@ def fresh_home(tmp_path) -> Path:
     return build(tmp_path / "home", seed=11, days=3)
 
 
+@pytest.fixture(autouse=True)
+def _isolated_snapshot_root(tmp_path, monkeypatch):
+    """F2: no test may write a private copy into the default root."""
+    root = tmp_path / "snapshot-root"
+    root.mkdir()
+    monkeypatch.setenv("REEL_SNAPSHOT_DIR", str(root))
+    return root
+
+
 @pytest.fixture()
 def hermes_env(monkeypatch, synthetic_home) -> Path:
     """Point the CLI at the synthetic home so tests never read real history."""

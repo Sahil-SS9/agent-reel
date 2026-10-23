@@ -28,6 +28,7 @@ import os
 import shutil
 import sqlite3
 import tempfile
+import weakref
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -90,21 +91,26 @@ def _default_snapshot_root() -> Path:
     return root
 
 
+def _remove_tree(path: Path) -> None:
+    shutil.rmtree(path, ignore_errors=True)
+
+
 class StoreReader:
     """Opens Hermes databases read-only, never creating anything in the home."""
 
     def __init__(
         self,
-        snapshot_root: Path | None = None,
+        snapshot_root: Path | str | None = None,
         *,
         copy_limit: int = DEFAULT_COPY_LIMIT,
     ) -> None:
-        self._snapshot_root = snapshot_root
+        self._snapshot_root = Path(snapshot_root) if snapshot_root is not None else None
         self._copy_limit = copy_limit
         self._session_dir: Path | None = None
         self._decisions: dict[str, StoreDecision] = {}
         self._copies: dict[str, Path] = {}
         self._open_connections: list[sqlite3.Connection] = []
+        self._finalizer: weakref.finalize | None = None
 
     # -- decisions ---------------------------------------------------------
     def decisions(self) -> list[StoreDecision]:
@@ -172,6 +178,11 @@ class StoreReader:
             root = Path(root)
             root.mkdir(parents=True, exist_ok=True)
             self._session_dir = Path(tempfile.mkdtemp(prefix="reel-store-", dir=str(root)))
+            # weakref.finalize fires on garbage collection *and* at interpreter
+            # exit, so a run that raises (or never reaches close()) still cleans
+            # up. Do not hold a bound method in atexit here: that strong reference
+            # would keep self alive and stop the finaliser from ever running.
+            self._finalizer = weakref.finalize(self, _remove_tree, self._session_dir)
         # Keep the relative shape so two stores with the same file name do not collide.
         safe = str(target).replace(os.sep, "__").lstrip("_")
         destination = self._session_dir / safe
@@ -184,13 +195,20 @@ class StoreReader:
         )
 
     # -- lifecycle ---------------------------------------------------------
-    def close(self) -> None:
+    def _cleanup(self) -> None:
+        """Remove the snapshot tree. Idempotent; safe to call more than once."""
         for conn in self._open_connections:
             ro.safe_close(conn)
         self._open_connections.clear()
-        if self._session_dir is not None:
-            shutil.rmtree(self._session_dir, ignore_errors=True)
-            self._session_dir = None
+        session_dir, self._session_dir = self._session_dir, None
+        if session_dir is not None:
+            shutil.rmtree(session_dir, ignore_errors=True)
+        if self._finalizer is not None:
+            self._finalizer.detach()
+            self._finalizer = None
+
+    def close(self) -> None:
+        self._cleanup()
 
     def __enter__(self) -> "StoreReader":
         return self

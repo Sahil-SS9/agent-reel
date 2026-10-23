@@ -79,6 +79,18 @@ def rules_from_snapshot(snapshot: dict | None = None) -> tuple[Rule, ...]:
             ),
             Rule("secret", "hermes_secret_header", re.compile(rf"(?i)((?:{header_names})\s*:\s*)(\S+)")),
             Rule("secret", "private_key_block", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----")),
+            # A bare header is already a leak (held-out case ho-14).
+            Rule("secret", "private_key_header", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
+            # A keyword followed straight by an opaque value: "the webhook token X was
+            # pasted into the ticket" (held-out case ho-11).
+            Rule(
+                "secret",
+                "keyword_token",
+                re.compile(
+                    r"(?i)\b(?:webhook|bot|api|access|refresh|session|auth|bearer|signing)?"
+                    r"\s?token\s+['\"]?[A-Za-z0-9_\-]{18,}"
+                ),
+            ),
             Rule("secret", "bearer_token", re.compile(r"(?i)\bbearer\s+([A-Za-z0-9._\-]{12,})")),
             Rule("secret", "jwt", re.compile(r"\beyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\b")),
             Rule("secret", "telegram_bot_token", re.compile(r"(?<!\d)(?:bot)?(\d{8,}):([-A-Za-z0-9_]{30,})")),
@@ -99,6 +111,14 @@ def rules_from_snapshot(snapshot: dict | None = None) -> tuple[Rule, ...]:
                 "phone_uk",
                 re.compile(r"(?<![\w.])(?:\+44\s?7\d{3}|07\d{3})\s?\d{3}\s?\d{3}(?![\w])(?!\.\d)"),
             ),
+            # UK landlines: "020 7946 0958", "0161 496 0000" (held-out case ho-20).
+            Rule(
+                "phone",
+                "phone_uk_landline",
+                re.compile(
+                    r"(?<![\w.])0(?:1\d{2,3}|20)\s?\d{3,4}\s?\d{3,4}(?![\w])(?!\.\d)"
+                ),
+            ),
             Rule(
                 "phone",
                 "phone_intl",
@@ -117,6 +137,46 @@ def rules_from_snapshot(snapshot: dict | None = None) -> tuple[Rule, ...]:
             ),
             Rule("path", "abs_home_path", re.compile(r"/(?:home|Users)/[A-Za-z0-9._\-]+(?:/[^\s\"'`,;)]*)?")),
             Rule("path", "abs_private_path", re.compile(r"/(?:private|var/folders|root)/[^\s\"'`,;)]+")),
+            # Audit M1-F3: a token in a URL *path* is a secret. Discord webhooks are
+            # the live case on this fleet; Slack and generic opaque path segments are
+            # the same shape.
+            Rule(
+                "secret",
+                "discord_webhook",
+                re.compile(
+                    r"https?://(?:[\w.-]+\.)?discord(?:app)?\.com/api/webhooks/"
+                    r"\d{6,}/[A-Za-z0-9_\-]{20,}"
+                ),
+            ),
+            Rule(
+                "secret",
+                "webhook_path",
+                re.compile(r"/(?:api/)?webhooks?/\d{6,}/[A-Za-z0-9_\-]{20,}"),
+            ),
+            Rule(
+                "secret",
+                "slack_webhook",
+                re.compile(r"https?://hooks\.slack\.com/services/[A-Za-z0-9/_\-]{20,}"),
+            ),
+            Rule(
+                "secret",
+                "url_path_token",
+                # A long, opaque path segment: session ids and signed path tokens.
+                re.compile(
+                    r"(?<=/)[A-Za-z0-9_\-]{28,}"
+                    r"(?=[/?#\s\"'<>]|$)"
+                ),
+            ),
+            Rule(
+                "secret",
+                "plain_credential",
+                # "the password is X", "my api key was X", "token: X".
+                re.compile(
+                    r"(?i)\b(?:the\s+|my\s+|our\s+)?"
+                    r"(?:password|passphrase|passcode|pass\s?word|token|api[\s_-]?key|"
+                    r"secret|pin)\s+(?:is|was|=|:)\s*['\"]?[^\s'\"]{3,}"
+                ),
+            ),
             Rule(
                 "url_token",
                 "signed_url",

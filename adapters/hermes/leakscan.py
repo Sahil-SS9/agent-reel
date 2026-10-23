@@ -39,6 +39,13 @@ PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         ),
     ),
     ("home_path", re.compile(r"/(?:home|Users)/[A-Za-z0-9._\-]+")),
+    (
+        "webhook_url",
+        re.compile(
+            r"(?:discord(?:app)?\.com/api/webhooks/|hooks\.slack\.com/services/|"
+            r"/webhooks?/)\d*[A-Za-z0-9/_\-]{16,}"
+        ),
+    ),
     ("bearer", re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._\-]{12,}")),
 )
 

@@ -253,9 +253,16 @@ def test_every_line_traces_to_a_real_event():
 def test_ir_validation_catches_phantom_event_ids():
     import dataclasses
 
+    from canon.episode import Line
+
     _, ir = _ir()
-    ir2 = dataclasses.replace(ir, panels=ir.panels[:1])
-    problems = validate_ir(ir2, known_event_ids={"ev_not_a_real_id"})
+    panel = ir.panels[0]
+    bad_panel = dataclasses.replace(
+        panel,
+        lines=(Line("Sahil", "a line", ("ev_not_a_real_id",)),),
+    )
+    ir2 = dataclasses.replace(ir, panels=(bad_panel,))
+    problems = validate_ir(ir2, known_event_ids={"ev_something_real"})
     assert problems
     assert any("unknown source event id" in problem for problem in problems)
 

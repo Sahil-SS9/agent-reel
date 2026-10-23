@@ -46,7 +46,7 @@ from canon.episode import (
 )
 from canon.events import Event
 from canon.gate import GatedEvent
-from canon.grounding import GroundingGate
+from canon.grounding import ClaimGate
 from canon.llm import CachedLLM, LLMClient, NullLLM
 from canon.redact import DeterministicRedactor, ModelEntityGate, RedactionGate
 from canon.source import Window
@@ -428,12 +428,33 @@ def run_pipeline(
         else:
             writer = TemplateDialogueWriter(cast, hero=config.hero)
 
-        # Audit M1-F1: every factual claim must be supported by the gated content of
-        # the events the line cites. Terms always, entailment when a model is present.
-        grounder = GroundingGate(
-            cached if config.use_model else None,
-            allow=tuple(cast) + tuple(config.allowlist) + (config.hero,),
+        # Audit M1-F6: profiles are characters, not database ids.
+        cast_map = build_cast_map(
+            [beat.profile for beat in beats if beat.profile],
+            hero=config.hero,
         )
+        cast_map["default"] = cast_map.get("default", "Kensei")
+        # A character name is released in the evidence, so it must survive the gate:
+        # a profile whose name matches a learned sensitive term gets a neutral alias.
+        safe_cast: dict[str, str] = {}
+        for index, (profile, character) in enumerate(sorted(cast_map.items()), start=1):
+            redacted, findings = gate.redact_text(character)
+            safe_cast[profile] = character if not findings else f"Agent {index}"
+        cast_map = safe_cast
+
+        # Audit M1-F1 + round 3: claims in both layers must be supported by the gated
+        # content of the events the line cites.
+        grounder = ClaimGate(
+            cached if config.use_model else None,
+            allow=tuple(cast_map.values()) + tuple(config.allowlist) + (config.hero,),
+        )
+        # Who did what: only an actor of a cited event may speak its panel (R2-F2).
+        actors_by_event: dict[str, str] = {}
+        for event in gated:
+            # Prefer the profile: on message events the actor is a tool name, and a tool
+            # cannot speak. Fall back to the actor only when it is a known character.
+            who = cast_map.get(event.profile) or cast_map.get(event.actor) or ""
+            actors_by_event[event.id] = who
         # Audit M1-F6: profiles are characters, not database ids.
         cast_map = build_cast_map(
             [beat.profile for beat in beats if beat.profile],
@@ -469,6 +490,7 @@ def run_pipeline(
             hero=config.hero,
             grounder=grounder,
             evidence=evidence_by_event(gated),
+            actors_by_event=actors_by_event,
             cast_map=cast_map,
             title=title,
         )

@@ -13,7 +13,7 @@ template rather than failing an episode.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Iterable, Mapping, Protocol, Sequence
 
 from canon.arcs import ARC_ROLES, Arc
@@ -21,7 +21,7 @@ from canon.beats import Beat
 from canon.casting import build_cast_map, speaker_for
 from canon.canon import Canon
 from canon.events import make_event_id
-from canon.grounding import GroundingGate, GroundingReport
+from canon.grounding import ClaimGate, ClaimReport, GroundingReport
 from canon.llm import CachedLLM, LLMError
 
 SHOTS = ("wide", "medium", "close", "insert")
@@ -63,8 +63,11 @@ class Panel:
     pose: str
     expression: str
     setting: str
+    #: The fact caption: a plain, grounded sentence (narrator box).
     caption: str
     lines: tuple[Line, ...]
+    #: The date/role label, kept separate so the caption can carry the facts.
+    label: str = ""
 
     def __post_init__(self) -> None:
         if self.shot not in SHOTS:
@@ -80,6 +83,7 @@ class Panel:
             "expression": self.expression,
             "setting": self.setting,
             "caption": self.caption,
+            "label": self.label,
             "lines": [line.as_dict() for line in self.lines],
         }
 
@@ -96,6 +100,7 @@ class EpisodeIR:
     panels: tuple[Panel, ...]
     writer: str
     grounding: Mapping[str, Any] = field(default_factory=dict)
+    cliffhanger: bool = False
 
     def as_dict(self) -> dict[str, Any]:
         scene = {
@@ -114,6 +119,7 @@ class EpisodeIR:
             "logline": self.logline,
             "writer": self.writer,
             "grounding": dict(self.grounding),
+            "cliffhanger": self.cliffhanger,
             "panels": [panel.as_dict() for panel in self.panels],
             "scenes": [scene],
         }
@@ -136,38 +142,57 @@ class DialogueWriter(Protocol):
 
 
 class TemplateDialogueWriter:
-    """Deterministic dialogue: the beat summary, split into two beats of speech."""
+    """Deterministic two layers: a fact caption plus claim-free reactions.
+
+    The caption states what the evidence says. The dialogue adds tone only - it makes
+    no claim, so it cannot be wrong, and it reads better than a truncated task title.
+    """
 
     name = "template"
 
+    #: Reactions carry no claim (round 3: pure register passes grounding).
+    REACTIONS = (
+        "Okay.", "Right.", "That's the one.", "Ugh.", "Of course.", "Here we go.",
+        "Not again.", "Fine.", "Naturally.", "Typical.",
+    )
+
     def __init__(self, cast: Sequence[str], *, hero: str = "Sahil") -> None:
-        self.cast = tuple(cast)
+        self.cast = tuple(cast) or (hero,)
         self.hero = hero
 
     def _speaker_for(self, index: int) -> str:
         pool = [self.hero] + [name for name in self.cast if name != self.hero]
         return pool[index % len(pool)]
 
-    def write(self, panels: Sequence[Mapping[str, Any]]) -> dict[str, list[list[str]]]:
-        out: dict[str, list[list[str]]] = {}
+    def caption_for(self, panel: Mapping[str, Any]) -> str:
+        summary = str(panel.get("summary", "")).strip()
+        if not summary:
+            evidence = str(panel.get("evidence", "")).strip()
+            return " ".join(evidence.split()[:12])
+        if ": " in summary:
+            summary = summary.split(": ", 1)[1]
+        words = summary.split()
+        if len(words) > 14:
+            summary = " ".join(words[:14]).rstrip(" ,;:") + "."
+        return summary
+
+    def write(self, panels: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
+        out: dict[str, dict[str, Any]] = {}
         for index, panel in enumerate(panels):
-            summary = str(panel.get("summary", "")).strip()
-            speaker = self._speaker_for(index)
-            other = self._speaker_for(index + 1)
-            if not summary:
-                out[panel["role"]] = []
-                continue
-            head, _, tail = summary.partition(":")
-            text_main = (tail or head).strip()
-            if len(text_main) > 120:
-                cut = text_main.rfind(" ", 0, 120)
-                text_main, text_rest = text_main[: cut if cut > 40 else 120], text_main[cut:]
+            actors = list(panel.get("actors") or [])
+            if actors:
+                speaker = actors[index % len(actors)]
+                reaction = self.REACTIONS[index % len(self.REACTIONS)]
+                lines = [[speaker, reaction]]
             else:
-                text_rest = ""
-            lines = [[speaker, text_main.rstrip(" .,") + "."]]
-            if text_rest.strip():
-                lines.append([other, text_rest.strip()[:120]])
-            out[panel["role"]] = lines
+                # Nobody is an actor of this panel's events. The owner may still react:
+                # a claim-free reaction cannot misattribute a fact (R2-F2).
+                reaction = self.REACTIONS[index % len(self.REACTIONS)]
+                lines = [[self.hero, reaction]]
+            out[panel["role"]] = {
+                "caption": self.caption_for(panel),
+                "lines": lines,
+            }
         return out
 
 
@@ -178,13 +203,16 @@ class LLMDialogueWriter:
 
     PROMPT = (
         "You write one panel of a weekly comic that replays an AI agent's real work. "
-        "Hard rules: at most 2 speech lines per panel; each line at most 100 characters; "
-        "speakers must come from the cast list; no text inside the image, dialogue only. "
-        "GROUNDING: you may only use facts that appear in the beat and evidence text. Do "
-        "not invent a cause, a component, a fix, a number, a name or an outcome, even if "
-        "it would make the line funnier. If the evidence is thin, write a short reactive "
-        "line instead of a factual one. "
-        'Answer with JSON only: {"lines": [{"speaker": "...", "text": "..."}]}.'
+        "Return two layers. "
+        'JSON only: {"caption": "...", "lines": [{"speaker": "...", "text": "..."}]}. '
+        "caption: ONE plain factual sentence, narrator voice, using only what the "
+        "evidence says. No cause, no outcome, no number, no name that the evidence does "
+        "not contain. "
+        "lines: at most 2; each under 100 characters; speakers must be from the cast "
+        "list AND must be the actor of a cited event. Dialogue MAY dramatise tone, "
+        "emotion, sarcasm and metaphor - it may NOT add a fact: no new names, numbers, "
+        "causes, outcomes or tools. A pure reaction is ideal when the evidence is thin. "
+        "No text inside the image."
     )
 
     def __init__(
@@ -207,7 +235,7 @@ class LLMDialogueWriter:
         for panel in panels:
             payload = {
                 "role": panel["role"],
-                "cast": list(self.cast),
+                "cast": list(panel.get("actors") or self.cast),
                 "beat": panel.get("summary", ""),
                 "evidence": panel.get("evidence", ""),
                 "previous": context[-1] if context else "",
@@ -218,26 +246,29 @@ class LLMDialogueWriter:
                 response = self.llm.complete_json(
                     prompt=self.PROMPT,
                     payload=payload,
-                    schema_hint={"lines": [{"speaker": "string", "text": "string"}]},
+                    schema_hint={
+                        "caption": "string",
+                        "lines": [{"speaker": "string", "text": "string"}],
+                    },
                     stage="episode.dialogue",
                 )
-                lines = self._validate(response)
+                caption, lines = self._validate(response)
             except (LLMError, ValueError):
                 self.failures += 1
-                lines = []
+                caption, lines = "", []
             if not lines and self.fallback is not None:
-                lines = [
-                    list(pair)
-                    for pair in self.fallback.write([panel]).get(panel["role"], [])
-                ]
-            out[panel["role"]] = lines
-            context.append(str(lines[0][1]) if lines else str(panel.get("summary", "")))
+                fallback = self.fallback.write([panel]).get(panel["role"], {})
+                caption = caption or str(fallback.get("caption", ""))
+                lines = [list(pair) for pair in fallback.get("lines", [])]
+            out[panel["role"]] = {"caption": caption, "lines": lines}
+            context.append(lines[0][1] if lines else str(panel.get("summary", "")))
         return out
 
-    def _validate(self, response: Mapping[str, Any]) -> list[list[str]]:
+    def _validate(self, response: Mapping[str, Any]) -> tuple[str, list[list[str]]]:
         rows = response.get("lines")
         if not isinstance(rows, list):
             raise ValueError("model returned no lines array")
+        caption = " ".join(str(response.get("caption", "")).split())
         lines: list[list[str]] = []
         for row in rows[:2]:
             if not isinstance(row, Mapping):
@@ -251,9 +282,9 @@ class LLMDialogueWriter:
             if len(text) > self.max_chars:
                 text = text[: self.max_chars].rstrip() + "..."
             lines.append([speaker, text])
-        if not lines:
-            raise ValueError("model returned no usable lines")
-        return lines
+        if not lines and not caption:
+            raise ValueError("model returned neither a caption nor a usable line")
+        return caption, lines
 
 
 def _cast_for(
@@ -272,7 +303,7 @@ def _cast_for(
     return tuple(names)
 
 
-def _caption(role: str, beat: Beat | None) -> str:
+def _label(role: str, beat: Beat | None) -> str:
     label = ROLE_STAGING.get(role, ("", "", "", "", role.upper()))[4]
     if beat is None:
         return label
@@ -298,8 +329,9 @@ def plan_episode(
     number: int = 1,
     writer: DialogueWriter | None = None,
     hero: str = "Sahil",
-    grounder: GroundingGate | None = None,
+    grounder: ClaimGate | None = None,
     evidence: Mapping[str, str] | None = None,
+    actors_by_event: Mapping[str, str] | None = None,
     cast_map: Mapping[str, str] | None = None,
     title: str | None = None,
 ) -> EpisodeIR:
@@ -323,6 +355,21 @@ def plan_episode(
         chunks = [str(evidence_map.get(event_id, "")) for event_id in beat.event_ids]
         return "\n".join(chunk for chunk in chunks if chunk)
 
+    actors_map = actors_by_event or {}
+
+    def allowed_speakers(beat: Beat | None, cast_names: Sequence[str]) -> set[str]:
+        """Who may speak this panel: the actors of its cited events (audit R2-F2).
+
+        Enforcement needs attribution data. When the caller supplies none (unit tests,
+        or a source without actor fields) the cast is the bound.
+        """
+        if beat is None:
+            return set()
+        if not actors_map:
+            return set(cast_names)
+        actors = {actors_map.get(event_id, "") for event_id in beat.event_ids} - {""}
+        return {actor for actor in actors if actor in cast_names}
+
     panel_specs: list[dict[str, Any]] = []
     for role in roles:
         beat = by_id.get(arc.roles[role])
@@ -337,6 +384,8 @@ def plan_episode(
                 "setting": setting,
                 "summary": beat.summary if beat else "",
                 "evidence": _evidence_for(beat),
+                "cast": _cast_for(beat, canon, hero, cast_map),
+                "actors": [],
                 "format": format,
             }
         )
@@ -360,81 +409,112 @@ def plan_episode(
                 },
             )
 
-    cast = sorted(
-        {name for spec in panel_specs for name in _cast_for(spec["beat"], canon, hero, cast_map)}
-    )
+    for spec in panel_specs:
+        # Chapter-mode detail panels are built inline, so default their cast here.
+        spec.setdefault("cast", _cast_for(spec["beat"], canon, hero, cast_map))
+        spec["actors"] = sorted(allowed_speakers(spec["beat"], spec["cast"]))
+    cast = sorted({name for spec in panel_specs for name in spec["cast"]})
     active_writer = writer or TemplateDialogueWriter(cast, hero=hero)
     dialogue = active_writer.write(panel_specs)
 
     report = GroundingReport()
     seen_text: set[str] = set()
     panels: list[Panel] = []
+    actors_map = actors_by_event or {}
+
     for index, spec in enumerate(panel_specs, start=1):
         beat: Beat | None = spec["beat"]
         role = spec["role"]
         event_ids = tuple(beat.event_ids) if beat else tuple()
         if not event_ids:
             continue
-        cast_names = _cast_for(beat, canon, hero, cast_map)
-        speakers = dialogue.get(role, [])
+        cast_names = tuple(spec.get("cast") or ())
         evidence_text = str(spec.get("evidence", ""))
+        speakers_allowed = set(spec.get("actors") or ())
+        written = dialogue.get(role, {})
+
+        # ---- layer 1: the fact caption -----------------------------------
+        caption = str(written.get("caption", "")).strip() if isinstance(written, dict) else ""
+        if not caption:
+            caption = TemplateDialogueWriter(cast_names, hero=hero).caption_for(spec)
+        if grounder is not None and caption:
+            report.captions += 1
+            verdict = grounder.check(caption, evidence_text, layer="caption")
+            if verdict.supported:
+                report.captions_supported += 1
+            else:
+                repaired = grounder.literal_caption(evidence_text)
+                report.reasons.append(f"{role} caption: {verdict.reason}")
+                if repaired:
+                    caption = repaired
+                    report.captions_repaired += 1
+                    report.captions_supported += 1
+                else:
+                    caption = ""
+        caption_key = caption.lower().strip()
+        if caption_key and caption_key in seen_text:
+            caption = ""
+
+        # ---- layer 2: dialogue -------------------------------------------
         lines: list[Line] = []
         duplicates: list[Line] = []
+        for speaker, text in (written.get("lines") if isinstance(written, dict) else []) or []:
+            def claim_free(text: str) -> bool:
+                from canon.grounding import extract_claims
 
-        def add(speaker: str, text: str) -> bool:
-            """Keep a line unless it repeats one already used, unless that silences."""
-            key = text.lower().strip()
-            if not key:
-                report.dropped += 1
-                return False
-            line = Line(speaker=speaker, text=text, source_event_ids=event_ids)
-            if key in seen_text:
-                # Audit M1-F6: no duplicate lines across panels - but a silent panel
-                # is worse than one echo, so remember it as a fallback.
-                duplicates.append(line)
-                report.dropped += 1
-                return False
-            seen_text.add(key)
-            lines.append(line)
-            return True
+                return not extract_claims(text)
 
-        for speaker, text in speakers:
-            if speaker not in cast_names:
+            if speaker not in speakers_allowed and not (speaker == hero and claim_free(text)):
+                # Audit R2-F2: never put words in someone's mouth. The line becomes
+                # narrator text if it survives grounding as a caption.
+                if grounder is not None:
+                    report.lines += 1
+                    verdict = grounder.check(text, evidence_text, layer="caption")
+                    if verdict.supported and not caption:
+                        caption = text
+                        caption_key = caption.lower().strip()
+                        report.lines_converted += 1
+                        continue
+                report.lines_dropped += 1
+                report.reasons.append(f"{role}: speaker {speaker!r} is not an actor")
                 continue
             candidate = text
             if grounder is not None:
                 report.lines += 1
-                verdict = grounder.check(candidate, evidence_text)
+                verdict = grounder.check(candidate, evidence_text, layer="dialogue")
                 if verdict.supported:
-                    report.supported += 1
+                    report.lines_supported += 1
                 else:
-                    # Rewrite literally from the evidence, or drop the line.
-                    replacement = grounder.literal_line(evidence_text)
-                    report.reasons.append(f"{role}: {verdict.reason}")
-                    if replacement:
-                        candidate = replacement
-                        report.rewritten += 1
-                        report.supported += 1
-                    else:
-                        report.dropped += 1
-                        continue
-            add(speaker, candidate)
-        if not lines:
-            # A panel with no line is still a panel (silent beat), but every panel
-            # that has text must trace to events, so the template fills the gap.
-            fallback = TemplateDialogueWriter(cast_names, hero=hero).write([spec]).get(role, [])
-            for speaker, text in fallback:
-                if grounder is not None:
-                    report.lines += 1
-                    verdict = grounder.check(text, evidence_text)
-                    if not verdict.supported:
-                        report.dropped += 1
-                        report.reasons.append(f"{role} (fallback): {verdict.reason}")
-                        continue
-                    report.supported += 1
-                add(speaker, text)
+                    report.lines_dropped += 1
+                    report.reasons.append(f"{role} line: {verdict.reason}")
+                    continue
+            key = candidate.lower().strip()
+            if not key:
+                report.lines_dropped += 1
+                continue
+            line = Line(speaker=speaker, text=candidate, source_event_ids=event_ids)
+            if key in seen_text:
+                duplicates.append(line)
+                report.lines_dropped += 1
+                continue
+            seen_text.add(key)
+            lines.append(line)
         if not lines and duplicates:
             lines.append(duplicates[0])
+        if not caption and not lines:
+            # Nothing survived and there is nothing to quote: state the event itself,
+            # which is grounded by construction, or leave the panel out.
+            tags = " ".join(beat.tags) if beat is not None and beat.tags else ""
+            structural = " ".join(
+                part for part in (beat.type.replace("-", " ") if beat else "", tags) if part
+            ).strip()
+            if not structural:
+                continue
+            caption = structural
+            caption_key = caption.lower().strip()
+        if caption_key:
+            seen_text.add(caption_key)
+
         panels.append(
             Panel(
                 id=f"{arc.id[-12:]}-p{index}",
@@ -444,12 +524,22 @@ def plan_episode(
                 pose=spec["pose"],
                 expression=spec["expression"],
                 setting=spec["setting"],
-                caption=_caption(role, beat),
+                caption=caption,
+                label=_label(role, beat),
                 lines=tuple(lines),
             )
         )
 
-    # A model title only survives if it is grounded; otherwise the derived one stands.
+    # ---- the arc ends properly (round 3, item 4) --------------------------
+    cliffhanger = arc.status != "resolved"
+    if cliffhanger and panels:
+        last = panels[-1]
+        panels[-1] = replace(
+            last,
+            caption=(last.caption + " " if last.caption else "") + "To be continued\u2026",
+            label=last.label or "CLIFFHANGER",
+        )
+
     logline = f"{title or arc.title}: {arc.stakes}"
     return EpisodeIR(
         episode_id=make_event_id("episode", format, arc.opened, {"arc": arc.id, "n": number}),
@@ -462,6 +552,7 @@ def plan_episode(
         panels=tuple(panels),
         writer=getattr(active_writer, "name", "unknown"),
         grounding=report.as_dict(),
+        cliffhanger=cliffhanger,
     )
 
 
@@ -472,8 +563,9 @@ def validate_ir(ir: EpisodeIR, *, known_event_ids: Iterable[str]) -> list[str]:
     if not ir.panels:
         problems.append("episode has no panels")
     for panel in ir.panels:
-        if not panel.lines:
-            problems.append(f"panel {panel.id} has no lines")
+        # A panel is carried by its fact caption, its dialogue, or both (round 3).
+        if not panel.lines and not panel.caption:
+            problems.append(f"panel {panel.id} has neither a caption nor a line")
         for line in panel.lines:
             if not line.source_event_ids:
                 problems.append(f"line by {line.speaker} in {panel.id} has no source_event_ids")

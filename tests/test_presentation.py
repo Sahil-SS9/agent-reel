@@ -96,7 +96,7 @@ def test_captions_are_in_europe_london():
     _events, beats, arc, canon, evidence, cast_map = _episode()
     ir = plan_episode(arc, beats, canon, evidence=evidence, cast_map=cast_map)
     # 2026-10-23 is BST (UTC+1): 11:20 UTC is 12:20 in London.
-    first = ir.panels[0].caption
+    first = ir.panels[0].label
     assert first
     utc_hour = datetime.fromtimestamp(beats[0].ts, tz=timezone.utc).hour
     london_hour = int(first.split()[3].split(":")[0])

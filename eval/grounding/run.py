@@ -22,7 +22,7 @@ REPO = Path(__file__).resolve().parents[2]
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
-from canon.grounding import GroundingGate  # noqa: E402
+from canon.grounding import ClaimGate  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_OUT = HERE / "results.json"
@@ -193,16 +193,16 @@ CASES: list[tuple[str, str, str]] = [
 ]
 
 
-def run(gate: GroundingGate) -> dict[str, Any]:
+def run(gate: ClaimGate) -> dict[str, Any]:
     released_unsupported: list[dict[str, str]] = []
     rejected_supported: list[dict[str, str]] = []
     for index, (evidence, grounded, invented) in enumerate(CASES, start=1):
-        good = gate.check(grounded, evidence)
+        good = gate.check(grounded, evidence, layer="caption")
         if not good.supported:
             rejected_supported.append(
                 {"case": index, "line": grounded, "reason": good.reason}
             )
-        bad = gate.check(invented, evidence)
+        bad = gate.check(invented, evidence, layer="caption")
         if bad.supported:
             released_unsupported.append({"case": index, "line": invented})
     total = len(CASES)
@@ -240,7 +240,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         cached = CachedLLM(client, ModelCache(HERE / ".cache"), stage="grounding-eval")
 
-    report = run(GroundingGate(cached))
+    report = run(ClaimGate(cached))
     print(f"grounding eval: {report['cases']} cases (model pass = {args.llm == 'local'})")
     print(f"  grounded lines accepted : {report['grounded_lines_passed']}/{report['cases']}")
     print(f"  invented lines refused   : {report['invented_lines_refused']}/{report['cases']}")

@@ -120,6 +120,7 @@ class PipelineConfig:
     max_text_chars: int = MAX_TEXT_CHARS
     max_text_events: int = MAX_TEXT_EVENTS
     max_vocabulary: int = 400
+    episodes: int = 1
     snapshot_root: Path | None = None
     #: Where the private memory snapshot lives. Never the evidence folder (M1-F4).
     state_dir: Path | None = None
@@ -145,6 +146,7 @@ class PipelineResult:
     title: str = ""
     title_source: str = ""
     cast: list[dict[str, Any]] = field(default_factory=list)
+    episodes: list[dict[str, Any]] = field(default_factory=list)
     timings: dict[str, float] = field(default_factory=dict)
     artifacts: dict[str, str] = field(default_factory=dict)
 
@@ -428,17 +430,15 @@ def run_pipeline(
         else:
             writer = TemplateDialogueWriter(cast, hero=config.hero)
 
+        # Round 3 item 3: a script never shows a redaction marker. Every masked value
+        # gets a stable fictional alias from the private alias book.
+        alias_book = AliasBook.load(snapshot_store.root / "aliases.json")
         # Audit M1-F6: profiles are characters, not database ids.
         cast_map = build_cast_map(
             [beat.profile for beat in beats if beat.profile],
             hero=config.hero,
         )
-        # Round 3 item 3: a script never shows a redaction marker. Every masked value
-        # gets a stable fictional alias from the private alias book. It is loaded before
-        # the title so the title can be alias-safe too.
-        alias_book = AliasBook.load(snapshot_store.root / "aliases.json")
         cast_map["default"] = cast_map.get("default", "Kensei")
-        _title_alias = alias_book.resolve
         # A character name is released in the evidence, so it must survive the gate:
         # a profile whose name matches a learned sensitive term gets a neutral alias.
         safe_cast: dict[str, str] = {}
@@ -446,6 +446,7 @@ def run_pipeline(
             redacted, findings = gate.redact_text(character)
             safe_cast[profile] = character if not findings else f"Agent {index}"
         cast_map = safe_cast
+        result.cast = summarise_cast(cast_map)
 
         # Audit M1-F1 + round 3: claims in both layers must be supported by the gated
         # content of the events the line cites.
@@ -460,59 +461,71 @@ def run_pipeline(
             # cannot speak. Fall back to the actor only when it is a known character.
             who = cast_map.get(event.profile) or cast_map.get(event.actor) or ""
             actors_by_event[event.id] = who
-        # Audit M1-F6: profiles are characters, not database ids.
-        cast_map = build_cast_map(
-            [beat.profile for beat in beats if beat.profile],
-            hero=config.hero,
-        )
-        cast_map["default"] = cast_map.get("default", "Kensei")
-        # A character name is released in the evidence, so it must survive the gate:
-        # a profile whose name matches a learned sensitive term gets a neutral alias.
-        safe_cast: dict[str, str] = {}
-        for index, (profile, character) in enumerate(sorted(cast_map.items()), start=1):
-            redacted, findings = gate.redact_text(character)
-            safe_cast[profile] = character if not findings else f"Agent {index}"
-        cast_map = safe_cast
-        # One cached title call, after grounding, and only kept when it is grounded.
-        thread_beats = [beat for beat in beats if beat.id in set(arcs[0].beat_ids)]
-        title_evidence = "\n".join(
-            evidence_by_event(gated).get(event_id, "")
-            for beat in (thread_beats or beats)
-            for event_id in beat.event_ids
-        )
-        title, title_source = write_title(
-            cached if config.use_model else None,
-            beats=thread_beats or beats,
-            derived=arcs[0].title,
-            hero=config.hero,
-            gate=grounder,
-            evidence=title_evidence,
-            alias=_title_alias,
-        )
-        result.title = title
-        result.title_source = title_source
 
-        ir = plan_episode(
-            arcs[0],
-            beats,
-            canon,
-            format=config.format,
-            season=config.season,
-            number=config.number,
-            writer=writer,
-            hero=config.hero,
-            grounder=grounder,
-            evidence=evidence_by_event(gated),
-            actors_by_event=actors_by_event,
-            cast_map=cast_map,
-            title=title,
-        )
-        ir = apply_to_ir(ir, alias_book)
+        evidence_map = evidence_by_event(gated)
+        episodes: list[dict[str, Any]] = []
+        ir: EpisodeIR | None = None
+        for index, arc in enumerate(arcs[: max(1, config.episodes)], start=1):
+            thread_beats = [beat for beat in beats if beat.id in set(arc.beat_ids)]
+            title_evidence = "\n".join(
+                evidence_map.get(event_id, "")
+                for beat in (thread_beats or beats)
+                for event_id in beat.event_ids
+            )
+            title, title_source = write_title(
+                cached if config.use_model else None,
+                beats=thread_beats or beats,
+                derived=arc.title,
+                hero=config.hero,
+                gate=grounder,
+                evidence=title_evidence,
+                alias=alias_book.resolve,
+            )
+            episode_ir = plan_episode(
+                arc,
+                beats,
+                canon,
+                format=config.format,
+                season=config.season,
+                number=config.number + index - 1,
+                writer=writer,
+                hero=config.hero,
+                grounder=grounder,
+                evidence=evidence_map,
+                actors_by_event=actors_by_event,
+                cast_map=cast_map,
+                title=title,
+            )
+            episode_ir = apply_to_ir(episode_ir, alias_book)
+            stray = masks_in(markdown_of(episode_ir))
+            if stray:
+                result.problems.append(
+                    f"episode {index} still shows {len(stray)} redaction marker(s)"
+                )
+            episodes.append(
+                {
+                    "number": index,
+                    "thread_kind": arc.thread_kind,
+                    "thread_label": arc.thread_label,
+                    "title": title,
+                    "title_source": title_source,
+                    "panels": len(episode_ir.panels),
+                    "cliffhanger": episode_ir.cliffhanger,
+                    "grounding": dict(episode_ir.grounding),
+                    "ir": episode_ir,
+                }
+            )
+            if index == 1:
+                ir = episode_ir
+                result.title = title
+                result.title_source = title_source
         alias_book.save()
-        stray_masks = masks_in(markdown_of(ir))
-        if stray_masks:
-            result.problems.append(f"script still shows {len(stray_masks)} redaction marker(s)")
-
+        if ir is None:
+            result.problems.append("no episode could be planned")
+            return result
+        result.episodes = [
+            {key: value for key, value in row.items() if key != "ir"} for row in episodes
+        ]
         result.grounding = dict(ir.grounding)
         result.cast = summarise_cast(cast_map)
         result.ir = ir
@@ -566,6 +579,18 @@ def run_pipeline(
             write_json(config.data_dir / "arcs.json", {"arcs": [arc.as_dict() for arc in arcs]}, gate)
             write_json(config.data_dir / "canon.json", canon.as_dict(), gate)
             write_json(config.data_dir / "script-ir.json", ir.as_dict(), gate)
+            for row in episodes:
+                episode_ir = row["ir"]
+                write_json(
+                    config.data_dir / f"script-ir-{row['number']}.json",
+                    episode_ir.as_dict(),
+                    gate,
+                )
+                write_text(
+                    config.data_dir / f"episode-{row['number']}-script.md",
+                    render_script_markdown(episode_ir),
+                    gate,
+                )
             write_json(
                 config.data_dir / "memory.json",
                 {"counts": memory_counts, "hashes": memory_hashes},
@@ -587,6 +612,7 @@ def run_pipeline(
                     "panels": len(ir.panels),
                     "writer": ir.writer,
                     "grounding": result.grounding,
+                    "episodes": result.episodes,
                     "threads": result.threads,
                     "title": result.title,
                     "title_source": result.title_source,
@@ -700,6 +726,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             "defaults to $REEL_STATE_DIR or ~/.local/state/scrollback-reel"
         ),
     )
+    parser.add_argument(
+        "--episodes",
+        type=int,
+        default=1,
+        help="how many threads to turn into scripts (each from a different thread)",
+    )
     parser.add_argument("--json", action="store_true", help="print the metrics JSON")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
@@ -741,6 +773,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         max_deep_events=args.max_deep_events,
         max_text_events=args.max_text_events,
         max_vocabulary=args.max_vocabulary,
+        episodes=max(1, args.episodes),
         state_dir=Path(args.state_dir).expanduser() if args.state_dir else None,
         llm=client,
     )

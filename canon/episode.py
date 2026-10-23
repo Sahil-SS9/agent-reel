@@ -276,7 +276,9 @@ class LLMDialogueWriter:
             speaker = str(row.get("speaker", "")).strip()
             text = " ".join(str(row.get("text", "")).split())
             if speaker not in self.cast:
-                raise ValueError(f"speaker not in cast: {speaker!r}")
+                # A line for someone who was not there is dropped, not fatal: losing the
+                # whole panel (caption included) over one bad speaker is worse.
+                continue
             if not text:
                 continue
             if len(text) > self.max_chars:

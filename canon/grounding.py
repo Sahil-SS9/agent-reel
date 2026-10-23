@@ -115,8 +115,16 @@ def check_terms(line: str, evidence_text: str, *, allow: Iterable[str] = ()) -> 
     haystack = _normalise(evidence_text)
     stems = {_stem(token) for token in _TOKEN_RE.findall(haystack)}
 
+    # A multi-word allowlisted name ("The Reviewer", "Project Lantern") must also cover
+    # its own words, or a caption that uses the alias looks ungrounded.
+    allowed_words = {
+        word
+        for entry in allow
+        for word in str(entry).lower().replace("-", " ").split()
+    }
+
     def present(term: str) -> bool:
-        return term in haystack or _stem(term) in stems
+        return term in haystack or _stem(term) in stems or term in allowed_words
 
     checked = content_terms(line, allow=allow)
     supported = [term for term in checked if present(term)]

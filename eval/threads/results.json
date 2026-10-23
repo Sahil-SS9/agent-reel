@@ -1,6 +1,6 @@
 {
  "adversarial_captions_or_lines_released": [],
- "adversarial_refusals": 240,
+ "adversarial_refusals": 120,
  "clean_problems": [],
  "clean_threads_ok": true,
  "cliffhangers": 10,

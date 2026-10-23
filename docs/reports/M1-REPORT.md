@@ -8,7 +8,8 @@
 - Determinism is proven twice: byte-identical canon and IR on a re-run in deterministic mode (pinned window) **and** in model mode (cache reuse).
 - Nothing was installed in Hermes, no push, no images (0/40 used in M1 — script only, as specified).
 
-Commit: `d416d27` (latest; engine `0c9041f`, refinements `c855bd4`, signal cleanup `d416d27`).
+Commit: `19964cd` (latest; engine `0c9041f`, refinements `c855bd4`, signal cleanup `d416d27`,
+evidence regenerated `19964cd`).
 Audit fixes: `a37fca9` (F1), `ed872ae` (F2), `c8d54d9` (F3), `66fd89f` (F4). Branch: `main`.
 
 ## Gate results

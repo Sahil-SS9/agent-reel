@@ -97,6 +97,21 @@ def _thread_evidence(events: Sequence[GatedEvent]) -> str:
     return "\n".join(text for text in (event_text(event) for event in events) if text)
 
 
+_OUTCOME_WORDS = (
+    "complete", "completed", "done", "shipped", "fixed", "passed", "green", "result",
+    "scored", "against", "shipped", "merged", "delivered", "finished", "verified",
+)
+
+
+def _outcome_score(event: GatedEvent) -> float:
+    """How much a message reads like a result (R4-F2)."""
+    text = event_text(event).lower()
+    words = len(text.split())
+    digits = sum(1 for word in text.split() if any(ch.isdigit() for ch in word))
+    hits = sum(1 for word in _OUTCOME_WORDS if word in text)
+    return digits * 3 + hits * 2 + min(words, 60) / 60.0 + event.ts / 1e12
+
+
 def _key_turns(events: Sequence[GatedEvent], *, limit: int = MAX_TURNS) -> tuple[BriefTurn, ...]:
     """Text-bearing events, distinct, spread across the thread, best first."""
     candidates = [(event, event_text(event)) for event in events]
@@ -161,15 +176,14 @@ def build_brief(
             None,
         )
         goal = event_text(user_row) if user_row is not None else ""
-        outcome_row = next(
-            (
-                row
-                for row in reversed(rows)
-                if row.kind == KIND_MESSAGE_ASSISTANT
-                and len(event_text(row)) >= MIN_OUTCOME_CHARS
-            ),
-            None,
-        )
+        # R4-F2: the outcome is the message that actually says what happened - a result,
+        # a number, a completion - not necessarily the last thing said ("Go received").
+        candidates = [
+            row
+            for row in rows
+            if row.kind == KIND_MESSAGE_ASSISTANT and len(event_text(row)) >= MIN_OUTCOME_CHARS
+        ]
+        outcome_row = max(candidates, key=_outcome_score, default=None)
         outcome = event_text(outcome_row) if outcome_row is not None else ""
     else:
         created = next(

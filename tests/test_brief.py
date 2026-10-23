@@ -118,3 +118,15 @@ def test_brief_is_not_ok_without_a_goal():
     rows = [message("s2", KIND_MESSAGE_ASSISTANT, "An answer with no question behind it.", 1.0, "default")]
     brief = build_brief("s2", "session", rows)
     assert not brief.ok
+
+
+def test_the_outcome_is_the_message_that_reports_a_result():
+    rows = [
+        message("s1", KIND_MESSAGE_USER, "please benchmark the memory system properly", 1.0),
+        message("s1", KIND_MESSAGE_ASSISTANT, "Starting on the harness and the scoring path", 2.0, "denji"),
+        message("s1", KIND_MESSAGE_ASSISTANT, "Benchmark complete: 87.3 against 79.5 on the long set", 3.0, "denji"),
+        message("s1", KIND_MESSAGE_ASSISTANT, "Go received.", 4.0, "denji"),
+    ]
+    brief = build_brief("s1", "session", rows)
+    assert "87.3" in brief.outcome
+    assert brief.outcome != "Go received."

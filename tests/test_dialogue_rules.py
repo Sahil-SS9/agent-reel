@@ -7,6 +7,7 @@ from canon.beats import beats_from_events
 from canon.brief import build_brief
 from canon.canon import build_canon
 from canon.caption import compose_caption
+from canon.facts import build_facts, facts_text
 from canon.episode import TemplateDialogueWriter, plan_episode, validate_ir
 from canon.events import KIND_TASK_CREATED, KIND_TASK_STATUS, build_event
 from canon.gate import seal
@@ -49,12 +50,15 @@ def plan(writer=None):
     brief = build_brief(threads[0].key, "task", events)
     canon = build_canon(events, beats)
     cast_map = {"wesker": "Wesker", "octacon": "Octacon", "quan": "Quan", "kensei": "Kensei"}
+    facts = build_facts(brief, {event.id: event for event in events}, display=cast_map, hero="Sahil")
     ir = plan_episode(
         arc, beats, canon,
         writer=writer or TemplateDialogueWriter(("Sahil", "Wesker", "Octacon", "Quan")),
         evidence=evidence, brief=brief, cast_map=cast_map,
         structured_captions={event.id: compose_caption(event) for event in events},
         thread_evidence="\n".join(evidence.values()),
+        facts=facts,
+        facts_evidence=facts_text(facts),
     )
     return ir
 
@@ -103,7 +107,18 @@ def test_a_silent_panel_is_allowed():
 
 
 def test_thread_cast_members_from_the_evidence_may_speak():
-    ir = plan()
+    """A writer that does speak may only use the thread's cast (R5-F1: no fallback)."""
+
+    class Talker:
+        name = "talker"
+
+        def write(self, panels):
+            return {
+                panel["role"]: {"caption": "", "lines": [["Quan", "The fixture was stale again."]]}
+                for panel in panels
+            }
+
+    ir = plan(Talker())
     speakers = {line.speaker for panel in ir.panels for line in panel.lines}
     assert speakers, "at least one thread cast member should speak"
     assert speakers <= {"Sahil", "Wesker", "Octacon", "Quan", "Kensei"}

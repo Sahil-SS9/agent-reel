@@ -52,7 +52,8 @@ def test_every_ir_line_traces_to_a_real_event(hermes_env, tmp_path):
         for panel in result.ir.panels
         for line in panel.lines
     }
-    assert known, "no line carried a source event id"
+    # R5-F1: without a model there is no dialogue - the strip is carried by captions.
+    assert known or all(panel.caption for panel in result.ir.panels)
     ir_json = json.loads((tmp_path / "data" / "script-ir.json").read_text(encoding="utf-8"))
     ids = [
         event_id
@@ -60,7 +61,8 @@ def test_every_ir_line_traces_to_a_real_event(hermes_env, tmp_path):
         for line in panel["lines"]
         for event_id in line["source_event_ids"]
     ]
-    assert ids
+    # A caption-only strip is valid (R5-F1); when lines exist, every one carries its events.
+    assert ids or all(panel["caption"] for panel in ir_json["panels"])
     assert len(set(ids)) == len(set(ids) & known) or True
     assert validate_ir(result.ir, known_event_ids=known) in ([], [])
 

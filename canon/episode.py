@@ -191,45 +191,17 @@ class TemplateDialogueWriter:
             summary = " ".join(words[:14]).rstrip(" ,;:") + "."
         return summary
 
-    def reaction_for(self, panel: Mapping[str, Any]) -> str:
-        """A line that reacts to *this* panel's fact, or '' for silence (R4-F3)."""
-        caption = str(panel.get("structured_caption", "")).strip()
-        if not caption:
-            return ""
-        body = caption.rstrip(".")
-        # Drop the actor and the verb: what is left is the thing being reacted to.
-        for lead in ("The agent", "The owner"):
-            if body.startswith(lead):
-                body = body[len(lead):].strip()
-        words = body.split()
-        if len(words) > 2:
-            body = " ".join(words[1:])  # the verb
-        body = " ".join(body.split()[:7]).strip(" ,;:-")
-        if len(body.split()) < 2:
-            return ""
-        text = f"{body[0].upper()}{body[1:]}."
-        if len(text.split()) < 3:
-            return ""
-        return text if text.lower() not in self.used else ""
-
     def write(self, panels: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
+        """Captions only (round 6, R5-F1).
+
+        The template used to invent a line when the model gave none, and those lines were
+        fragments ("Worked on …", "Reported …"). A panel now carries a caption, and a
+        spoken line only when the writer actually wrote one. Silence is better than a
+        truncated fragment in a character's mouth.
+        """
         out: dict[str, dict[str, Any]] = {}
-        for index, panel in enumerate(panels):
-            speakers = list(panel.get("speakers") or panel.get("actors") or [])
-            speaker = speakers[index % len(speakers)] if speakers else self.hero
-            reaction = self.reaction_for(panel)
-            if reaction and reaction.lower() in self.used:
-                reaction = ""
-            if not reaction:
-                # Silence beats filler (R3-F5); a generic interjection is capped elsewhere.
-                lines = []
-            else:
-                self.used.add(reaction.lower())
-                lines = [[speaker, reaction]]
-            out[panel["role"]] = {
-                "caption": self.caption_for(panel),
-                "lines": lines,
-            }
+        for panel in panels:
+            out[panel["role"]] = {"caption": self.caption_for(panel), "lines": []}
         return out
 
 
@@ -485,7 +457,9 @@ def plan_episode(
 
     actors_map = actors_by_event or {}
 
-    thread_haystack = " ".join(str(thread_evidence).lower().split())
+    # A speaker must appear in what the thread says. The fact list names who did what, so
+    # it counts as evidence for eligibility even when the raw text never says the name.
+    thread_haystack = " ".join(f"{thread_evidence}\n{facts_evidence}".lower().split())
 
     def in_thread_evidence(name: str) -> bool:
         needle = str(name).replace("-", " ").lower()

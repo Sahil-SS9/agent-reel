@@ -87,11 +87,12 @@ def test_at_most_one_generic_interjection_survives():
     assert len(generic) <= 1
 
 
-def test_the_template_reaction_quotes_the_panel_fact():
+def test_the_template_writer_never_invents_a_line():
+    """R5-F1: the fallback dialogue is gone; silence beats a fragment."""
     writer = TemplateDialogueWriter(("Wesker",))
-    out = writer.write([{"role": "setup", "actors": ["Wesker"], "structured_caption": "Wesker completed the adapter and the snapshot path"}])
-    line = out["setup"]["lines"][0][1]
-    assert "adapter" in line.lower()
+    out = writer.write([{"role": "setup", "actors": ["Wesker"], "structured_caption": "Wesker completed the adapter"}])
+    assert out["setup"]["lines"] == []
+    assert out["setup"]["caption"]
 
 
 def test_no_caption_means_silence_not_filler():

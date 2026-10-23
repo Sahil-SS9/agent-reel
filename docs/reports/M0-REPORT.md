@@ -8,7 +8,7 @@
 - Real history stayed out of the repo: the only real-data output is a summary written to the evidence folder. It contains counts and session titles, and a pre-flight leak scan on it comes back **clean**.
 - Two things are honestly short of the letter of the handoff: memory *diffs* need a prior snapshot (Hermes keeps no memory history), and skill usage is collapsed to the latest timestamp per skill. Both are documented, with a fix path.
 
-Commit: PENDING (written into this line after the build commit, then committed again)
+Commit: `ec91e37b6e4d0892e05550c14e0ce9cf134186da` (build commit; this report is the next commit)
 Branch: `main`
 
 ## Gate results

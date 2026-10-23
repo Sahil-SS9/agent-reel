@@ -106,6 +106,7 @@ _DANGLING = {
     "a", "an", "and", "as", "at", "but", "by", "do", "for", "from", "in", "into", "is",
     "it", "of", "on", "or", "please", "so", "that", "the", "then", "to", "with", "within",
     "he", "she", "they", "we", "you", "i", "because", "if", "when", "while", "my", "our",
+    "i've", "i'm", "i'd", "i'll", "we've", "they've", "it's", "that's", "and", "but", "yet",
 }
 
 

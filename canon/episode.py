@@ -151,15 +151,18 @@ class TemplateDialogueWriter:
 
     name = "template"
 
-    #: Reactions carry no claim (round 3: pure register passes grounding).
+    #: Reactions carry no claim (round 3: pure register passes grounding). Each is used
+    #: at most once per episode; when they run out the panel is silent, because silence
+    #: beats filler (round 4, R3-F5).
     REACTIONS = (
-        "Okay.", "Right.", "That's the one.", "Ugh.", "Of course.", "Here we go.",
-        "Not again.", "Fine.", "Naturally.", "Typical.",
+        "That's the one.", "Ugh.", "Of course.", "Here we go.", "Not again.",
+        "Naturally.", "Typical.", "Finally.", "Well then.", "As expected.",
     )
 
     def __init__(self, cast: Sequence[str], *, hero: str = "Sahil") -> None:
         self.cast = tuple(cast) or (hero,)
         self.hero = hero
+        self.used: set[str] = set()
 
     def _speaker_for(self, index: int) -> str:
         pool = [self.hero] + [name for name in self.cast if name != self.hero]
@@ -184,14 +187,15 @@ class TemplateDialogueWriter:
     def write(self, panels: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
         out: dict[str, dict[str, Any]] = {}
         for index, panel in enumerate(panels):
-            actors = list(panel.get("actors") or [])
-            if actors:
-                speaker = actors[index % len(actors)]
-                reaction = self.REACTIONS[index % len(self.REACTIONS)]
-                lines = [[speaker, reaction]]
+            speakers = list(panel.get("speakers") or panel.get("actors") or [])
+            speaker = speakers[index % len(speakers)] if speakers else self.hero
+            reaction = next((line for line in self.REACTIONS if line not in self.used), "")
+            if not reaction:
+                # Silence beats filler (R3-F5).
+                lines = []
             else:
-                reaction = self.REACTIONS[index % len(self.REACTIONS)]
-                lines = [[self.hero, reaction]]
+                self.used.add(reaction)
+                lines = [[speaker, reaction]]
             out[panel["role"]] = {
                 "caption": self.caption_for(panel),
                 "lines": lines,
@@ -364,6 +368,7 @@ def plan_episode(
     evidence: Mapping[str, str] | None = None,
     brief: Any | None = None,
     structured_captions: Mapping[str, str] | None = None,
+    thread_evidence: str = "",
     actors_by_event: Mapping[str, str] | None = None,
     cast_map: Mapping[str, str] | None = None,
     title: str | None = None,
@@ -410,10 +415,24 @@ def plan_episode(
 
     actors_map = actors_by_event or {}
 
+    thread_haystack = " ".join(str(thread_evidence).lower().split())
+
+    def in_thread_evidence(name: str) -> bool:
+        needle = str(name).replace("-", " ").lower()
+        return bool(needle) and needle in thread_haystack
+
     def allowed_speakers(beat: Beat | None, cast_names: Sequence[str]) -> set[str]:
-        """Who may speak this panel: the actors of its cited events (audit R2-F2)."""
+        """Who may speak this panel.
+
+        Round 4 (R3-F5) widens the round 3 rule: a line may name any thread cast member
+        who appears in the thread's evidence, not only an actor of the panel's own
+        events. The *claim* rule is unchanged - what the line says must still be backed
+        by the events it cites.
+        """
         if beat is None:
             return set()
+        if thread_haystack:
+            return {name for name in cast_names if in_thread_evidence(name)}
         if not actors_map:
             return set(cast_names)
         actors = {actors_map.get(event_id, "") for event_id in beat.event_ids} - {""}
@@ -476,6 +495,15 @@ def plan_episode(
         # Chapter-mode detail panels are built inline, so default their cast here.
         spec.setdefault("cast", _cast_for(spec["beat"], canon, hero, cast_map))
         spec["actors"] = sorted(allowed_speakers(spec["beat"], spec["cast"]))
+        # R3-F5: the thread cast who appear in the thread's evidence may speak.
+        spec["speakers"] = sorted(
+            {
+                name
+                for name in (spec["cast"] + tuple(cast_map.values()) if thread_haystack else spec["cast"])
+                if in_thread_evidence(name) or not thread_haystack
+            }
+            or set(spec["actors"])
+        )
     cast = sorted({name for spec in panel_specs for name in spec["cast"]})
     active_writer = writer or TemplateDialogueWriter(cast, hero=hero)
     dialogue = active_writer.write(panel_specs)
@@ -493,7 +521,7 @@ def plan_episode(
             continue
         cast_names = tuple(spec.get("cast") or ())
         evidence_text = str(spec.get("evidence", ""))
-        speakers_allowed = set(spec.get("actors") or ())
+        speakers_allowed = set(spec.get("speakers") or spec.get("actors") or ())
         written = dialogue.get(role, {})
 
         # ---- layer 1: the fact caption -----------------------------------

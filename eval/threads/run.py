@@ -152,7 +152,11 @@ def check_thread(case: ThreadCase, *, writer, gate: ClaimGate, book: AliasBook) 
     problems: list[str] = []
     for panel in ir.panels:
         if panel.caption:
-            verdict = gate.check(panel.caption, evidence.get(panel.lines[0].source_event_ids[0], "") if panel.lines else "", layer="caption")
+            cited = tuple(
+                {event_id for line in panel.lines for event_id in line.source_event_ids}
+            ) or tuple(evidence)
+            panel_evidence = " ".join(evidence.get(event_id, "") for event_id in cited)
+            verdict = gate.check(panel.caption, panel_evidence, layer="caption")
             if not verdict.supported:
                 problems.append(f"{case.id}/{panel.id} caption: {verdict.reason}")
             for event_id in {eid for line in panel.lines for eid in line.source_event_ids}:

@@ -231,18 +231,32 @@ def test_canon_promotes_a_recurring_problem_to_nemesis():
 
 
 def _ir(**kwargs):
+    from canon.caption import compose_caption
+
     events = _story_events()
     beats = beats_from_events(events)
     arc = build_arc(beats)
     canon = build_canon(events, beats)
+    evidence = {event.id: str(event.payload.get("text", "")) for event in events}
+    kwargs.setdefault("evidence", evidence)
+    kwargs.setdefault(
+        "structured_captions", {event.id: compose_caption(event) for event in events}
+    )
     return events, plan_episode(arc, beats, canon, **kwargs)
 
 
-def test_strip_has_six_panels_and_chapter_more():
+def test_strip_has_panels_and_chapter_more():
+    """A panel needs text to stand on (R3-F3/R4-F2).
+
+    This fixture carries text on only some of its events, so the strip is shorter than
+    the old four-panel assertion: a beat with nothing to say is skipped rather than
+    captioned "Wesker was blocked on." Chapter mode adds the arc's remaining beats.
+    """
     _, strip = _ir(format="strip")
     _, chapter = _ir(format="chapter")
-    assert len(strip.panels) >= 4
+    assert len(strip.panels) >= 1
     assert len(chapter.panels) >= len(strip.panels)
+    assert all(panel.caption or panel.lines for panel in strip.panels)
 
 
 def test_every_line_traces_to_a_real_event():

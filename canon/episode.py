@@ -12,6 +12,8 @@ template rather than failing an episode.
 
 from __future__ import annotations
 
+import re
+
 import json
 from dataclasses import dataclass, field, replace
 from typing import Any, Iterable, Mapping, Protocol, Sequence
@@ -189,17 +191,38 @@ class TemplateDialogueWriter:
             summary = " ".join(words[:14]).rstrip(" ,;:") + "."
         return summary
 
+    def reaction_for(self, panel: Mapping[str, Any]) -> str:
+        """A line that reacts to *this* panel's fact, or '' for silence (R4-F3)."""
+        caption = str(panel.get("structured_caption", "")).strip()
+        if not caption:
+            return ""
+        body = caption.rstrip(".")
+        # Drop the actor and the verb: what is left is the thing being reacted to.
+        for lead in ("The agent", "The owner"):
+            if body.startswith(lead):
+                body = body[len(lead):].strip()
+        words = body.split()
+        if len(words) > 2:
+            body = " ".join(words[1:])  # the verb
+        body = " ".join(body.split()[:7]).strip(" ,;:-")
+        if len(body.split()) < 2:
+            return ""
+        text = f"That {body}." if not body[0].isupper() else f"{body}."
+        return text if text.lower() not in self.used else ""
+
     def write(self, panels: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
         out: dict[str, dict[str, Any]] = {}
         for index, panel in enumerate(panels):
             speakers = list(panel.get("speakers") or panel.get("actors") or [])
             speaker = speakers[index % len(speakers)] if speakers else self.hero
-            reaction = next((line for line in self.REACTIONS if line not in self.used), "")
+            reaction = self.reaction_for(panel)
+            if reaction and reaction.lower() in self.used:
+                reaction = ""
             if not reaction:
-                # Silence beats filler (R3-F5).
+                # Silence beats filler (R3-F5); a generic interjection is capped elsewhere.
                 lines = []
             else:
-                self.used.add(reaction)
+                self.used.add(reaction.lower())
                 lines = [[speaker, reaction]]
             out[panel["role"]] = {
                 "caption": self.caption_for(panel),
@@ -357,6 +380,22 @@ def compose_caption_first(beat: Beat | None) -> str:
         return ""
     action = beat.type.replace("-", " ").replace("_", " ")
     return ""
+
+
+_GENERIC_STOP = frozenset(
+    "the a an and or of to in on at for with from by is was are were be it its this that "
+    "these those i you we they my our their okay right ugh sure fine well here not again "
+    "of course naturally typical finally expected then now".split()
+)
+
+
+def _is_generic(line: str, evidence_text: str, caption: str) -> bool:
+    """A line is generic when it shares no content word with its panel's fact (R4-F3)."""
+    haystack = f"{evidence_text} {caption}".lower()
+    words = [w for w in re.findall(r"[a-z][a-z'\-]{2,}", (line or "").lower()) if w not in _GENERIC_STOP]
+    if not words:
+        return True
+    return not any(word in haystack for word in words)
 
 
 def _logline(title: str, panels: Sequence[Panel]) -> str:
@@ -544,6 +583,7 @@ def plan_episode(
     dialogue = active_writer.write(panel_specs)
 
     report = GroundingReport()
+    generic_used = 0
     seen_text: set[str] = set()
     panels: list[Panel] = []
     actors_map = actors_by_event or {}
@@ -653,6 +693,12 @@ def plan_episode(
                 report.reasons.append(f"{role}: speaker {speaker!r} is not an actor")
                 continue
             candidate = text
+            if _is_generic(candidate, evidence_text, caption) and generic_used >= 1:
+                report.lines_dropped += 1
+                report.reasons.append(f"{role}: second generic interjection dropped")
+                continue
+            if _is_generic(candidate, evidence_text, caption):
+                generic_used += 1
             if grounder is not None:
                 report.lines += 1
                 verdict = grounder.check(candidate, evidence_text, layer="dialogue")

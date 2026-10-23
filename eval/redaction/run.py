@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -102,6 +103,7 @@ def run_benchmark(
     if model_gate is not None:
         gate.learn_vocabulary(item["text"] for item in items)
 
+    started = time.time()
     per_category: dict[str, dict[str, int]] = {}
     misses: list[dict[str, str]] = []
     for item in items:
@@ -146,8 +148,13 @@ def run_benchmark(
         )
         for category, bucket in per_category.items()
     }
+    elapsed = max(time.time() - started, 1e-6)
+    quarantined_items = sum(bucket["quarantined"] for bucket in per_category.values())
     return {
         "items": len(items),
+        "elapsed_s": round(elapsed, 2),
+        "items_per_s": round(len(items) / elapsed, 2),
+        "quarantine_rate": round(quarantined_items / len(items), 4) if items else 0.0,
         "use_model": use_model,
         "recall": {category: round(value, 4) for category, value in sorted(recall.items())},
         "counts": {category: bucket for category, bucket in sorted(per_category.items())},
@@ -179,6 +186,12 @@ def evaluate_thresholds(report: dict[str, Any]) -> list[str]:
         got = recall.get(category, 0.0)
         if got < required:
             failures.append(f"{category}: recall {got:.2%} < {required:.0%} (deterministic pass)")
+    # Audit M1-F5: a model pass that quarantines more than 5% of items is not stable
+    # enough to run a story on, even though quarantine is the safe outcome.
+    if report.get("quarantine_rate", 0.0) > 0.05:
+        failures.append(
+            f"quarantine rate {report['quarantine_rate']:.1%} > 5% (model pass unstable)"
+        )
     if not report["use_model"]:
         return failures
     for category in sorted(NAME_CATEGORIES):
@@ -213,9 +226,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json-out", default=None)
     args = parser.parse_args(argv)
 
-    items = load_dataset(Path(args.dataset))
-    if len(items) < 200:
-        print(f"dataset has {len(items)} items, the gate needs >=200", file=sys.stderr)
+    dataset_path = Path(args.dataset)
+    items = load_dataset(dataset_path)
+    # The dev gate needs 200+ items; a held-out set is smaller by design and only
+    # needs to be big enough to be meaningful.
+    floor = 200 if dataset_path.name == DATASET.name else 30
+    if len(items) < floor:
+        print(f"dataset has {len(items)} items, the gate needs >={floor}", file=sys.stderr)
         return 2
 
     client: LLMClient
@@ -244,8 +261,15 @@ def main(argv: list[str] | None = None) -> int:
     report["failures"] = failures
     report["passed"] = not failures
 
-    print(f"redaction benchmark: {report['items']} items, model pass = {report['use_model']}")
+    print(
+        f"redaction benchmark: {report['items']} items from {dataset_path.name}, "
+        f"model pass = {report['use_model']}, deep = {args.deep}"
+    )
     print(f"  client: {report['client']}")
+    print(
+        f"  {report['items']} items in {report['elapsed_s']}s "
+        f"({report['items_per_s']}/s), quarantined {report['quarantine_rate']:.1%}"
+    )
     for category, value in report["recall"].items():
         counts = report["counts"][category]
         print(

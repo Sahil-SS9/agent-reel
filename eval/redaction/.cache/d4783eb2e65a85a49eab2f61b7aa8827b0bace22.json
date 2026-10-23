@@ -1,0 +1,106 @@
+{
+ "key": "redact.vocabulary|openai-compat:auto|ddb3e97e941e6133fd6ba47fab27f902|ef8b869c2007917be38537a8627171d4",
+ "model": "openai-compat:auto",
+ "stage": "redact.vocabulary",
+ "v": 1,
+ "value": {
+  "results": [
+   {
+    "category": "person_name",
+    "name": "Ask Ingrid Larsson"
+   },
+   {
+    "category": "safe",
+    "name": "Authorization"
+   },
+   {
+    "category": "safe",
+    "name": "Backups"
+   },
+   {
+    "category": "client_name",
+    "name": "Bluepeak Analytics"
+   },
+   {
+    "category": "safe",
+    "name": "Documents"
+   },
+   {
+    "category": "safe",
+    "name": "Forward"
+   },
+   {
+    "category": "safe",
+    "name": "He"
+   },
+   {
+    "category": "safe",
+    "name": "Her"
+   },
+   {
+    "category": "safe",
+    "name": "Here"
+   },
+   {
+    "category": "safe",
+    "name": "His"
+   },
+   {
+    "category": "client_name",
+    "name": "Kestrel Labs"
+   },
+   {
+    "category": "safe",
+    "name": "Library"
+   },
+   {
+    "category": "person_name",
+    "name": "Oluwaseun Adeyemi"
+   },
+   {
+    "category": "project_name",
+    "name": "Operation Tinderbox"
+   },
+   {
+    "category": "safe",
+    "name": "Posting"
+   },
+   {
+    "category": "project_name",
+    "name": "Project Nightjar"
+   },
+   {
+    "category": "safe",
+    "name": "Ring"
+   },
+   {
+    "category": "safe",
+    "name": "Session"
+   },
+   {
+    "category": "safe",
+    "name": "Set"
+   },
+   {
+    "category": "safe",
+    "name": "She"
+   },
+   {
+    "category": "safe",
+    "name": "Slack"
+   },
+   {
+    "category": "safe",
+    "name": "They"
+   },
+   {
+    "category": "person_name",
+    "name": "Tomasz Nowak"
+   },
+   {
+    "category": "safe",
+    "name": "Users"
+   }
+  ]
+ }
+}

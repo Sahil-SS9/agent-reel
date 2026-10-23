@@ -153,14 +153,14 @@ class _LyingWriter:
     name = "liar"
 
     def write(self, panels):
-        return {panel["role"]: [["wesker", "the config was missing the timeout key."]] for panel in panels}
+        return {panel["role"]: [["Wesker", "the config was missing the timeout key."]] for panel in panels}
 
 
 class _HonestWriter:
     name = "honest"
 
     def write(self, panels):
-        return {panel["role"]: [["wesker", panel.get("evidence", "").split("\n")[0][:80] or "it broke."]] for panel in panels}
+        return {panel["role"]: [["Wesker", panel.get("evidence", "").split("\n")[0][:80] or "it broke."]] for panel in panels}
 
 
 def test_invented_lines_are_never_released():

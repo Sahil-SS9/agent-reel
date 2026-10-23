@@ -49,7 +49,6 @@ TRIGGER_KINDS = frozenset(
         KIND_TASK_FINISHED,
         KIND_RUN_FINISHED,
         KIND_CRON_FINISHED,
-        KIND_MESSAGE_TOOL_RESULT,
         KIND_MESSAGE_USER,
         KIND_SKILL_CREATED,
         KIND_SKILL_USED,
@@ -218,10 +217,8 @@ def classify(event: GatedEvent) -> tuple[str, int] | None:
             return "failure", 3
         return None
 
-    if event.kind == KIND_MESSAGE_TOOL_RESULT:
-        if struggles:
-            return "struggle", min(5, 2 + struggles)
-        return None
+    # Audit M1-F7: a tool result is never a beat on its own - a raw tool name is not
+    # a story unit. Tool output travels as evidence for a thread's beat instead.
 
     if event.kind == KIND_SKILL_CREATED:
         return "level-up", 3

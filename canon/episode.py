@@ -18,6 +18,7 @@ from typing import Any, Iterable, Mapping, Protocol, Sequence
 
 from canon.arcs import ARC_ROLES, Arc
 from canon.beats import Beat
+from canon.casting import build_cast_map, speaker_for
 from canon.canon import Canon
 from canon.events import make_event_id
 from canon.grounding import GroundingGate, GroundingReport
@@ -255,10 +256,19 @@ class LLMDialogueWriter:
         return lines
 
 
-def _cast_for(beat: Beat | None, canon: Canon, hero: str) -> tuple[str, ...]:
+def _cast_for(
+    beat: Beat | None,
+    canon: Canon,
+    hero: str,
+    cast_map: Mapping[str, str] | None = None,
+) -> tuple[str, ...]:
+    """Panel cast in character names, never profile ids (audit M1-F6)."""
+    mapping = cast_map or {}
     names: list[str] = [hero]
-    if beat is not None and beat.profile and beat.profile not in names:
-        names.append(beat.profile)
+    if beat is not None and beat.profile:
+        character = speaker_for(beat.profile, mapping, hero=hero)
+        if character and character not in names:
+            names.append(character)
     return tuple(names)
 
 
@@ -267,8 +277,14 @@ def _caption(role: str, beat: Beat | None) -> str:
     if beat is None:
         return label
     import datetime as _dt
+    from zoneinfo import ZoneInfo
 
-    stamp = _dt.datetime.fromtimestamp(beat.ts, tz=_dt.timezone.utc).strftime("%a %d %b %H:%M")
+    # Audit M1-F6: captions read in the owner's timezone, not UTC.
+    try:
+        zone = ZoneInfo("Europe/London")
+    except Exception:  # pragma: no cover - tzdata missing
+        zone = _dt.timezone.utc
+    stamp = _dt.datetime.fromtimestamp(beat.ts, tz=zone).strftime("%a %d %b %H:%M")
     return f"{stamp} \u00b7 {label}"
 
 
@@ -284,6 +300,8 @@ def plan_episode(
     hero: str = "Sahil",
     grounder: GroundingGate | None = None,
     evidence: Mapping[str, str] | None = None,
+    cast_map: Mapping[str, str] | None = None,
+    title: str | None = None,
 ) -> EpisodeIR:
     """Plan an episode from one arc.
 
@@ -342,7 +360,9 @@ def plan_episode(
                 },
             )
 
-    cast = sorted({name for spec in panel_specs for name in _cast_for(spec["beat"], canon, hero)})
+    cast = sorted(
+        {name for spec in panel_specs for name in _cast_for(spec["beat"], canon, hero, cast_map)}
+    )
     active_writer = writer or TemplateDialogueWriter(cast, hero=hero)
     dialogue = active_writer.write(panel_specs)
 
@@ -355,7 +375,7 @@ def plan_episode(
         event_ids = tuple(beat.event_ids) if beat else tuple()
         if not event_ids:
             continue
-        cast_names = _cast_for(beat, canon, hero)
+        cast_names = _cast_for(beat, canon, hero, cast_map)
         speakers = dialogue.get(role, [])
         evidence_text = str(spec.get("evidence", ""))
         lines: list[Line] = []
@@ -429,7 +449,8 @@ def plan_episode(
             )
         )
 
-    logline = f"{arc.title}: {arc.stakes}"
+    # A model title only survives if it is grounded; otherwise the derived one stands.
+    logline = f"{title or arc.title}: {arc.stakes}"
     return EpisodeIR(
         episode_id=make_event_id("episode", format, arc.opened, {"arc": arc.id, "n": number}),
         season=season,

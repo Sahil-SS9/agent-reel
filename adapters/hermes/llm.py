@@ -121,14 +121,51 @@ class OpenAICompatLLMClient:
             "max_tokens": self.max_tokens,
         }
         body.update(self.extra_body)
-        response = self._post(body)
+        # A reasoning model can return content: null after spending its budget on
+        # reasoning_content. Retry once with the same body (thinking is already off
+        # on this client) before giving up - audit M1-F5: 22% of items failed this way.
+        last_error: Exception | None = None
+        for _attempt in range(2):
+            response = self._post(body)
+            try:
+                content = response["choices"][0]["message"]["content"]
+            except (KeyError, IndexError, TypeError) as exc:
+                last_error = exc
+                continue
+            if isinstance(content, str) and content.strip():
+                return parse_json_object(content)
+            last_error = LLMError("model returned empty content")
+        raise LLMError(f"model returned no usable content ({last_error})")
+
+
+class FallbackLLM:
+    """Try the primary client, then a fallback route, and count both (audit M1-F5)."""
+
+    def __init__(self, primary: Any, fallback: Any | None = None) -> None:
+        self.primary = primary
+        self.fallback = fallback
+        self.name = getattr(primary, "name", "primary")
+        self.primary_failures = 0
+        self.fallback_used = 0
+        self.calls = 0
+
+    def complete_json(self, **kwargs: Any) -> dict[str, Any]:
+        self.calls += 1
         try:
-            content = response["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError) as exc:
-            raise LLMError(f"unexpected response shape: {exc}") from exc
-        if not isinstance(content, str) or not content.strip():
-            raise LLMError("model returned empty content")
-        return parse_json_object(content)
+            return self.primary.complete_json(**kwargs)
+        except LLMError:
+            self.primary_failures += 1
+            if self.fallback is None:
+                raise
+            self.fallback_used += 1
+            return self.fallback.complete_json(**kwargs)
+
+    def stats(self) -> dict[str, int]:
+        return {
+            "calls": self.calls,
+            "primary_failures": self.primary_failures,
+            "fallback_used": self.fallback_used,
+        }
 
 
 class HermesCtxLLMClient:

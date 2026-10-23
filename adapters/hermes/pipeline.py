@@ -35,6 +35,7 @@ from canon.arcs import build_arcs
 from canon.beats import Beat, beats_from_events
 from canon.cache import ModelCache
 from canon.canon import Canon, build_canon
+from canon.casting import build_cast_map, summarise as summarise_cast
 from canon.episode import (
     EpisodeIR,
     LLMDialogueWriter,
@@ -49,11 +50,12 @@ from canon.llm import CachedLLM, LLMClient, NullLLM
 from canon.redact import DeterministicRedactor, ModelEntityGate, RedactionGate
 from canon.source import Window
 from canon.threads import build_threads
+from canon.titling import write_title
 
 from adapters.hermes import leakscan
 from adapters.hermes.evidence import EvidenceLeak, write_json, write_text
 from adapters.hermes.history import HermesHistorySource
-from adapters.hermes.llm import OpenAICompatLLMClient
+from adapters.hermes.llm import FallbackLLM, OpenAICompatLLMClient
 from adapters.hermes.redact_source import rules_from_snapshot
 from adapters.hermes.snapshot import SnapshotStore, build_snapshot
 
@@ -138,6 +140,10 @@ class PipelineResult:
     problems: list[str] = field(default_factory=list)
     grounding: dict[str, Any] = field(default_factory=dict)
     threads: int = 0
+    quarantine_rate: float = 0.0
+    title: str = ""
+    title_source: str = ""
+    cast: list[dict[str, Any]] = field(default_factory=list)
     timings: dict[str, float] = field(default_factory=dict)
     artifacts: dict[str, str] = field(default_factory=dict)
 
@@ -350,6 +356,14 @@ def run_pipeline(
             result.timings["deep_gate_s"] = round(time.time() - started, 2)
 
         result.gate_report = gate.report.as_dict()
+        # Audit M1-F5: a run that quarantines more than 5% of what it gated is not
+        # stable enough to build a story on.
+        processed = result.gated + result.quarantined
+        result.quarantine_rate = (result.quarantined / processed) if processed else 0.0
+        if result.quarantine_rate > 0.05:
+            result.problems.append(
+                f"quarantine rate {result.quarantine_rate:.1%} exceeds 5%"
+            )
         result.cache_stats = cache.stats()
 
         # ---- arcs, canon, episode ---------------------------------------
@@ -393,6 +407,23 @@ def run_pipeline(
             cached if config.use_model else None,
             allow=tuple(cast) + tuple(config.allowlist) + (config.hero,),
         )
+        # Audit M1-F6: profiles are characters, not database ids.
+        cast_map = build_cast_map(
+            [beat.profile for beat in beats if beat.profile],
+            hero=config.hero,
+        )
+        cast_map["default"] = cast_map.get("default", "Kensei")
+        # One cached title call, after grounding, and only kept when it is grounded.
+        thread_beats = [beat for beat in beats if beat.id in set(arcs[0].beat_ids)]
+        title, title_source = write_title(
+            cached if config.use_model else None,
+            beats=thread_beats or beats,
+            derived=arcs[0].title,
+            hero=config.hero,
+        )
+        result.title = title
+        result.title_source = title_source
+
         ir = plan_episode(
             arcs[0],
             beats,
@@ -404,8 +435,11 @@ def run_pipeline(
             hero=config.hero,
             grounder=grounder,
             evidence=evidence_by_event(gated),
+            cast_map=cast_map,
+            title=title,
         )
         result.grounding = dict(ir.grounding)
+        result.cast = summarise_cast(cast_map)
         result.ir = ir
         result.timings["episode_s"] = round(time.time() - started, 2)
 
@@ -479,6 +513,10 @@ def run_pipeline(
                     "writer": ir.writer,
                     "grounding": result.grounding,
                     "threads": result.threads,
+                    "title": result.title,
+                    "title_source": result.title_source,
+                    "cast": result.cast,
+                    "quarantine_rate": round(result.quarantine_rate, 4),
                     "primary_thread": (arcs[0].as_dict()["thread_kind"] if arcs else ""),
                     "causation_verified": (arcs[0].causation.get("verified") if arcs else None),
                     "gate": result.gate_report,
@@ -602,6 +640,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             extra_body={"chat_template_kwargs": {"enable_thinking": False}},
         )
 
+    if client is not None:
+        fallback_url = os.environ.get("REEL_LLM_FALLBACK_URL")
+        fallback = (
+            OpenAICompatLLMClient(
+                base_url=fallback_url,
+                model=os.environ.get("REEL_LLM_FALLBACK_MODEL", args.llm_model),
+                extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+            )
+            if fallback_url
+            else None
+        )
+        client = FallbackLLM(client, fallback)
+
     config = PipelineConfig(
         data_dir=Path(args.data_dir).expanduser(),
         days=args.days,
@@ -631,6 +682,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         "writer": result.ir.writer if result.ir else "",
         "grounding": result.grounding,
         "threads": result.threads,
+        "title": result.title,
+        "title_source": result.title_source,
+        "quarantine_rate": round(result.quarantine_rate, 4),
         "gate": result.gate_report,
         "cache": result.cache_stats,
         "timings": result.timings,

@@ -44,6 +44,9 @@ def _clean(title: str) -> str:
     words = text.split()
     if len(words) > MAX_TITLE_WORDS:
         text = " ".join(words[:MAX_TITLE_WORDS])
+    # A title never ends on a word that needs an object, however short it is.
+    while text.split() and text.split()[-1].lower().strip(".,;:-") in _DANGLING:
+        text = " ".join(text.split()[:-1])
     if len(text) > MAX_TITLE_CHARS:
         text = text[:MAX_TITLE_CHARS]
         # Never cut a word in half, and never end on a word that needs a noun after it.

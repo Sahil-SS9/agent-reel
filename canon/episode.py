@@ -366,7 +366,7 @@ def _logline(title: str, panels: Sequence[Panel]) -> str:
     seed = _re.sub(r"https?://\S+", "a link", seed)
     seed = " ".join(seed.split())
     words = seed.split()[:12]
-    while words and words[-1].lower() in {"and", "or", "the", "a", "of", "to", "with"}:
+    while words and words[-1].lower().strip(".,;:-") in {"and", "or", "the", "a", "of", "to", "with"}:
         words = words[:-1]
     tail = " ".join(words).rstrip(" .,;:")
     if title and tail:

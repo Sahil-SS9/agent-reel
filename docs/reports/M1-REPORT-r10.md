@@ -28,3 +28,11 @@ r9 claimed the model judge rejected its own true captions. The r9 run cache cont
 4. Self-graded evals: the paraphrase cases were written by the producer. An independent held-out caption set is needed.
 
 Evidence: /home/kensei/handoffs/agent-story-replay/build-evidence/M1-r10/
+
+
+## Round 10b — fixes for Quan's review (t_0ea810b2), head 6a74259 (installed)
+- QAR10-01: cast names stay legal vocabulary but a caption naming one must find it in the cited evidence; refused before any model call (tests/test_r10b_review_fixes.py, no-model and always-yes-model paths).
+- QAR10-02: numbers compared as whole canonical figures (4 vs 14, 2.8 vs 2.85, 1,152 vs 81,152, 9:4 vs 09:40, 87 vs 87.3), before any model call.
+- QAR10-03: every caption carries caption_source_event_ids (panel events + thread facts that support it); each episode ships episode-N-trace.json with its arc, beats, facts and re-gated evidence for every cited id; every episode (not only the first) is validated. A vacuous test (`or True`) in test_pipeline.py replaced with real assertions.
+- QAR10-04 (medium): accepted as a documented limitation, not fixed — the 50% vocabulary floor still refuses some synonym-heavy true paraphrases (11/12 on our set, 21/23 on Quan's).
+- Measured: 370 tests pass; ctx.llm grounding eval 44/44 invented refused; run-week-2 and run-sept-2 both 3/3 episodes, all 6 scripts traceable with matching arcs; 12 caption traces in build-evidence/M1-r10b/caption-traces.md.

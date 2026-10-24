@@ -193,10 +193,83 @@ CASES: list[tuple[str, str, str]] = [
 ]
 
 
+#: Round 10: paraphrase cases. The original set only has near-quotes as its grounded
+#: lines, so it rewarded the full-overlap rule that refused every reworded caption. Each
+#: case pairs a true rewording with a subtle invention: wrong actor, flipped outcome,
+#: added cause, added time, or a changed figure.
+PARAPHRASE_CASES: list[tuple[str, str, str]] = [
+    (
+        "The verify step did not run. It needed approval and the approval prompt timed out after 5 minutes.",
+        "The verification never ran: it needed approval and the prompt timed out after 5 minutes.",
+        "The verification failed its tests, so the prompt timed out after 5 minutes.",
+    ),
+    (
+        "Sahil picked option two and asked for a leaderboard shared across plugin users.",
+        "Sahil chose option two and wants a shared leaderboard for everyone using the plugin.",
+        "Sahil chose option three and wants a shared leaderboard for everyone using the plugin.",
+    ),
+    (
+        "kensei stopped the run on purpose; exit 143 was a SIGTERM, not a crash.",
+        "Kensei halted the run deliberately; exit 143 was a SIGTERM rather than a crash.",
+        "The run crashed with exit 143 after a SIGTERM from the kernel.",
+    ),
+    (
+        "Every re-run finished, the full test suite passes and no skill made the AI worse for any persona.",
+        "All the re-runs completed, the whole suite passed, and no skill hurt any persona.",
+        "Most re-runs completed, the whole suite passed, and one skill hurt a persona.",
+    ),
+    (
+        "Severian scored 87.3 against LCM-X at 79.5 on LoCoMo; BEAM was a tie; LongMemEval still running.",
+        "On LoCoMo, Severian beat LCM-X 87.3 to 79.5, with BEAM tied.",
+        "On LoCoMo, Severian beat LCM-X 87.3 to 79.5, and won LongMemEval too.",
+    ),
+    (
+        "quan opened a rig trial comparing Gemma-4-E4B-it with Qwen3-4B as the compressor.",
+        "Quan began a rig trial pitting Gemma-4-E4B-it against Qwen3-4B as compressor.",
+        "Quan's rig trial showed Qwen3-4B beating Gemma-4-E4B-it as compressor.",
+    ),
+    (
+        "The reviewer marked question four, about sharing, as option 2.",
+        "The reviewer answered the sharing question, number four, with option 2.",
+        "The reviewer skipped the sharing question because it was unclear.",
+    ),
+    (
+        "octacon fixed the flaky login test and pushed the branch for review.",
+        "Octacon repaired the flaky login test and sent the branch for review.",
+        "Octacon repaired the flaky login test and merged it straight to main.",
+    ),
+    (
+        "The redaction gate caught 17 of 17 secrets and leaked nothing on the held-out set.",
+        "On the held-out set the redaction gate stopped all 17 secrets with zero leaks.",
+        "On the held-out set the redaction gate stopped 16 of 17 secrets.",
+    ),
+    (
+        "wesker restarted the gateway at 09:40 and the backlog cleared.",
+        "Wesker restarted the gateway at 09:40, and the backlog cleared.",
+        "Wesker restarted the gateway at 09:40 after a memory leak, and the backlog cleared.",
+    ),
+    (
+        "The image test is done: two comic pages in two styles. I have not looked at the pictures myself.",
+        "The image test produced two comic pages in two styles, still unviewed by Kensei.",
+        "The image test produced two comic pages that Kensei checked and approved.",
+    ),
+    (
+        "sahil asked for a simpler explanation of the review.",
+        "Sahil wanted the review explained more simply.",
+        "Sahil rejected the review as wrong.",
+    ),
+]
+
+
+#: The cast the pipeline passes to its gate as allowed names (production does the same
+#: with the run's cast map): a character naming another character is judged by meaning.
+EVAL_CAST = ("Sahil", "Kensei", "Quan", "Octacon", "Wesker", "Severian")
+
+
 def run(gate: ClaimGate) -> dict[str, Any]:
     released_unsupported: list[dict[str, str]] = []
     rejected_supported: list[dict[str, str]] = []
-    for index, (evidence, grounded, invented) in enumerate(CASES, start=1):
+    for index, (evidence, grounded, invented) in enumerate(CASES + PARAPHRASE_CASES, start=1):
         good = gate.check(grounded, evidence, layer="caption")
         if not good.supported:
             rejected_supported.append(
@@ -205,8 +278,12 @@ def run(gate: ClaimGate) -> dict[str, Any]:
         bad = gate.check(invented, evidence, layer="caption")
         if bad.supported:
             released_unsupported.append({"case": index, "line": invented})
-    total = len(CASES)
+    total = len(CASES) + len(PARAPHRASE_CASES)
+    paraphrase_ids = set(range(len(CASES) + 1, total + 1))
     return {
+        "paraphrase_cases": len(PARAPHRASE_CASES),
+        "paraphrases_accepted": len(PARAPHRASE_CASES)
+        - sum(1 for row in rejected_supported if row["case"] in paraphrase_ids),
         "cases": total,
         "grounded_lines_passed": total - len(rejected_supported),
         "invented_lines_refused": total - len(released_unsupported),
@@ -240,7 +317,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         cached = CachedLLM(client, ModelCache(HERE / ".cache"), stage="grounding-eval")
 
-    report = run(ClaimGate(cached))
+    report = run(ClaimGate(cached, allow=EVAL_CAST))
     print(f"grounding eval: {report['cases']} cases (model pass = {args.llm == 'local'})")
     print(f"  grounded lines accepted : {report['grounded_lines_passed']}/{report['cases']}")
     print(f"  invented lines refused   : {report['invented_lines_refused']}/{report['cases']}")

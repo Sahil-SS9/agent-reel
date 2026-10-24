@@ -271,9 +271,13 @@ def test_the_eval_dataset_is_clean():
     from pathlib import Path
 
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "eval" / "grounding"))
-    from eval.grounding.run import CASES, run  # type: ignore[import-not-found]
+    from eval.grounding.run import CASES, PARAPHRASE_CASES, run  # type: ignore[import-not-found]
 
     assert len(CASES) >= 30
     report = run(ClaimGate())
     assert report["ok"], report["released_unsupported"]
-    assert report["invented_lines_refused"] == len(CASES)
+    # Every invented line is refused, paraphrase cases included.
+    assert report["invented_lines_refused"] == len(CASES) + len(PARAPHRASE_CASES)
+    # Without a model, near-quotes still pass; a paraphrase cannot (fail closed).
+    refused_ids = {row["case"] for row in report["rejected_supported"]}
+    assert not refused_ids & set(range(1, len(CASES) + 1))

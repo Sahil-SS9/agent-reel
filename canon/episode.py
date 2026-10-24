@@ -744,9 +744,12 @@ def plan_episode(
                 caption = trimmed
             else:
                 # Round 9: a dropped caption must say why, so yield is diagnosable.
-                why = caption_problem(
-                    trimmed, owner_texts=owner_texts, max_owner_quote=8
-                ) or "not supported by the panel evidence"
+                why = caption_problem(trimmed, owner_texts=owner_texts, max_owner_quote=8)
+                if not why and grounder is not None:
+                    # Round 10: name the real reason. r9's generic wording hid that the
+                    # deterministic term rule, not the model, refused these captions.
+                    why = grounder.check(trimmed, judge_text, layer="caption").reason
+                why = why or "not supported by the panel evidence"
                 report.reasons.append(f"{role} caption refused: {why}")
         if caption and (len(caption.split()) < 3 or looks_like_provenance(caption)):
             caption = ""

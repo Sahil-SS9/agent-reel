@@ -66,13 +66,74 @@ def register_cli(subparser: argparse.ArgumentParser) -> None:
     plan.add_argument("--llm-url", default=DEFAULT_LOCAL_URL, help="local route for redaction")
     plan.add_argument("--max-deep-events", type=int, default=90)
     plan.add_argument("--json", action="store_true", help="print the metrics JSON")
+    check = subs.add_parser(
+        "eval-grounding",
+        help="Run the caption/line grounding eval against the host model (reads no history)",
+    )
+    check.add_argument("--json-out", default="", help="where to write the eval report")
     subparser.set_defaults(func=reel_command)
+
+
+def _import_repo() -> None:
+    try:
+        import canon  # noqa: F401
+    except ImportError:  # directory install: the plugin dir is not on sys.path
+        here = Path(__file__).resolve().parents[2]
+        if str(here) not in sys.path:
+            sys.path.insert(0, str(here))
+
+
+def eval_grounding_command(args: argparse.Namespace) -> int:
+    """The grounding eval through the production judge (round 10).
+
+    The eval script's own model option is a local OpenAI-compatible route; the plugin's
+    judge is ctx.llm. Only this command measures the judge the pipeline actually uses.
+    Synthetic cases only: no history is read and no network call is made beyond ctx.llm.
+    """
+    llm = ctx_llm()
+    if llm is None:
+        print("ctx.llm is unavailable in this process; run this through `hermes reel eval-grounding`.")
+        return 1
+    _import_repo()
+    import importlib.util
+
+    from adapters.hermes.plugin_llm import PluginLLMClient
+    from canon.grounding import ClaimGate
+
+    path = Path(__file__).resolve().parents[2] / "eval" / "grounding" / "run.py"
+    spec = importlib.util.spec_from_file_location("reel_grounding_eval", path)
+    if spec is None or spec.loader is None:
+        print(f"grounding eval not found at {path}")
+        return 1
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    client = PluginLLMClient(llm)
+    report = module.run(ClaimGate(client, allow=module.EVAL_CAST))  # type: ignore[arg-type]
+    report["usage"] = client.usage()
+    print(f"grounding eval (judge: ctx.llm): {report['cases']} cases")
+    print(f"  grounded lines accepted : {report['grounded_lines_passed']}/{report['cases']}")
+    print(f"  paraphrases accepted    : {report['paraphrases_accepted']}/{report['paraphrase_cases']}")
+    print(f"  invented lines refused  : {report['invented_lines_refused']}/{report['cases']}")
+    for row in report["released_unsupported"]:
+        print(f"  RELEASED: case {row['case']}: {row['line']}")
+    for row in report["rejected_supported"]:
+        print(f"  refused true line: case {row['case']}: {row['line']} ({row['reason']})")
+    print(f"  judge calls: {client.calls}, max prompt tokens {client.max_prompt_tokens_per_call}")
+    print("GATE " + ("PASSED: 0 unsupported claims released" if report["ok"] else "FAILED"))
+    if args.json_out:
+        out = Path(args.json_out).expanduser()
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(report, indent=1, sort_keys=True), encoding="utf-8")
+    return 0 if report["ok"] else 1
 
 
 def reel_command(args: argparse.Namespace) -> int:
     action = getattr(args, "reel_action", None)
+    if action == "eval-grounding":
+        return eval_grounding_command(args)
     if action != "plan":
-        print("Usage: hermes reel plan --dry-run [--days N] [--episodes N]")
+        print("Usage: hermes reel plan --dry-run [--days N] [--episodes N] | hermes reel eval-grounding")
         return 2
     if not getattr(args, "dry_run", False):
         print("This command only plans: pass --dry-run.")

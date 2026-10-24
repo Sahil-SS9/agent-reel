@@ -274,6 +274,8 @@ OUTCOME_WORDS = (
     "restored", "throttled", "crashed", "timed out", "timeout",
 )
 _PROPER_RE = re.compile(r"\b(?:[A-Z][a-z]{1,20})(?:\s+[A-Z][a-z]{1,20}){0,2}\b")
+#: An acronym or a model/version code (GGUF, LCM-X, Q3, E4B): as specific as a name.
+_ACRONYM_RE = re.compile(r"\b[A-Z][A-Z0-9]{1,}(?:-[A-Z0-9]+)*\b")
 _TECHNICAL_RE = re.compile(r"[A-Za-z0-9_]*[_./][A-Za-z0-9_./]*")
 
 
@@ -333,6 +335,11 @@ def extract_claims(line: str, *, allow: Iterable[str] = ()) -> tuple[Claim, ...]
             continue
         # A capitalised first word is a sentence start, not a claim.
         if match.start() == 0 and len(token.split()) == 1:
+            continue
+        add("name", token)
+    for match in _ACRONYM_RE.finditer(line):
+        token = match.group(0)
+        if token.lower() in allowed or token.isdigit():
             continue
         add("name", token)
     return tuple(claims)
@@ -401,6 +408,25 @@ class ClaimGate:
         "result the evidence does not mention is NOT supported."
     )
 
+    #: Captions are narration, so they are judged as facts. Paraphrase is expected; the
+    #: judge is told which words are not in the evidence so it looks at exactly those.
+    CAPTION_PROMPT = (
+        "You check one narrator caption of a comic against the evidence it cites. "
+        'Answer JSON only: {"supported": true|false, "unbacked": ["..."]}. '
+        "Rewording, synonyms and summarising are fine. The caption is supported only if "
+        "everything it states - who did it, what happened, why, when, a number, a name, "
+        "an outcome, a tool - is stated or directly implied by the evidence. "
+        "terms_not_in_evidence lists caption words that do not appear in the evidence: "
+        "for each, decide whether it is a rewording of something the evidence says or a "
+        "new fact. A wrong actor, a flipped outcome, an added cause, an added time of day "
+        "or any detail the evidence does not give makes the caption NOT supported. When "
+        "unsure, answer false."
+    )
+
+    #: With a model, a caption must share at least this much vocabulary with its
+    #: evidence before the model is asked; below it the caption is about something else.
+    MIN_CAPTION_OVERLAP = 0.5
+
     def __init__(
         self,
         llm: CachedLLM | None = None,
@@ -428,12 +454,22 @@ class ClaimGate:
             detail = ", ".join(f"{claim.kind}:{claim.text}" for claim in report.unbacked[:4])
             return ClaimVerdict(False, f"unbacked {detail}", report)
 
+        terms = None
         if layer == "caption":
             terms = check_terms(line, evidence_text, allow=self.allow)
-            if terms.overlap < 1.0:
+            if terms.invented_numbers:
+                return ClaimVerdict(
+                    False, "invented numbers: " + ", ".join(terms.invented_numbers[:4]), report
+                )
+            # Round 10: without a model the term rule is the only judge, so it is
+            # absolute. With a model it is a relevance floor; the model decides whether
+            # the remaining words are rewording or new facts. Demanding full overlap with
+            # a model refused every paraphrase before the model was ever asked (r9).
+            required = 1.0 if self.llm is None else self.MIN_CAPTION_OVERLAP
+            if terms.overlap < required:
                 return ClaimVerdict(
                     False,
-                    "caption states something the evidence does not: "
+                    f"caption term overlap {terms.overlap:.0%} below {required:.0%}: "
                     + ", ".join(terms.invented[:4]),
                     report,
                 )
@@ -445,14 +481,17 @@ class ClaimGate:
             if layer == "dialogue" and report.needs_model and strict:
                 return ClaimVerdict(False, "cause/outcome needs a model to verify", report)
             return ClaimVerdict(True, "claims clean (no model available)", report)
+        payload: dict[str, Any] = {
+            "line": line,
+            "evidence": (evidence_text or "")[:4000],
+            "claims": [claim.as_dict() for claim in report.claims],
+        }
+        if terms is not None:
+            payload["terms_not_in_evidence"] = list(terms.invented)
         try:
             response = self.llm.complete_json(
-                prompt=self.PROMPT,
-                payload={
-                    "line": line,
-                    "evidence": (evidence_text or "")[:4000],
-                    "claims": [claim.as_dict() for claim in report.claims],
-                },
+                prompt=self.CAPTION_PROMPT if layer == "caption" else self.PROMPT,
+                payload=payload,
                 schema_hint={"supported": "bool", "unbacked": ["string"]},
                 stage="grounding",
             )

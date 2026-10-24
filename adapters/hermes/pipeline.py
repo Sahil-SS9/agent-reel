@@ -644,7 +644,18 @@ def run_pipeline(
                 skipped.append({"key": candidate.key, "reason": str(refused)})
                 continue
             if len(episode_ir.panels) < 3:
-                skipped.append({"key": candidate.key, "reason": "fewer than three panels"})
+                # Round 9: a refusal must say why in terms a human can agree with.
+                why = "; ".join(episode_ir.grounding.get("reasons", [])[-3:])
+                skipped.append(
+                    {
+                        "key": candidate.key,
+                        "reason": (
+                            f"fewer than three panels ({len(episode_ir.panels)} kept"
+                            + (f"; {why}" if why else "")
+                            + ")"
+                        ),
+                    }
+                )
                 continue
             episode_ir = apply_to_ir(episode_ir, alias_book)
             stray = masks_in(markdown_of(episode_ir))

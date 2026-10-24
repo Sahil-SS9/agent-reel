@@ -17,7 +17,7 @@ import argparse
 import json
 import shutil
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -43,6 +43,7 @@ def register_render_cli(subs: Any) -> None:
     render.add_argument("--retries", type=int, default=1, help="regenerations per failed panel")
     render.add_argument("--public", action="store_true", help="public mode: real people need consent")
     render.add_argument("--allow-untested-style", action="store_true")
+    render.add_argument("--literal", action="store_true", help="no director: draw what literally happened")
     render.add_argument("--assets-dir", default="", help="user styles/kits/approvals (default: plugin data dir)")
 
     kit = subs.add_parser("kit", help="List, add or approve character kits")
@@ -137,6 +138,62 @@ def kit_command(args: argparse.Namespace, default_dir: Callable[[], Path]) -> in
     return 2
 
 
+def _story_text(plan_dir: Path, episode: int, ir: Mapping[str, Any]) -> str:
+    """Post-gate text the director may read: the episode's facts and its own words."""
+    parts: list[str] = [str(ir.get("logline", ""))]
+    trace = plan_dir / f"episode-{episode}-trace.json"
+    if trace.is_file():
+        try:
+            data = json.loads(trace.read_text(encoding="utf-8"))
+            parts += [str(f.get("sentence", "")) for f in data.get("facts", [])]
+        except (OSError, json.JSONDecodeError):
+            pass
+    for panel in ir.get("panels", []) or []:
+        parts.append(str(panel.get("caption", "")))
+        parts += [str(l.get("text", "")) for l in panel.get("lines", [])]
+    return "\n".join(p for p in parts if p.strip())
+
+
+def _villain_sheet(treatment: Any, style: Any, kits: Mapping[str, Any], renderer: Any, root: Path, raw_dir: Path, report: Any) -> Path | None:
+    """One reference sheet per villain and style, made once and reused (V3).
+
+    Villains are fictional creatures, never people, so no likeness approval applies. The
+    sheet is cached under the plugin data dir and listed in the render output for review.
+    """
+    import re
+
+    from canon.panel_prompt import PanelRequest
+
+    slug = re.sub(r"[^a-z0-9]+", "-", treatment.villain_name.lower()).strip("-") or "villain"
+    target = root / "kits" / f"villain-{slug}" / f"{style.key}.png"
+    if target.is_file():
+        return target
+    builtin = kits.get(slug) or kits.get(slug.removeprefix("the-"))
+    if builtin is not None and style.key in builtin.sheets and builtin.sheets[style.key].is_file():
+        return builtin.sheets[style.key]
+    style_ref = next((ref for ref in style.refs if Path(ref).is_file()), None)
+    prompt = (
+        f"Character reference sheet of a comic villain: {treatment.villain_look}. "
+        "Front view, three-quarter view and side view, plus three expressions, on a plain "
+        "light background. A creature or force, not a human. "
+        f"{style.prompt_block} Match the art style of the reference sheet exactly. "
+        f"{style.negative_block}"
+    )
+    request = PanelRequest(panel_id=f"villain-{slug}", prompt=prompt,
+                           references=(Path(style_ref),) if style_ref else (), cast=(), positions={}, aspect="landscape")
+    produced = renderer.render_one(request, raw_dir, report)
+    if produced is None:
+        return None
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(produced, target)
+    (target.parent / "kit.json").write_text(json.dumps({
+        "name": treatment.villain_name, "role": "villain", "description": treatment.villain_look,
+        "sheets": {style.key: target.name}, "real_person": False, "generated": True,
+        "licence": "generated for this project; fictional",
+    }, indent=1) + "\n", encoding="utf-8")
+    return target
+
+
 def render_command(args: argparse.Namespace, *, ctx: Any, default_dir: Callable[[], Path]) -> int:
     from adapters.hermes.images import host_generator
     from adapters.hermes.vision import VisionError, host_vision
@@ -190,18 +247,44 @@ def render_command(args: argparse.Namespace, *, ctx: Any, default_dir: Callable[
             print(f"  - {problem}")
         return 1
 
-    requests, prompt_problems = build_episode_requests(ir, style=style, kits=kits)
+    out = Path(args.out).expanduser() if args.out else plan_dir / f"render-{args.episode}-{style.key}"
+    raw_dir = out / "raw"
+    renderer = PanelRenderer(host_generator(dispatch), cache_dir=root / "cache" / "images", budget=args.budget)
+    report = RenderReport()
+
+    # V1/V3: the director decides how each panel looks (villain, world, shot, angle). The
+    # words are untouched. Without a model, a rule-based treatment is used.
+    treatment = None
+    villain = None
+    if not getattr(args, "literal", False):
+        from canon.director import direct
+
+        story_text = _story_text(plan_dir, args.episode, ir)
+        llm = getattr(ctx, "llm", None)
+        complete_json = None
+        if llm is not None:
+            from adapters.hermes.plugin_llm import PluginLLMClient
+
+            complete_json = PluginLLMClient(llm).complete_json
+        treatment = direct(ir, story_text=story_text, complete_json=complete_json)
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "treatment.json").write_text(json.dumps(treatment.as_dict(), indent=1) + "\n", encoding="utf-8")
+        sheet = _villain_sheet(treatment, style, kits, renderer, root, raw_dir, report)
+        if sheet is not None:
+            villain = (treatment.villain_name, treatment.villain_look, sheet)
+        else:
+            print(f"warning: no sheet for villain {treatment.villain_name!r}; panels drawn without it")
+
+    requests, prompt_problems = build_episode_requests(ir, style=style, kits=kits, treatment=treatment, villain=villain)
     if prompt_problems:
         for problem in prompt_problems:
             print(f"  - {problem}")
         return 1
 
-    out = Path(args.out).expanduser() if args.out else plan_dir / f"render-{args.episode}-{style.key}"
-    raw_dir = out / "raw"
-    renderer = PanelRenderer(host_generator(dispatch), cache_dir=root / "cache" / "images", budget=args.budget)
     ask = host_vision(dispatch)
-    report = RenderReport()
     descriptions = {name: getattr(_kit_for(name, kits), "description", "") for name in cast}
+    if villain is not None:
+        descriptions[villain[0]] = f"a villain creature: {villain[1]} (not a person)"
     panels_by_id = {p.get("id"): p for p in ir.get("panels", [])}
     checks: list[dict[str, Any]] = []
     lettered: list[Image.Image] = []
@@ -215,9 +298,11 @@ def render_command(args: argparse.Namespace, *, ctx: Any, default_dir: Callable[
                 break
             try:
                 answer = ask(path, check_question(list(request.cast), descriptions))
+                speakers = [str(l.get("speaker")) for l in panels_by_id.get(request.panel_id, {}).get("lines", [])]
                 check = interpret(
                     request.panel_id, list(request.cast), answer,
                     tighten=lambda name, p=path: ask(p, TIGHT_QUESTION.format(name=name)),
+                    require_heads=speakers,
                 )
             except VisionError as exc:
                 # The check could not run. That says nothing about the panel, so it is not

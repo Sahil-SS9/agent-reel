@@ -88,7 +88,10 @@ def build_panel_request(
     style: StyleCard,
     kits: Mapping[str, CharacterKit],
     aspect: str = "landscape",
+    treatment: Any = None,
+    villain: Any = None,
 ) -> PanelRequest:
+    """``treatment``: a canon.director.PanelTreatment (V1); ``villain``: (name, look, sheet path)."""
     cast = staging_order(panel)
     if len(cast) > len(POSITIONS):
         raise PromptError(f"panel {panel.get('id')} has {len(cast)} characters; at most {len(POSITIONS)}")
@@ -116,20 +119,40 @@ def build_panel_request(
         for index, (name, _kit) in enumerate(resolved)
     )
 
-    shot = SHOT_WORDS.get(str(panel.get("shot", "")), "Medium shot")
-    setting = describe_setting(str(panel.get("setting", "")))
     caption = str(panel.get("caption", "")).strip()
-    parts = [f"{shot}, {setting}. {SAME_PLACE}"]
+    if treatment is not None:
+        from canon.director import ANGLE_WORDS, SHOT_WORDS as DIRECTOR_SHOTS
+
+        shot = f"{DIRECTOR_SHOTS.get(treatment.shot, 'Medium shot')}, {ANGLE_WORDS.get(treatment.angle, 'eye-level camera')}"
+        parts = [f"{shot}. Location: {treatment.location}. All panels of this episode share this world."]
+    else:
+        shot = SHOT_WORDS.get(str(panel.get("shot", "")), "Medium shot")
+        setting = describe_setting(str(panel.get("setting", "")))
+        parts = [f"{shot}, {setting}. {SAME_PLACE}"]
     if staging_bits:
         parts.append("STAGING: " + "; ".join(staging_bits) + ".")
     else:
         parts.append("STAGING: no characters; an empty scene.")
+    villain_shown = (
+        treatment is not None and villain is not None and treatment.villain_presence != "absent"
+    )
+    if treatment is not None:
+        parts.append(f"ACTION: {treatment.action}.")
+        parts.append("Dynamic comic-book composition, dramatic lighting, cinematic energy.")
     if caption:
-        parts.append(f"The moment this panel shows: {caption}")
-    if resolved:
+        parts.append(f"The real event behind this panel (for mood only, never write it): {caption}")
+    if villain_shown:
+        name, look, sheet = villain
+        presence = {"lurking": "half-hidden in the shadows", "attacking": "attacking in full view",
+                    "defeated": "defeated, breaking apart"}.get(treatment.villain_presence, "present")
+        parts.append(f"VILLAIN: {name.upper()} ({look}), {presence}.")
+        references = references + (Path(sheet),)
+        model_line += f", {name.upper()} is exactly as in the {ORDINALS[len(resolved)]} reference sheet"
+    if resolved or villain_shown:
+        extra = " Draw no other people." if resolved else ""
         parts.append(
             f"Characters: {model_line} - keep everyone on-model (face, hair, outfit, colours, "
-            "proportions). Draw no other people."
+            f"proportions).{extra}"
         )
     parts.append(style.prompt_block)
     if style.staging_rules:
@@ -139,21 +162,27 @@ def build_panel_request(
         panel_id=str(panel.get("id", "")),
         prompt=" ".join(part.strip() for part in parts if part.strip()),
         references=references,
-        cast=tuple(name for name, _kit in resolved),
+        cast=tuple(name for name, _kit in resolved) + ((villain[0],) if villain_shown else ()),
         positions=positions,
         aspect=aspect,
     )
 
 
 def build_episode_requests(
-    ir: Mapping[str, Any], *, style: StyleCard, kits: Mapping[str, CharacterKit]
+    ir: Mapping[str, Any],
+    *,
+    style: StyleCard,
+    kits: Mapping[str, CharacterKit],
+    treatment: Any = None,
+    villain: Any = None,
 ) -> tuple[list[PanelRequest], list[str]]:
     """Requests for every panel, plus the reasons any panel could not be prompted."""
     requests: list[PanelRequest] = []
     problems: list[str] = []
     for panel in ir.get("panels", []) or []:
+        item = treatment.panels.get(str(panel.get("id"))) if treatment is not None else None
         try:
-            requests.append(build_panel_request(panel, style=style, kits=kits))
+            requests.append(build_panel_request(panel, style=style, kits=kits, treatment=item, villain=villain))
         except PromptError as exc:
             problems.append(str(exc))
     return requests, problems

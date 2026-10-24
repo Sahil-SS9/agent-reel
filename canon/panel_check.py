@@ -102,7 +102,9 @@ def interpret(
     answer: Mapping[str, Any],
     *,
     tighten: Callable[[str], Any] | None = None,
+    require_heads: Sequence[str] | None = None,
 ) -> PanelCheck:
+    """``require_heads``: who needs a head box (the speakers); default: the whole cast."""
     check = PanelCheck(panel_id=panel_id)
     raw_on_model = answer.get("on_model")
     on_model: Mapping[str, Any] = raw_on_model if isinstance(raw_on_model, dict) else {}
@@ -126,8 +128,11 @@ def interpret(
     raw_heads = answer.get("heads")
     heads: Mapping[str, Any] = raw_heads if isinstance(raw_heads, dict) else {}
     heads_lower = {str(k).lower(): v for k, v in heads.items()}
+    needed = {n.lower() for n in (require_heads if require_heads is not None else cast)}
     for name in cast:
         box = _box(heads_lower.get(name.lower()))
+        if box is None and name.lower() not in needed:
+            continue
         if box is not None and area(box) > COARSE_HEAD_AREA and tighten is not None:
             tight = tighten(name)
             tight_box = _box((tight or {}).get("head")) if isinstance(tight, dict) else None

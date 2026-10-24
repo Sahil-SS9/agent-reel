@@ -829,8 +829,10 @@ def plan_episode(
     if not cliffhanger and panels:
         supported, why = _ending_supported(panels, facts, getattr(brief, "outcome", "") or "")
         if not supported:
+            kept = len(panels)
+            detail = "; ".join(report.reasons[-2:]) if report.reasons else "no reasons"
             raise EpisodeRefused(
-                f"finished thread with no visible outcome ({why})"
+                f"finished thread with no visible outcome ({why}; {kept} panel(s) kept: {detail})"
             )
     if cliffhanger and panels:
         last = panels[-1]

@@ -28,10 +28,10 @@ from canon.events import (
 )
 from canon.gate import GatedEvent
 
-#: Short by construction: a fact must not read as a quote of the owner's message
-#: (the caption policy refuses an owner echo over eight words).
-MAX_OBJECT_WORDS = 7
-MAX_RESULT_WORDS = 8
+#: Facts are evidence, not page text (round 8): they keep the names and numbers a caption
+#: may legitimately use. The caption itself is short because the writer writes it.
+MAX_OBJECT_WORDS = 24
+MAX_RESULT_WORDS = 24
 
 _NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
 

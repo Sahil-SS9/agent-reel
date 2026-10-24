@@ -156,6 +156,9 @@ def test_a_rejected_caption_is_dropped_rather_than_repaired():
     assert offered not in {panel.caption for panel in ir.panels}
     caption_checks = [call for call in grounder.calls if call[2] == "caption"]
     assert caption_checks
-    # the judge text is the fact list plus the panel's own evidence (round 8 union)
+    # the judge text is the fact list plus the panel's own evidence (round 8 union);
+    # since r10c each fact is its own blank-line-separated block.
     for _text, evidence, _layer in caption_checks:
-        assert facts_text(facts) in evidence
+        for fact in facts:
+            if fact.sentence:
+                assert fact.sentence in evidence

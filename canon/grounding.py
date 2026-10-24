@@ -54,16 +54,45 @@ REGISTER = frozenset(
 _NUMBER_RE = re.compile(r"\b\d[\d,.:]*\b")
 _TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z'\-]+|\d[\d,.]*")
 _THOUSANDS = re.compile(r"(?<=\d),(?=\d{3}(?:\D|$))")
+#: A figure as a whole token (r10c / QAR10-02): keeps a leading minus sign, a version
+#: prefix ("v14") and an ordinal suffix ("14th"), so -4/4, 14th/4th and v14/v4 differ.
+#: A digit inside a hyphenated name ("Gemma-4-E4B") is part of that name, not a figure.
+_FIGURE_RE = re.compile(
+    r"(?<![\w\-.])(?:-(?=\d))?[vV]?\d[\d,.:]*(?:st|nd|rd|th)?(?![\w\-])"
+)
 
 
 def canonical_number(token: str) -> str:
     """One spelling per figure: no trailing punctuation, no thousands separators."""
-    return _THOUSANDS.sub("", token.strip().rstrip(".,:"))
+    text = token.strip().rstrip(".,:")
+    return _THOUSANDS.sub("", text).lower()
+
+
+def figures_in(text: str) -> list[str]:
+    """The figures in ``text`` as written (trailing punctuation stripped)."""
+    return [match.group(0).rstrip(".,:") for match in _FIGURE_RE.finditer(text or "")]
 
 
 def number_tokens(text: str) -> set[str]:
     """Every complete figure in ``text`` (r10b / QAR10-02: never a substring)."""
-    return {canonical_number(match.group(0)) for match in _NUMBER_RE.finditer(text or "")}
+    return {canonical_number(token) for token in figures_in(text)}
+
+
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?;])\s+")
+
+
+def attribution_blocks(text: str) -> list[str]:
+    """Units within which an actor is bound to what it did (r10c / QAR10-01).
+
+    The planner separates cited events (and thread facts) with blank lines, so a block
+    is one event. Text without blank lines is split into sentences instead.
+    """
+    text = (text or "").strip()
+    if not text:
+        return []
+    if "\n\n" in text:
+        return [block.strip() for block in re.split(r"\n\s*\n", text) if block.strip()]
+    return [part.strip() for part in _SENTENCE_SPLIT.split(text) if part.strip()]
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,7 +173,7 @@ def check_terms(line: str, evidence_text: str, *, allow: Iterable[str] = ()) -> 
     supported = [term for term in checked if present(term)]
     invented = [term for term in checked if not present(term)]
 
-    line_numbers = [match.group(0) for match in _NUMBER_RE.finditer(line)]
+    line_numbers = figures_in(line)
     backed_numbers = number_tokens(evidence_text)
     invented_numbers = [
         number for number in line_numbers if canonical_number(number) not in backed_numbers
@@ -344,8 +373,8 @@ def extract_claims(line: str, *, allow: Iterable[str] = ()) -> tuple[Claim, ...]
     for word in OUTCOME_WORDS:
         if re.search(rf"\b{re.escape(word)}\b", lowered):
             add("outcome", word)
-    for match in _NUMBER_RE.finditer(line):
-        add("number", match.group(0))
+    for token in figures_in(line):
+        add("number", token)
     for match in _PROPER_RE.finditer(line):
         token = " ".join(match.group(0).split())
         if token.lower() in allowed or _TECHNICAL_RE.search(token):
@@ -461,7 +490,10 @@ class ClaimGate:
         #: Character names. They are legal vocabulary (allow), but a caption that names
         #: one is claiming that person was involved, so the name must be in the cited
         #: evidence (r10b / QAR10-01).
-        self.cast = tuple(name for name in cast if name and name.strip())
+        # r10c: a caller that only passes an allowlist still gets the actor check for the
+        # names in it (QAR10-01 failed for allow-only callers).
+        named = cast or (entry for entry in self.allow if str(entry)[:1].isupper())
+        self.cast = tuple(dict.fromkeys(str(name).strip() for name in named if str(name).strip()))
         self.max_quote_words = max_quote_words
         self.model_calls = 0
         self.failures = 0
@@ -482,16 +514,26 @@ class ClaimGate:
 
         terms = None
         if layer == "caption":
+            named = [
+                name for name in self.cast
+                if re.search(rf"\b{re.escape(name)}\b", line, re.IGNORECASE)
+            ]
             missing_cast = [
-                name
-                for name in self.cast
-                if re.search(rf"\b{re.escape(name)}\b", line)
-                and not re.search(rf"\b{re.escape(name)}\b", evidence_text or "", re.IGNORECASE)
+                name for name in named
+                if not re.search(rf"\b{re.escape(name)}\b", evidence_text or "", re.IGNORECASE)
             ]
             if missing_cast:
                 return ClaimVerdict(
                     False,
                     "unbacked actor " + ", ".join(missing_cast[:4]) + " (not in the cited evidence)",
+                    report,
+                )
+            unbound = self._unbound_actors(line, evidence_text, named)
+            if unbound:
+                return ClaimVerdict(
+                    False,
+                    "actor not bound to the action: " + ", ".join(unbound[:4])
+                    + " (no cited event names them doing it)",
                     report,
                 )
             terms = check_terms(line, evidence_text, allow=self.allow)
@@ -545,6 +587,40 @@ class ClaimGate:
             False, f"not entailed{(' (' + detail + ')') if detail else ''}", report,
             model_checked=True,
         )
+
+    def _unbound_actors(self, line: str, evidence_text: str, named: Sequence[str]) -> list[str]:
+        """Named actors with no evidence block that names them *and* shares the action.
+
+        r10c / QAR10-01: presence anywhere in the merged evidence let "Kensei leaves one
+        command" pass when only Octacon's event mentions the command. Each named actor
+        needs one block (one cited event, or one sentence) carrying both the name and at
+        least one of the caption's content words.
+        """
+        if not named:
+            return []
+        names_lower = {name.lower() for name in self.cast}
+        content = {
+            term[:6]
+            for term in content_terms(line, allow=())
+            if term not in names_lower and not any(term in n.lower().split() for n in self.cast)
+        }
+        if not content:
+            return []
+        blocks = attribution_blocks(evidence_text)
+        unbound: list[str] = []
+        for name in named:
+            pattern = re.compile(rf"\b{re.escape(name)}\b", re.IGNORECASE)
+            bound = False
+            for block in blocks:
+                if not pattern.search(block):
+                    continue
+                stems = {token.lower()[:6] for token in _TOKEN_RE.findall(block)}
+                if content & stems:
+                    bound = True
+                    break
+            if not bound:
+                unbound.append(name)
+        return unbound
 
     def quote_ok(self, text: str) -> bool:
         """A verbatim quote is grounded by construction, but a long one is lazy writing."""

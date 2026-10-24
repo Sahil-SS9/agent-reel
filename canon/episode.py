@@ -474,6 +474,32 @@ def _supporting_fact_ids(caption: str, facts: Sequence[Any]) -> tuple[str, ...]:
     return tuple(out)
 
 
+def _supporting_event_ids(caption: str, pool: Mapping[str, str]) -> tuple[str, ...]:
+    """Episode events whose own text directly states what the caption says (r10c).
+
+    QAR10-03: "not a single file was modified" cited two read-only instructions while
+    the event that actually said "No files were modified" sat in another panel. Any
+    event already cited in this episode whose text shares most of the caption's content
+    is cited as well.
+    """
+    stop = {"the", "and", "with", "that", "this", "from", "into", "wants", "sahil", "kensei"}
+
+    def words(text: str) -> set[str]:
+        return {
+            w.rstrip("s")[:6]
+            for w in re.findall(r"[a-z0-9]{4,}", (text or "").lower())
+            if w not in stop
+        }
+
+    mine = words(caption)
+    if len(mine) < 2:
+        return ()
+    need = max(2, (len(mine) + 1) // 2)
+    return tuple(
+        event_id for event_id, text in pool.items() if len(mine & words(text)) >= need
+    )
+
+
 def _policy_caption(
     spec: Mapping[str, Any],
     *,
@@ -578,8 +604,13 @@ def plan_episode(
     def _evidence_for(beat: Beat | None) -> str:
         if beat is None:
             return ""
-        chunks = [str(evidence_map.get(event_id, "")) for event_id in beat.event_ids]
-        return "\n".join(chunk for chunk in chunks if chunk)
+        # r10c: one blank-line-separated block per cited event, so an actor stays bound
+        # to what its own event says (attribution_blocks in canon.grounding).
+        chunks = [
+            re.sub(r"\n\s*\n", "\n", str(evidence_map.get(event_id, ""))).strip()
+            for event_id in beat.event_ids
+        ]
+        return "\n\n".join(chunk for chunk in chunks if chunk)
 
     actors_map = actors_by_event or {}
 
@@ -722,6 +753,14 @@ def plan_episode(
     panels: list[Panel] = []
     actors_map = actors_by_event or {}
 
+    # r10c / QAR10-03: every event cited anywhere in this episode, so a caption can also
+    # cite the event that states it directly even when that event anchors another panel.
+    episode_pool: dict[str, str] = {}
+    for _spec in panel_specs:
+        _beat = _spec.get("beat")
+        for _event_id in (tuple(_beat.event_ids) if _beat else ()):
+            episode_pool[_event_id] = str(evidence_map.get(_event_id, ""))
+
     for index, spec in enumerate(panel_specs, start=1):
         beat: Beat | None = spec["beat"]
         role = spec["role"]
@@ -735,8 +774,13 @@ def plan_episode(
         # that names a component or a figure from the source must not be called invented.
         # The union is stricter than the raw text alone about invented claims and no more
         # permissive: anything in neither source is still refused.
+        # r10c: each thread fact is its own block (one actor, one action) and each cited
+        # event is its own block, so actor/action binding can be checked per block.
+        fact_blocks = "\n\n".join(
+            line.strip() for line in str(facts_evidence or "").splitlines() if line.strip()
+        )
         judge_text = (
-            f"{facts_evidence}\n{evidence_text}".strip() if facts_evidence else evidence_text
+            f"{fact_blocks}\n\n{evidence_text}".strip() if fact_blocks else evidence_text
         )
         speakers_allowed = set(spec.get("speakers") or spec.get("actors") or ())
         written = dialogue.get(role, {})
@@ -871,7 +915,13 @@ def plan_episode(
                 label=_label(role, beat),
                 lines=tuple(lines),
                 caption_source_event_ids=(
-                    tuple(dict.fromkeys(event_ids + _supporting_fact_ids(caption, facts)))
+                    tuple(
+                        dict.fromkeys(
+                            event_ids
+                            + _supporting_fact_ids(caption, facts)
+                            + _supporting_event_ids(caption, episode_pool)
+                        )
+                    )
                     if caption
                     else ()
                 ),

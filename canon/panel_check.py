@@ -30,8 +30,16 @@ CHECK_QUESTION = (
     "each scripted character's head and face only. free = empty background where speech "
     "balloons can go without covering faces or key objects. keep_out = key objects or "
     "action that must stay visible. extra_people = people or characters drawn who are not "
-    "in the scripted list. text_in_image = any letters, words, numbers or speech bubbles "
-    "drawn in the art."
+    "in the scripted list. text_in_image = READABLE words or letters, speech bubbles or "
+    "captions drawn in the art; tiny unreadable interface or code squiggles on screens do not "
+    "count."
+)
+
+LETTER_QUESTION = (
+    "Answer with JSON only. This comic panel has speech balloons added. For each balloon, "
+    "say whether its tail points at the face or head of the character named here as its "
+    "speaker: {speakers}. Return {{\"misses\": [SPEAKER, ...]}} listing every speaker whose "
+    "balloon tail does NOT point at them, or an empty list."
 )
 
 TIGHT_QUESTION = (

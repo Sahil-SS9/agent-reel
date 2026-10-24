@@ -57,9 +57,13 @@ def compose(panels: Sequence[Image.Image], cols: int, title: str, footer: str = 
     title_font = ImageFont.truetype(str(TITLE_FONT), max(24, int(120 * scale)))
     small = ImageFont.truetype(str(BODY_FONT), max(14, int(32 * scale)))
     draw.text((width / 2, head / 2 + 10), title, font=title_font, fill="black", anchor="mm")
+    lone_last = cols > 1 and len(panels) % cols == 1
     for index, panel in enumerate(panels):
         r, c = divmod(index, cols)
         x, y = gap + c * (pw + gap), head + gap + r * (ph + gap)
+        if lone_last and index == len(panels) - 1:
+            # A single panel on the last row is centred, not left with a blank beside it.
+            x = (width - pw) // 2
         page.paste(panel.convert("RGB").resize((pw, ph)), (x, y))
         draw.rectangle([x, y, x + pw, y + ph], outline="black", width=max(3, int(8 * scale)))
     if footer:

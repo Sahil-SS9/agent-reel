@@ -143,7 +143,7 @@ def render_command(args: argparse.Namespace, *, ctx: Any, default_dir: Callable[
     from canon.assets import clear_to_render
     from canon.export import export_episode
     from canon.letterer import letter_panel
-    from canon.panel_check import TIGHT_QUESTION, check_question, interpret
+    from canon.panel_check import LETTER_QUESTION, TIGHT_QUESTION, check_question, interpret
     from canon.panel_prompt import build_episode_requests, episode_cast
     from canon.render import PanelRenderer, RenderReport, write_render_manifest
     from PIL import Image
@@ -248,6 +248,39 @@ def render_command(args: argparse.Namespace, *, ctx: Any, default_dir: Callable[
             caption=display_text(str(panel.get("caption", ""))),
             lines=[(speaker, display_text(text)) for speaker, text in lines],
         )
+        if lines and letter_report.balloons:
+            # Letterer self-check (bake-off r2): ask whether every tail points at its
+            # speaker; for any miss, re-ask that head tightly and letter once more.
+            speakers = ", ".join(sorted({speaker for speaker, _ in lines}))
+            try:
+                tmp = out / "raw" / f"{request.panel_id}-lettered-check.jpg"
+                image.save(tmp, quality=85)
+                misses = ask(tmp, LETTER_QUESTION.format(speakers=speakers)).get("misses") or []
+                tmp.unlink(missing_ok=True)
+            except VisionError:
+                misses = []
+            fixed_heads = dict(final_check.heads)
+            for name in [str(m) for m in misses if isinstance(m, str)]:
+                key = next((k for k in fixed_heads if k.lower() == name.lower()), name)
+                try:
+                    tight = ask(final_path, TIGHT_QUESTION.format(name=key))
+                    from canon.panel_check import _box
+
+                    box = _box(tight.get("head"))
+                    if box:
+                        fixed_heads[key] = box
+                except VisionError:
+                    pass
+            if misses:
+                image, letter_report = letter_panel(
+                    Image.open(final_path),
+                    heads=fixed_heads,
+                    free=final_check.free or [[0.05, 0.01, 0.95, 0.25]],
+                    keep_out=final_check.keep_out,
+                    caption=display_text(str(panel.get("caption", ""))),
+                    lines=[(speaker, display_text(text)) for speaker, text in lines],
+                )
+                checks[-1]["tail_misses_fixed"] = misses
         checks[-1]["lettering"] = letter_report.as_dict()
         if not letter_report.complete:
             flagged.append(f"{request.panel_id}: could not place {', '.join(letter_report.unplaced)}")

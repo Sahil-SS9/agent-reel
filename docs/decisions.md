@@ -36,3 +36,14 @@ Kanban card: t_ec1754fc.
 - P2: Built-in styles for V1: `anime-colour`, `ink-manga`, plus one more chosen by the builder from Sahil's style skills (Saga Noir, Ink & Ember, Baoyu Comic). Name it in the M2 report.
 - P3: The default original cast (non-Multiverse, licence-clean) is generated via the user's image source at `/reel setup`.
 - P4: Privacy default `private`. Public export requires every named entity to be approved, plus a clean redaction scan.
+
+
+## Owner decisions 23/10/26 (folded in at M2 start)
+
+| # | Decision | Effect |
+|---|----------|--------|
+| D7 (amended) | The schedule is **optional, daily or weekly**, chosen by the user. Still off until the user enables it. | M2: the automation blueprint offers both cadences. A daily strip uses the same arc rules, with a 24 h window. A quiet day produces no episode rather than filler. |
+| D9 (amended) | Hermes Multiverse characters **may be shown publicly** (owner approval). | Public mode may use Multiverse sheets. **Caveat:** most Multiverse characters depict real community members (e.g. teknium, nousgirl, 123mikeyd), and the repo NOTICE says inclusion is not a reuse licence. Sahil's own character is cleared by his decision. Before any **public** render, each other real person's consent should be recorded per character (an allowlist file). Private renders are unaffected. |
+| D12 | **Install into live Hermes is approved.** | KENSEI installs after the M2 audit passes: a plugin install into the default profile, verified with `hermes plugins doctor`. The weekly/daily blueprint stays disabled until Sahil enables it. |
+| D13 | **Public publication** = submission to the Hermes plugin catalog **and/or** a hosted community site. | Catalog submission is M3. The site is a separate product (below). |
+| D14 (follow-up product, not V1) | **Scrollback Reel Hub**: a hosted website where users publish their stories and series, with a news feed, following, likes and comments. | Needs its own grill and spec after M2. It is a step up from a plugin: accounts/login, storage, hosting cost, moderation and reporting, takedowns. Also UK Online Safety Act duties, because users post content and comment on each other's. The plugin's "publish" button would push a strip (already redaction-checked and owner-approved) to the Hub. Nothing is ever auto-posted. |

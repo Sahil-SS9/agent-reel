@@ -117,6 +117,9 @@ class PipelineConfig:
     days: float = 7.0
     since: float | None = None
     until: float | None = None
+    #: Smallest strip/chapter that may export (D7: a strip is 4-6 panels). Tests on the
+    #: tiny synthetic home lower it; production keeps the spec.
+    min_strip_panels: int = 4
     profiles: tuple[str, ...] | None = None
     format: str = "strip"
     season: int = 1
@@ -674,7 +677,7 @@ def run_pipeline(
                 skipped.append({"key": candidate.key, "reason": str(refused)})
                 continue
             # Round 10: D7 says a strip is 4-6 panels; three was below the spec.
-            min_panels = 4 if config.format == "strip" else 8
+            min_panels = config.min_strip_panels if config.format == "strip" else 8
             if len(episode_ir.panels) < min_panels:
                 # Round 9: a refusal must say why in terms a human can agree with.
                 why = "; ".join(episode_ir.grounding.get("reasons", [])[-3:])

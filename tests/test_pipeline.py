@@ -18,6 +18,8 @@ def _run(tmp_path: Path, *, data_dir: Path, **kwargs):
         snapshot_root=tmp_path / "snapshots",
         state_dir=tmp_path / "state",
         writer=kwargs.pop("writer", StubWriter()),
+        # The synthetic sessions are tiny; production keeps D7's four-panel minimum.
+        min_strip_panels=kwargs.pop("min_strip_panels", 3),
         **kwargs,
     )
     return run_pipeline(config)
@@ -176,3 +178,14 @@ def test_quarantine_is_reported_not_swallowed(hermes_env, tmp_path, monkeypatch)
     assert result.problems, "a blocked gate must surface as a problem"
     assert not result.ok
     assert result.ir is None
+
+
+def test_production_default_refuses_a_three_panel_strip(hermes_env, tmp_path):
+    """D7: a strip is 4-6 panels. The synthetic home yields three-panel strips, so with
+    the production default nothing may export and each refusal names the panel count."""
+    assert PipelineConfig(data_dir=tmp_path).min_strip_panels == 4
+    result = _run(tmp_path, data_dir=tmp_path / "data", min_strip_panels=4)
+    metrics = json.loads((tmp_path / "data" / "metrics.json").read_text())
+    assert not result.episodes
+    reasons = [row["reason"] for row in metrics["skipped_stories"]]
+    assert any(reason.startswith("fewer than 4 panels (3 kept") for reason in reasons)

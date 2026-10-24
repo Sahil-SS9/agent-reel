@@ -67,8 +67,17 @@ def test_every_ir_line_traces_to_a_real_event(hermes_env, tmp_path):
     ]
     # A caption-only strip is valid (R5-F1); when lines exist, every one carries its events.
     assert ids or all(panel["caption"] for panel in ir_json["panels"])
-    assert len(set(ids)) == len(set(ids) & known) or True
-    assert validate_ir(result.ir, known_event_ids=known) in ([], [])
+    # r10b: the old assertions here were vacuous (`or True`, and `known` built from the
+    # IR itself). The pipeline validates every episode against the real gated ids, so
+    # the honest check is that it reported no unresolved id, and that every caption
+    # carries ids of its own.
+    assert not [p for p in result.problems if "source event id" in p or "source_event_ids" in p]
+    assert all(
+        panel["caption_source_event_ids"] for panel in ir_json["panels"] if panel["caption"]
+    )
+    assert validate_ir(result.ir, known_event_ids=set(ids) | {
+        event_id for panel in ir_json["panels"] for event_id in panel["caption_source_event_ids"]
+    }) == []
 
 
 def test_a_second_run_is_byte_identical(hermes_env, tmp_path):

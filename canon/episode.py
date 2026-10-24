@@ -78,6 +78,9 @@ class Panel:
     lines: tuple[Line, ...]
     #: The date/role label, kept separate so the caption can carry the facts.
     label: str = ""
+    #: r10b / QAR10-03: the events the caption was judged against (the panel's own
+    #: cited events; the thread's fact list is recorded per episode in the trace file).
+    caption_source_event_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.shot not in SHOTS:
@@ -93,6 +96,7 @@ class Panel:
             "expression": self.expression,
             "setting": self.setting,
             "caption": self.caption,
+            "caption_source_event_ids": list(self.caption_source_event_ids),
             "label": self.label,
             "lines": [line.as_dict() for line in self.lines],
         }
@@ -844,6 +848,7 @@ def plan_episode(
                 caption=caption,
                 label=_label(role, beat),
                 lines=tuple(lines),
+                caption_source_event_ids=event_ids if caption else (),
             )
         )
 
@@ -895,6 +900,11 @@ def validate_ir(ir: EpisodeIR, *, known_event_ids: Iterable[str]) -> list[str]:
         # A panel is carried by its fact caption, its dialogue, or both (round 3).
         if not panel.lines and not panel.caption:
             problems.append(f"panel {panel.id} has neither a caption nor a line")
+        if panel.caption and not panel.caption_source_event_ids:
+            problems.append(f"caption in {panel.id} has no source_event_ids")
+        for event_id in panel.caption_source_event_ids:
+            if event_id not in known:
+                problems.append(f"{panel.id}: unknown caption source event id {event_id}")
         for line in panel.lines:
             if not line.source_event_ids:
                 problems.append(f"line by {line.speaker} in {panel.id} has no source_event_ids")

@@ -53,6 +53,17 @@ REGISTER = frozenset(
 
 _NUMBER_RE = re.compile(r"\b\d[\d,.:]*\b")
 _TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z'\-]+|\d[\d,.]*")
+_THOUSANDS = re.compile(r"(?<=\d),(?=\d{3}(?:\D|$))")
+
+
+def canonical_number(token: str) -> str:
+    """One spelling per figure: no trailing punctuation, no thousands separators."""
+    return _THOUSANDS.sub("", token.strip().rstrip(".,:"))
+
+
+def number_tokens(text: str) -> set[str]:
+    """Every complete figure in ``text`` (r10b / QAR10-02: never a substring)."""
+    return {canonical_number(match.group(0)) for match in _NUMBER_RE.finditer(text or "")}
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,6 +110,9 @@ def content_terms(line: str, *, allow: Iterable[str] = ()) -> list[str]:
         lowered = token.lower().strip("'-")
         if len(lowered) < 4:
             continue
+        if lowered[0].isdigit():
+            # Figures are checked as complete numbers by the number rule (r10b).
+            continue
         if lowered in allowed:
             continue
         terms.append(lowered)
@@ -131,7 +145,10 @@ def check_terms(line: str, evidence_text: str, *, allow: Iterable[str] = ()) -> 
     invented = [term for term in checked if not present(term)]
 
     line_numbers = [match.group(0) for match in _NUMBER_RE.finditer(line)]
-    invented_numbers = [number for number in line_numbers if number not in haystack]
+    backed_numbers = number_tokens(evidence_text)
+    invented_numbers = [
+        number for number in line_numbers if canonical_number(number) not in backed_numbers
+    ]
     return TermReport(
         checked=tuple(checked),
         supported=tuple(supported),
@@ -349,8 +366,12 @@ def check_claims(line: str, evidence_text: str, *, allow: Iterable[str] = ()) ->
     """Names and numbers must appear in the evidence; causes and outcomes need a model."""
     haystack = " ".join((evidence_text or "").lower().split())
     claims = extract_claims(line, allow=allow)
+    figures = number_tokens(evidence_text)
 
     def backed(claim: Claim) -> bool:
+        if claim.kind == "number":
+            # QAR10-02: a complete figure, never a substring ("4" is not in "14").
+            return canonical_number(claim.text) in figures
         needle = claim.text.lower()
         if needle in haystack:
             return True
@@ -432,10 +453,15 @@ class ClaimGate:
         llm: CachedLLM | None = None,
         *,
         allow: Iterable[str] = (),
+        cast: Iterable[str] = (),
         max_quote_words: int = 12,
     ) -> None:
         self.llm = llm
         self.allow = tuple(allow)
+        #: Character names. They are legal vocabulary (allow), but a caption that names
+        #: one is claiming that person was involved, so the name must be in the cited
+        #: evidence (r10b / QAR10-01).
+        self.cast = tuple(name for name in cast if name and name.strip())
         self.max_quote_words = max_quote_words
         self.model_calls = 0
         self.failures = 0
@@ -456,6 +482,18 @@ class ClaimGate:
 
         terms = None
         if layer == "caption":
+            missing_cast = [
+                name
+                for name in self.cast
+                if re.search(rf"\b{re.escape(name)}\b", line)
+                and not re.search(rf"\b{re.escape(name)}\b", evidence_text or "", re.IGNORECASE)
+            ]
+            if missing_cast:
+                return ClaimVerdict(
+                    False,
+                    "unbacked actor " + ", ".join(missing_cast[:4]) + " (not in the cited evidence)",
+                    report,
+                )
             terms = check_terms(line, evidence_text, allow=self.allow)
             if terms.invented_numbers:
                 return ClaimVerdict(

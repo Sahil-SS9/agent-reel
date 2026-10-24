@@ -275,6 +275,48 @@ def _text_for(source: HermesHistorySource, event: Event, limit: int) -> str | No
 # --------------------------------------------------------------------------- #
 
 
+#: Per-event evidence kept in a trace file: enough to check a caption, bounded so the
+#: evidence folder does not become a copy of the history.
+TRACE_EVIDENCE_CHARS = 1200
+
+
+def episode_trace(
+    ir: Any,
+    arc: Any,
+    story_beats: Sequence[Any],
+    facts: Sequence[Mapping[str, Any]],
+    evidence_map: Mapping[str, str],
+    regate: Any = None,
+) -> dict[str, Any]:
+    """Everything needed to follow a caption or line back to its gated source (QAR10-03).
+
+    panel -> caption_source_event_ids / line source_event_ids -> the gated evidence text
+    of those events, plus the arc and beats the episode was planned from and the thread
+    fact list the captions were also judged against.
+    """
+    cited: list[str] = []
+    for panel in ir.panels:
+        cited.extend(panel.caption_source_event_ids)
+        for line in panel.lines:
+            cited.extend(line.source_event_ids)
+    cited = list(dict.fromkeys(cited))
+    return {
+        "episode_id": ir.episode_id,
+        "arc": arc.as_dict(),
+        "beats": [beat.as_dict() for beat in story_beats],
+        "facts": list(facts),
+        "evidence": {
+            # A cut can leave a fragment the evidence writer reads as a secret, so the
+            # cut text is re-gated (same lesson as the story rows in metrics).
+            event_id: (regate or (lambda text: text))(
+                str(evidence_map.get(event_id, ""))[:TRACE_EVIDENCE_CHARS]
+            )
+            for event_id in cited
+        },
+        "judged_against": "panel evidence (these ids) + the thread facts listed here",
+    }
+
+
 def _thread_for_candidate(candidate: Any, by_event: Mapping[str, Any]) -> Any:
     """The thread holding most of a story candidate's events, or None."""
     counts: dict[str, int] = {}
@@ -512,6 +554,9 @@ def run_pipeline(
         grounder = ClaimGate(
             writer_cached if config.use_model else None,
             allow=tuple(cast_map.values()) + tuple(config.allowlist) + (config.hero,),
+            # r10b / QAR10-01: a caption naming a character must find that name in its
+            # cited evidence; the allowlist only makes the name legal vocabulary.
+            cast=tuple(dict.fromkeys(tuple(cast_map.values()) + (config.hero,))),
         )
         # Who did what: only an actor of a cited event may speak its panel (R2-F2).
         actors_by_event: dict[str, str] = {}
@@ -725,6 +770,8 @@ def run_pipeline(
                     "brief": brief.as_dict(),
                     "facts": [fact.as_dict() for fact in thread_facts],
                     "ir": episode_ir,
+                    "arc": arc,
+                    "story_beats": tuple(story_beats or ()),
                 }
             )
             used_anchors |= anchor_events
@@ -744,7 +791,8 @@ def run_pipeline(
             result.timings["episode_s"] = round(time.time() - started, 2)
             result.timings["writer"] = "none"
         result.episodes = [
-            {key: value for key, value in row.items() if key != "ir"} for row in episodes
+            {key: value for key, value in row.items() if key not in {"ir", "arc", "story_beats"}}
+            for row in episodes
         ]
         if ir is not None:
             result.grounding = dict(ir.grounding)
@@ -768,7 +816,11 @@ def run_pipeline(
             result.problems.extend([])
             markdown = ""
         else:
-            result.problems.extend(validate_ir(ir, known_event_ids=known))
+            # r10b / QAR10-03: every episode is validated, not only the first, and a
+            # caption must carry resolvable source ids like a line does.
+            for row in episodes:
+                for problem in validate_ir(row["ir"], known_event_ids=known):
+                    result.problems.append(f"episode {row['number']}: {problem}")
             markdown = render_script_markdown(ir)
         hits = leakscan.scan_text(markdown)
         if hits:
@@ -825,6 +877,18 @@ def run_pipeline(
                 write_text(
                     config.data_dir / f"episode-{row['number']}-script.md",
                     render_script_markdown(episode_ir),
+                    gate,
+                )
+                write_json(
+                    config.data_dir / f"episode-{row['number']}-trace.json",
+                    episode_trace(
+                        episode_ir,
+                        row["arc"],
+                        row["story_beats"],
+                        row["facts"],
+                        evidence_map,
+                        regate=lambda text: gate.redact_text(text)[0],
+                    ),
                     gate,
                 )
             write_json(

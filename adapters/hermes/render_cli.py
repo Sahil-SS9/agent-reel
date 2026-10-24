@@ -145,6 +145,15 @@ def render_command(args: argparse.Namespace, *, ctx: Any, default_dir: Callable[
     if dispatch is None:
         print("ctx.dispatch_tool is unavailable; run this through `hermes reel render`.")
         return 1
+    # A CLI subcommand runs before the agent loads its tools, so the registry is empty and
+    # every dispatch answers "Unknown tool". ``tools.registry`` is a documented public plugin
+    # surface; discovery is idempotent.
+    try:
+        from tools.registry import discover_builtin_tools
+
+        discover_builtin_tools()
+    except Exception as exc:  # noqa: BLE001 - report, then let dispatch fail visibly
+        print(f"warning: could not load the host tools ({type(exc).__name__}: {exc})")
     plan_dir = Path(args.plan_dir).expanduser()
     ir_path = plan_dir / f"script-ir-{args.episode}.json"
     if not ir_path.is_file():

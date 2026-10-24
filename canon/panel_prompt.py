@@ -24,6 +24,27 @@ ORDINALS = ("first", "second", "third", "fourth", "fifth", "sixth")
 SHOT_WORDS = {"wide": "Establishing wide shot", "medium": "Medium shot", "close": "Close-up"}
 
 
+#: The IR names settings loosely ("the rig at night"); the image model then invents a
+#: new location every panel (first M2 render: a waterfront, a mountain hangar, a boardroom).
+#: These pin each named setting to one concrete place, and every panel says it is the same
+#: place, so the strip reads as one scene.
+SETTING_DESCRIPTIONS = {
+    "the rig": "the owner's home office: one desk with several glowing monitors, a tower PC and a small server rack, cables, a desk lamp",
+    "the terminal glow": "a close view of a glowing terminal screen on the desk in the same home office",
+}
+SAME_PLACE = "Every panel of this episode is set in this same room."
+
+
+def describe_setting(setting: str) -> str:
+    text = (setting or "").strip()
+    lowered = text.lower()
+    for key, description in SETTING_DESCRIPTIONS.items():
+        if lowered.startswith(key):
+            rest = text[len(key):].strip(" ,")
+            return f"{description}{(', ' + rest) if rest else ''}"
+    return text or SETTING_DESCRIPTIONS["the rig"]
+
+
 class PromptError(ValueError):
     """A panel cannot be turned into a prompt (missing kit, too many characters)."""
 
@@ -96,9 +117,9 @@ def build_panel_request(
     )
 
     shot = SHOT_WORDS.get(str(panel.get("shot", "")), "Medium shot")
-    setting = str(panel.get("setting", "")).strip() or "the rig"
+    setting = describe_setting(str(panel.get("setting", "")))
     caption = str(panel.get("caption", "")).strip()
-    parts = [f"{shot}, {setting}."]
+    parts = [f"{shot}, {setting}. {SAME_PLACE}"]
     if staging_bits:
         parts.append("STAGING: " + "; ".join(staging_bits) + ".")
     else:

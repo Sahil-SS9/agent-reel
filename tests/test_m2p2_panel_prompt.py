@@ -35,7 +35,8 @@ def test_prompt_has_the_approved_shape(tmp_path):
     style = load_styles(REPO / "styles")["anime"]
     req = build_panel_request(PANEL, style=style, kits=_kits(tmp_path))
     p = req.prompt
-    assert p.startswith("Establishing wide shot, the rig at night.")
+    assert p.startswith("Establishing wide shot, the owner's home office:")
+    assert "at night" in p.split(".")[0]
     # first speaker on the LEFT so balloons read left to right
     assert "KENSEI on the LEFT, standing at the desk, calm" in p
     assert "SAHIL on the RIGHT" in p
@@ -72,3 +73,13 @@ def test_episode_collects_problems_per_panel(tmp_path):
 
 def test_staging_order_speakers_first():
     assert staging_order(PANEL) == ["Kensei", "Sahil"]
+
+
+def test_named_settings_are_pinned_to_one_place(tmp_path):
+    from canon.panel_prompt import describe_setting
+
+    style = load_styles(REPO / "styles")["anime"]
+    req = build_panel_request(dict(PANEL, setting="the rig, alarms implied"), style=style, kits=_kits(tmp_path))
+    assert "home office" in req.prompt and "alarms implied" in req.prompt
+    assert "same room" in req.prompt
+    assert describe_setting("a train station") == "a train station"

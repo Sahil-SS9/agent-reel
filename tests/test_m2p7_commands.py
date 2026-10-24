@@ -83,3 +83,10 @@ def test_blueprints_are_templates_with_the_right_schedules():
         pass
 
     module._register_blueprints(Old())
+
+
+def test_display_text_shortens_long_hashes_only():
+    from adapters.hermes.render_cli import display_text
+
+    assert display_text("committed as 1e7d3a4d0196721a98afa66b85c353862dc6ccea.") == "committed as 1e7d3a4."
+    assert display_text("HEAD 1ac908d9 is clean") == "HEAD 1ac908d9 is clean"

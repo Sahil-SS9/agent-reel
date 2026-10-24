@@ -26,6 +26,13 @@ def _data_root(explicit: str, default_dir: Callable[[], Path]) -> Path:
     return Path(explicit).expanduser() if explicit else default_dir()
 
 
+def display_text(text: str) -> str:
+    """Shorten long ids for the page ("1e7d3a4d01…" -> "1e7d3a4"). The sidecar keeps the full text."""
+    import re
+
+    return re.sub(r"\b([0-9a-f]{7})[0-9a-f]{5,}\b", r"\1", text)
+
+
 def register_render_cli(subs: Any) -> None:
     render = subs.add_parser("render", help="Render a planned episode into lettered comic files")
     render.add_argument("--plan-dir", required=True, help="the --data-dir of a `hermes reel plan` run")
@@ -213,9 +220,14 @@ def render_command(args: argparse.Namespace, *, ctx: Any, default_dir: Callable[
                     tighten=lambda name, p=path: ask(p, TIGHT_QUESTION.format(name=name)),
                 )
             except VisionError as exc:
+                # The check could not run. That says nothing about the panel, so it is not
+                # regenerated (the first real render paid for 4 needless images this way);
+                # it is flagged for a human look instead.
                 from canon.panel_check import PanelCheck
 
-                check = PanelCheck(panel_id=request.panel_id, problems=[f"vision check unavailable: {exc}"])
+                final_path = path
+                final_check = PanelCheck(panel_id=request.panel_id, problems=[f"vision check unavailable: {str(exc)[:160]}"])
+                break
             final_path, final_check = path, check
             if check.passed:
                 break
@@ -233,8 +245,8 @@ def render_command(args: argparse.Namespace, *, ctx: Any, default_dir: Callable[
             heads=final_check.heads,
             free=final_check.free or [[0.05, 0.01, 0.95, 0.25]],
             keep_out=final_check.keep_out,
-            caption=str(panel.get("caption", "")),
-            lines=lines,
+            caption=display_text(str(panel.get("caption", ""))),
+            lines=[(speaker, display_text(text)) for speaker, text in lines],
         )
         checks[-1]["lettering"] = letter_report.as_dict()
         if not letter_report.complete:

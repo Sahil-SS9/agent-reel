@@ -634,8 +634,11 @@ def plan_episode(
                 # A caption comes from the fact list (round 6). The composed
                 # "actor + verb + object" sentence is not a caption source: it produced
                 # every template shape the audit refused.
-                # The facts this panel may state, handed to the writer as its source.
-                "fact_sentence": fact_sentence,
+                # The facts this panel may state, handed to the writer as its source. If the
+                # thread has no unused fact left, the panel's own gated evidence is the
+                # source - otherwise the writer starves on exactly the later panels.
+                "fact_sentence": fact_sentence
+                or " ".join(str(_evidence_for(beat)).split())[:220],
                 "facts_only": bool(facts),
                 "owner_texts": tuple(owner_texts),
                 "actors": [],

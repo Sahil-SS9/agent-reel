@@ -697,7 +697,14 @@ def plan_episode(
             continue
         cast_names = tuple(spec.get("cast") or ())
         evidence_text = str(spec.get("evidence", ""))
-        judge_text = facts_evidence or evidence_text
+        # Round 8: a caption may only state what the panel's evidence contains. The fact
+        # list is the clean core of it, but a fact is a short summary, so a true caption
+        # that names a component or a figure from the source must not be called invented.
+        # The union is stricter than the raw text alone about invented claims and no more
+        # permissive: anything in neither source is still refused.
+        judge_text = (
+            f"{facts_evidence}\n{evidence_text}".strip() if facts_evidence else evidence_text
+        )
         speakers_allowed = set(spec.get("speakers") or spec.get("actors") or ())
         written = dialogue.get(role, {})
 

@@ -494,7 +494,9 @@ class ClaimGate:
         #: evidence (r10b / QAR10-01).
         # r10c: a caller that only passes an allowlist still gets the actor check for the
         # names in it (QAR10-01 failed for allow-only callers).
-        named = cast or (entry for entry in self.allow if str(entry)[:1].isupper())
+        # M2 P0 (Quan P3): case-insensitive - every allowlisted entry counts, so a
+        # lower-case allowlist cannot skip the actor check. Production passes `cast`.
+        named = cast or self.allow
         self.cast = tuple(dict.fromkeys(str(name).strip() for name in named if str(name).strip()))
         self.max_quote_words = max_quote_words
         self.model_calls = 0

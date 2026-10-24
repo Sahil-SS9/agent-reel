@@ -18,9 +18,16 @@ MAX_TITLE_CHARS = 48
 TITLE_PROMPT = (
     "Title this comic episode in at most 6 words. It must describe what actually "
     "happened in the beats: no invented place, person, project, number or outcome, no "
-    "quotation marks, no full stop. Prefer the thread's own words. "
-    'Answer with JSON only: {"title": "..."}.'
+    "quotation marks, no full stop. Prefer the thread's own words. Use sentence case: "
+    "capitalise only the first word and real proper names. Offer three different "
+    'options, best first. Answer with JSON only: {"titles": ["...", "...", "..."]}.'
 )
+
+#: P0 (Quan t_3c0902f0): one Title-Cased model title turned every capitalised word
+#: into a name claim the thread could not back, so most strips fell back to "A
+#: session". Sentence case keeps real names checkable; three options give the gate a
+#: second and third chance before the fallback.
+MAX_TITLE_OPTIONS = 3
 
 #: Words a title may use that the beats need not contain: glue and register only.
 #: A title must not end on a word that needs an object.
@@ -126,15 +133,20 @@ def write_title(
         response = llm.complete_json(
             prompt=TITLE_PROMPT,
             payload=payload,
-            schema_hint={"title": "string"},
+            schema_hint={"titles": ["string"]},
             stage="episode.title",
         )
     except LLMError:
         return derived_clean, "fallback"
 
-    candidate = finish(str(response.get("title", "")))
-    if not candidate:
+    options = response.get("titles")
+    if not isinstance(options, list):
+        options = [response.get("title", "")]
+    candidates = [finish(str(option)) for option in options[:MAX_TITLE_OPTIONS]]
+    candidates = [candidate for candidate in candidates if candidate]
+    if not candidates:
         return derived_clean, "fallback"
-    if not acceptable(candidate):
-        return derived_clean, "ungrounded"
-    return candidate, "model"
+    for candidate in candidates:
+        if acceptable(candidate):
+            return candidate, "model"
+    return derived_clean, "ungrounded"

@@ -36,3 +36,11 @@ Evidence: /home/kensei/handoffs/agent-story-replay/build-evidence/M1-r10/
 - QAR10-03: every caption carries caption_source_event_ids (panel events + thread facts that support it); each episode ships episode-N-trace.json with its arc, beats, facts and re-gated evidence for every cited id; every episode (not only the first) is validated. A vacuous test (`or True`) in test_pipeline.py replaced with real assertions.
 - QAR10-04 (medium): accepted as a documented limitation, not fixed — the 50% vocabulary floor still refuses some synonym-heavy true paraphrases (11/12 on our set, 21/23 on Quan's).
 - Measured: 370 tests pass; ctx.llm grounding eval 44/44 invented refused; run-week-2 and run-sept-2 both 3/3 episodes, all 6 scripts traceable with matching arcs; 12 caption traces in build-evidence/M1-r10b/caption-traces.md.
+
+
+## Round 10c — Quan's r10b re-review (t_8645faf5) fixed; final PASS (t_13eb5c20) at f2ccfbb
+- Actor names bound to their action per cited event (blank-line event blocks, sentence split otherwise; semicolons keep a clause together); case-insensitive; allow-only callers get the check.
+- Figures compared as whole tokens including sign, ordinal and version forms (-4/4, 14th/4th, v14/v4).
+- Captions also cite the episode event that states them most directly (best overlap, at least two shared words).
+- Measured by Quan: 395 tests; frozen 24-case set 24/24 inventions refused, 21/23 valid paraphrases; 18/18 caption traces supported; Quan's regressions 2/2 and 10/10.
+- Known: 2 of 3 week-run titles fell back to "A session" (fixed in M2 P0: sentence-case titles, three options).

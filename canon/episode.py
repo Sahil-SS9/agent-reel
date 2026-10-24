@@ -222,6 +222,7 @@ class LLMDialogueWriter:
         "Return two layers. "
         'JSON only: {"caption": "...", "lines": [{"speaker": "...", "text": "..."}]}. '
         "caption: ONE grammatical narrator sentence about this panel, written as prose - "
+        "it must state the 'facts' line, and nothing that is not in it - "
         "subject, verb, object - in at most eighteen words. Build it from the 'facts' list, "
         "which is the only thing you may state: no cause, no outcome, no number and no name "
         "that the facts do not contain. Compress the facts into English; never paste a "
@@ -434,7 +435,7 @@ def _ending_supported(
         if numbers and any(number.strip(".,;:") in shown for number in numbers):
             return True, ""
         unit_words = _content_words(unit)
-        if unit_words and len(unit_words & shown_words) >= max(2, len(unit_words) // 2):
+        if unit_words and len(unit_words & shown_words) >= min(3, max(1, len(unit_words) - 1)):
             return True, ""
         if unit_words & _COMPLETION_CUES and unit_words & shown_words:
             return True, ""
@@ -585,11 +586,13 @@ def plan_episode(
         if role == "setup" and goal_facts:
             return goal_facts[0].sentence
         if role in {"climax", "win"} and not result_facts:
-            # No structured result: the brief's own outcome sentence is the result the
-            # panel must show (round 8 / R7-F2).
+            # No structured result: the first clause of the brief's outcome is the result
+            # this panel must show (round 8 / R7-F2). Short, so a caption can state it.
             outcome_line = str(getattr(brief, "outcome", "") or "").strip()
             if outcome_line:
-                return outcome_line
+                first = outcome_line.replace("\n", " ").split(".")[0]
+                words = first.split()[:14]
+                return " ".join(words).rstrip(" ,;:-")
         if role in {"climax", "win"} and result_facts:
             parts: list[str] = []
             for fact in result_facts:

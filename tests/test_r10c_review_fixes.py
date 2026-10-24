@@ -116,3 +116,14 @@ def test_number_forms_are_refused_before_the_model(evidence, caption, with_model
 )
 def test_same_number_forms_pass(evidence, caption):
     assert ClaimGate(None).check(caption, evidence, layer="caption").supported
+
+
+def test_semicolon_clause_keeps_the_actor_bound():
+    cast = ("Sahil", "Kensei")
+    verdict = ClaimGate(None, allow=cast, cast=cast).check(
+        "Kensei stopped the run on purpose; exit 143 was a SIGTERM, not a crash.",
+        "kensei stopped the run on purpose; exit 143 was a SIGTERM, not a crash.",
+        layer="caption",
+    )
+    assert verdict.supported, verdict.reason
+    assert attribution_blocks("A did x; then y. B did z.") == ["A did x; then y.", "B did z."]

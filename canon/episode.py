@@ -494,10 +494,14 @@ def _supporting_event_ids(caption: str, pool: Mapping[str, str]) -> tuple[str, .
     mine = words(caption)
     if len(mine) < 2:
         return ()
-    need = max(2, (len(mine) + 1) // 2)
-    return tuple(
-        event_id for event_id, text in pool.items() if len(mine & words(text)) >= need
-    )
+    # The best-matching event(s): every event tied for the highest shared-content count,
+    # when that count is at least two. A half-the-caption bar missed the direct witness
+    # "No files were modified" (2 shared words of an 8-word caption) on real data.
+    scores = {event_id: len(mine & words(text)) for event_id, text in pool.items()}
+    best = max(scores.values(), default=0)
+    if best < 2:
+        return ()
+    return tuple(event_id for event_id, score in scores.items() if score == best)
 
 
 def _policy_caption(

@@ -78,7 +78,9 @@ def number_tokens(text: str) -> set[str]:
     return {canonical_number(token) for token in figures_in(text)}
 
 
-_SENTENCE_SPLIT = re.compile(r"(?<=[.!?;])\s+")
+#: Sentence ends only - a semicolon joins clauses about the same actor ("kensei stopped
+#: the run on purpose; exit 143 was a SIGTERM"), so it must not split a name from its act.
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
 
 
 def attribution_blocks(text: str) -> list[str]:

@@ -452,6 +452,28 @@ def _ending_supported(
     return False, "no panel states it"
 
 
+def _supporting_fact_ids(caption: str, facts: Sequence[Any]) -> tuple[str, ...]:
+    """Event ids of thread facts that share content with the caption (r10b trace).
+
+    A caption is judged against its panel's evidence *and* the thread's fact list, so a
+    caption can be true because of a fact from another event. Those events are cited
+    too, or the trace would point only at the panel and miss the real support.
+    """
+    stop = {"the", "and", "with", "that", "this", "from", "into", "wants", "sahil", "kensei"}
+
+    def words(text: str) -> set[str]:
+        return {w[:6] for w in re.findall(r"[a-z0-9]{4,}", (text or "").lower()) if w not in stop}
+
+    mine = words(caption)
+    out: list[str] = []
+    for fact in facts or ():
+        event_id = str(getattr(fact, "event_id", "") or "")
+        source = f"{getattr(fact, 'object', '')} {getattr(fact, 'result', '')} {getattr(fact, 'source_text', '')}"
+        if event_id and len(mine & words(source)) >= 2:
+            out.append(event_id)
+    return tuple(out)
+
+
 def _policy_caption(
     spec: Mapping[str, Any],
     *,
@@ -848,7 +870,11 @@ def plan_episode(
                 caption=caption,
                 label=_label(role, beat),
                 lines=tuple(lines),
-                caption_source_event_ids=event_ids if caption else (),
+                caption_source_event_ids=(
+                    tuple(dict.fromkeys(event_ids + _supporting_fact_ids(caption, facts)))
+                    if caption
+                    else ()
+                ),
             )
         )
 

@@ -73,6 +73,12 @@ def register_cli(subparser: argparse.ArgumentParser) -> None:
         help="Run the caption/line grounding eval against the host model (reads no history)",
     )
     check.add_argument("--json-out", default="", help="where to write the eval report")
+    try:
+        from adapters.hermes.render_cli import register_render_cli
+    except ImportError:
+        _import_repo()
+        from adapters.hermes.render_cli import register_render_cli
+    register_render_cli(subs)
     subparser.set_defaults(func=reel_command)
 
 
@@ -134,8 +140,15 @@ def reel_command(args: argparse.Namespace) -> int:
     action = getattr(args, "reel_action", None)
     if action == "eval-grounding":
         return eval_grounding_command(args)
+    if action in {"render", "kit"}:
+        _import_repo()
+        from adapters.hermes.render_cli import kit_command, render_command
+
+        if action == "kit":
+            return kit_command(args, _default_data_dir)
+        return render_command(args, ctx=_CTX, default_dir=_default_data_dir)
     if action != "plan":
-        print("Usage: hermes reel plan --dry-run [--days N] [--episodes N] | hermes reel eval-grounding")
+        print("Usage: hermes reel plan --dry-run | render --plan-dir DIR | kit list|add|approve | eval-grounding")
         return 2
     if not getattr(args, "dry_run", False):
         print("This command only plans: pass --dry-run.")

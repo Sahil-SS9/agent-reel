@@ -22,6 +22,7 @@ def register(ctx) -> None:
         from adapters.hermes.reel_cli import bind, reel_command, register_cli  # type: ignore[no-redef]
 
     bind(ctx)
+    _register_blueprints(ctx)
     ctx.register_cli_command(
         name="reel",
         help="Plan comic episodes from this machine's Hermes history",
@@ -31,4 +32,49 @@ def register(ctx) -> None:
             "Plans weekly comic episodes from local Hermes history. Read-only on ~/.hermes: "
             "the plan is written to the directory you name, and the writer runs on ctx.llm."
         ),
+    )
+
+
+#: D7 (amended): an optional daily or weekly strip. A blueprint is only a template in the
+#: user's catalog; nothing runs until the user creates an automation from it.
+_BLUEPRINT_PROMPT = (
+    "Make this {cadence} Scrollback Reel strip for the owner to review. Run, in a terminal: "
+    "`hermes reel plan --dry-run --days {days} --episodes 1 --data-dir PLAN_DIR` and then "
+    "`hermes reel render --plan-dir PLAN_DIR --episode 1 --style {{style}}`, with "
+    "PLAN_DIR a new folder under the plugin's data directory named by today's date. "
+    "If the plan finds no story, say so in one line and stop: a quiet {unit} gets no strip. "
+    "Report the page and caption-draft paths and any FLAGGED panels. Never post, upload or "
+    "share the strip anywhere; the owner decides."
+)
+
+
+def _register_blueprints(ctx) -> None:
+    register = getattr(ctx, "register_automation_blueprint", None)
+    if register is None:  # older host: no blueprint catalog
+        return
+    style_slot = {"name": "style", "type": "enum", "label": "Art style", "default": "anime",
+                  "options": ("anime", "ink-pen-sketch")}
+    time_slot = {"name": "time", "type": "time", "label": "Time", "default": "18:00"}
+    register(
+        "daily-strip",
+        title="Scrollback Reel: daily strip",
+        description="A short comic of today's real work, for you to review. Nothing is posted.",
+        schedule_template="{minute} {hour} * * *",
+        prompt_template=_BLUEPRINT_PROMPT.format(cadence="daily", days=1, unit="day"),
+        category="daily",
+        slots=[time_slot, style_slot],
+        deliver_default="origin",
+        tags=("comic", "scrollback-reel"),
+    )
+    register(
+        "weekly-strip",
+        title="Scrollback Reel: weekly strip",
+        description="A 4-6 panel comic of the week's real work, for you to review. Nothing is posted.",
+        schedule_template="{minute} {hour} * * {dow}",
+        prompt_template=_BLUEPRINT_PROMPT.format(cadence="weekly", days=7, unit="week"),
+        category="weekly",
+        slots=[time_slot, {"name": "day", "type": "enum", "label": "Which day?", "default": "friday",
+                                    "options": ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")}, style_slot],
+        deliver_default="origin",
+        tags=("comic", "scrollback-reel"),
     )

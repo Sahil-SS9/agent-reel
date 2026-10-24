@@ -525,6 +525,7 @@ def run_pipeline(
         ir: EpisodeIR | None = None
         skipped: list[dict[str, str]] = []
         used_anchors: set[str] = set()
+        used_arcs: set[str] = set()
         for candidate in selected:
             if len(episodes) >= max(1, config.episodes):
                 break
@@ -611,6 +612,10 @@ def run_pipeline(
                 evidence=brief.text(),
                 alias=alias_book.resolve,
             )
+            if arc.id in used_arcs:
+                # Two candidates can resolve to the same thread; a strip is told once.
+                skipped.append({"key": candidate.key, "reason": "thread already told"})
+                continue
             index = len(episodes) + 1
             try:
                 episode_ir = plan_episode(
@@ -668,6 +673,7 @@ def run_pipeline(
                 }
             )
             used_anchors |= anchor_events
+            used_arcs.add(arc.id)
             if index == 1:
                 ir = episode_ir
                 result.title = title

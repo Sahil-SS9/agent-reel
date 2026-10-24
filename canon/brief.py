@@ -20,11 +20,13 @@ from typing import Any, Iterable, Sequence
 
 from canon.events import (
     KIND_MESSAGE_ASSISTANT,
+    KIND_MESSAGE_TOOL_RESULT,
     KIND_MESSAGE_USER,
     KIND_TASK_COMMENT,
     KIND_TASK_CREATED,
     KIND_TASK_FINISHED,
     KIND_TASK_STATUS,
+    KIND_TOOL_CALL,
 )
 from canon.gate import GatedEvent, require_gated
 
@@ -34,6 +36,49 @@ MIN_TURNS = 3
 MAX_TURNS = 6
 
 TEXT_KEYS = ("text", "title", "summary", "body", "message")
+
+#: Round 9 / R8-F2: a brief is told from what people said and what the board recorded.
+#: A tool call or a tool result is machinery, not story, and putting it in a brief put raw
+#: JSON (and a "not_found" receipt) on the page as an aftermath caption.
+STORY_KINDS = frozenset(
+    {
+        KIND_MESSAGE_USER,
+        KIND_MESSAGE_ASSISTANT,
+        KIND_TASK_CREATED,
+        KIND_TASK_COMMENT,
+        KIND_TASK_STATUS,
+        KIND_TASK_FINISHED,
+    }
+)
+MACHINERY_KINDS = frozenset({KIND_TOOL_CALL, KIND_MESSAGE_TOOL_RESULT})
+
+#: Internal identifiers are not narrative text.
+_INTERNAL_ID = __import__("re").compile(r"\b(?:local|session|ev|thr|proc)[-_][0-9a-f]{6,}\b")
+
+
+def looks_like_tool_payload(text: str) -> bool:
+    """True when a string is a tool payload rather than prose."""
+    clean = (text or "").strip()
+    if not clean:
+        return False
+    if clean[0] in "{[<" or clean.startswith("|"):
+        return True
+    if clean.count('"') >= 2 and ":" in clean:
+        return True
+    return False
+
+
+def is_story_event(event: GatedEvent) -> bool:
+    """May this event's text be used in a brief?"""
+    if event.kind in MACHINERY_KINDS or event.kind not in STORY_KINDS:
+        return False
+    return not looks_like_tool_payload(event_text(event))
+
+
+def strip_internal_ids(text: str) -> str:
+    """Remove a session/store identifier and leave a readable gap."""
+    clean = " ".join(str(text or "").split())
+    return " ".join(_INTERNAL_ID.sub("a session", clean).split())
 
 
 def event_text(event: GatedEvent) -> str:
@@ -81,12 +126,20 @@ class ThreadBrief:
         return "\n".join(self.fact_lines())
 
     def as_dict(self) -> dict[str, Any]:
+        # Round 9 / R8-F4: evidence carries what review needs, not whole paragraphs.
+        def short(text: str, limit: int = 160) -> str:
+            clean = " ".join(str(text or "").split())
+            return clean if len(clean) <= limit else clean[:limit].rstrip() + "\u2026"
+
         return {
-            "thread_key": self.thread_key,
+            "thread_key": short(self.thread_key, 80),
             "kind": self.kind,
-            "goal": self.goal,
-            "turns": [turn.as_dict() for turn in self.turns],
-            "outcome": self.outcome,
+            "goal": short(self.goal),
+            "turns": [
+                {"event_id": turn.event_id, "actor": turn.actor, "text": short(turn.text)}
+                for turn in self.turns
+            ],
+            "outcome": short(self.outcome),
             "dropped": list(self.dropped),
             "reasons": list(self.reasons),
             "ok": self.ok,
@@ -94,7 +147,9 @@ class ThreadBrief:
 
 
 def _thread_evidence(events: Sequence[GatedEvent]) -> str:
-    return "\n".join(text for text in (event_text(event) for event in events) if text)
+    return "\n".join(
+        text for event in events if is_story_event(event) for text in (event_text(event),) if text
+    )
 
 
 _OUTCOME_WORDS = (
@@ -114,7 +169,7 @@ def _outcome_score(event: GatedEvent) -> float:
 
 def _key_turns(events: Sequence[GatedEvent], *, limit: int = MAX_TURNS) -> tuple[BriefTurn, ...]:
     """Text-bearing events, distinct, spread across the thread, best first."""
-    candidates = [(event, event_text(event)) for event in events]
+    candidates = [(event, event_text(event)) for event in events if is_story_event(event)]
     candidates = [(event, text) for event, text in candidates if len(text) >= 12]
     if not candidates:
         return ()
@@ -170,6 +225,7 @@ def build_brief(
                 row
                 for row in rows
                 if row.kind == KIND_MESSAGE_USER
+                and is_story_event(row)
                 and len(event_text(row)) >= MIN_GOAL_CHARS
                 and not event_text(row).startswith("/")
             ),
@@ -181,23 +237,26 @@ def build_brief(
         candidates = [
             row
             for row in rows
-            if row.kind == KIND_MESSAGE_ASSISTANT and len(event_text(row)) >= MIN_OUTCOME_CHARS
+            if row.kind == KIND_MESSAGE_ASSISTANT
+            and is_story_event(row)
+            and len(event_text(row)) >= MIN_OUTCOME_CHARS
         ]
         outcome_row = max(candidates, key=_outcome_score, default=None)
         outcome = event_text(outcome_row) if outcome_row is not None else ""
     else:
         created = next(
-            (row for row in rows if row.kind == KIND_TASK_CREATED and event_text(row)), None
+            (row for row in rows if row.kind == KIND_TASK_CREATED and is_story_event(row)), None
         )
         if created is not None:
             goal = event_text(created)
         if not goal:
-            goal = next((event_text(row) for row in rows if event_text(row)), "")
+            goal = next((event_text(row) for row in rows if is_story_event(row)), "")
         finished = next(
             (
                 event_text(row)
                 for row in reversed(rows)
-                if row.kind == KIND_TASK_FINISHED
+                if is_story_event(row)
+                and row.kind == KIND_TASK_FINISHED
                 or (row.kind == KIND_TASK_STATUS and str((row.payload or {}).get("kind")) == "completed")
                 or (row.kind == KIND_TASK_COMMENT and event_text(row))
             ),
@@ -207,7 +266,13 @@ def build_brief(
 
     turns = _key_turns(rows)
 
-    brief = ThreadBrief(thread_key=thread_key, kind=kind, goal=goal, turns=turns, outcome=outcome)
+    brief = ThreadBrief(
+        thread_key=thread_key,
+        kind=kind,
+        goal=strip_internal_ids(goal),
+        turns=turns,
+        outcome=strip_internal_ids(outcome),
+    )
 
     if gate is None:
         return brief

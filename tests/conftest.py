@@ -63,6 +63,9 @@ class StubWriter:
             caption = self.captions.get(role)
             if caption is None:
                 caption = str(panel.get("fact_sentence") or panel.get("summary") or "").strip()
+            if not caption:
+                first = str(panel.get("evidence") or "").split("\n")[0][:70].strip()
+                caption = first or "Something happened here."
             out[role] = {"caption": caption, "lines": [list(pair) for pair in self.lines.get(role, [])]}
         return out
 

@@ -222,7 +222,9 @@ class LLMDialogueWriter:
         "Return two layers. "
         'JSON only: {"caption": "...", "lines": [{"speaker": "...", "text": "..."}]}. '
         "caption: ONE grammatical narrator sentence about this panel, written as prose - "
-        "it must state the 'facts' line, and nothing that is not in it - "
+        "it must state the 'facts' line, may use the 'evidence' line for detail, and may "
+        "state nothing that is in neither - on a climax or win panel it must state the "
+        "RESULT itself, including any score or figure the evidence gives - "
         "subject, verb, object - in at most eighteen words. Build it from the 'facts' list, "
         "which is the only thing you may state: no cause, no outcome, no number and no name "
         "that the facts do not contain. Compress the facts into English; never paste a "
@@ -408,7 +410,10 @@ def _content_words(text: str) -> set[str]:
 
 
 def _ending_supported(
-    panels: Sequence[Panel], facts: Sequence[Any], outcome_text: str
+    panels: Sequence[Panel],
+    facts: Sequence[Any],
+    outcome_text: str,
+    panel_evidence: str = "",
 ) -> tuple[bool, str]:
     """Is there a visible, sourced outcome for a finished thread?
 
@@ -427,6 +432,7 @@ def _ending_supported(
     shown = " ".join(
         [panel.caption for panel in panels if panel.caption]
         + [line.text for panel in panels for line in panel.lines]
+        + [panel_evidence]
     )
     shown_words = _content_words(shown)
     shown_low = shown.lower()
@@ -594,14 +600,12 @@ def plan_episode(
                 words = first.split()[:14]
                 return " ".join(words).rstrip(" ,;:-")
         if role in {"climax", "win"} and result_facts:
-            parts: list[str] = []
             for fact in result_facts:
                 sentence = fact.sentence
-                if sentence and sentence not in parts:
-                    parts.append(sentence)
-                if len(parts) == 2:
-                    break
-            return " ".join(parts)
+                if sentence and sentence not in used_facts:
+                    used_facts.add(sentence)
+                    return sentence
+            return ""
         for fact in turn_facts:
             sentence = fact.sentence
             if sentence and sentence not in used_facts:
@@ -834,7 +838,12 @@ def plan_episode(
     # ---- the ending must be earned (round 8 / R7-F2) ----------------------
     cliffhanger = arc.status != "resolved"
     if not cliffhanger and panels:
-        supported, why = _ending_supported(panels, facts, getattr(brief, "outcome", "") or "")
+        supported, why = _ending_supported(
+            panels,
+            facts,
+            getattr(brief, "outcome", "") or "",
+            " ".join(str(spec.get("evidence", "")) for spec in panel_specs),
+        )
         if not supported:
             kept = len(panels)
             detail = "; ".join(report.reasons[-2:]) if report.reasons else "no reasons"

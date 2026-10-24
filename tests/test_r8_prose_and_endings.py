@@ -106,14 +106,34 @@ def test_a_caption_that_invents_a_number_is_dropped_not_replaced():
     assert all("99.9" not in caption for caption in captions)
 
 
-def test_a_finished_story_without_a_visible_outcome_is_refused():
-    class NoOutcome(Talker):
-        name = "no-outcome"
+def test_the_ending_rule_refuses_when_nothing_shows_the_outcome():
+    """Round 9: the rule is judged on captions, lines and the panels' own evidence."""
+    from canon.episode import Panel, _ending_supported
 
-    writer = NoOutcome({"setup": "Sahil wanted a fair benchmark of both memory systems."})
-    with pytest.raises(EpisodeRefused) as refused:
-        plan(writer)
-    assert "outcome" in str(refused.value)
+    def panel(role, caption, line=""):
+        return Panel(
+            id=f"p-{role}",
+            role=role,
+            shot="wide",
+            cast=("Sahil",),
+            pose="",
+            expression="",
+            setting="",
+            caption=caption,
+            label=role,
+            lines=(),
+        )
+
+    panels = [panel("setup", "Sahil wanted a fair comparison of both systems.")]
+    supported, why = _ending_supported(panels, (), "Severian scored 87.3 against LCM-X at 79.5.")
+    assert supported is False
+    assert "outcome" in why or "states it" in why
+
+    supported, _ = _ending_supported(
+        panels, (), "Severian scored 87.3 against LCM-X at 79.5.",
+        "Severian scored 87.3 against LCM-X at 79.5 on LoCoMo.",
+    )
+    assert supported is True
 
 
 def test_a_finished_story_with_a_visible_outcome_exports():

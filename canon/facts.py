@@ -206,19 +206,23 @@ def build_facts(
             )
         )
 
-    # turns
+    # turns (a turn that repeats the goal is not a second fact)
+    goal_object = facts[0].object if facts else ""
     for turn in getattr(brief, "turns", ()) or ():
         event_id = getattr(turn, "event_id", "")
         event = events_by_id.get(event_id)
         text = getattr(turn, "text", "") or text_of(event_id)
         if event is None or not text:
             continue
+        turn_object = _first_clause(text, MAX_OBJECT_WORDS)
+        if turn_object and turn_object == goal_object:
+            continue
         facts.append(
             Fact(
                 kind="turn",
                 actor=_actor_for(event, table, hero),
                 action=_verb_for(event),
-                object=_first_clause(text, MAX_OBJECT_WORDS),
+                object=turn_object,
                 numbers=_numbers(text),
                 event_id=event_id,
                 source_text=text,

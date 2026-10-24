@@ -61,6 +61,38 @@ def is_plumbing(text: str) -> bool:
     return any(pattern.search(candidate) for pattern in PLUMBING_PATTERNS)
 
 
+#: A result a story can end on. A number alone is not a result, and neither is a receipt.
+_RESULT_CUES = {
+    "beats", "beat", "beaten", "passed", "passes", "green", "finished", "complete",
+    "completed", "merged", "shipped", "landed", "fixed", "verified", "measured", "scored",
+    "tied", "ties", "failed", "fails", "worse", "better", "improved", "reduced",
+}
+#: Receipts and acknowledgements that arrive as the last assistant message.
+_RECEIPT = re.compile(
+    r"^(go received|okay|ok|done|thanks|received|acknowledged|noted)\.?$", re.IGNORECASE
+)
+_BOILERPLATE = re.compile(r"background process|exit code|\[important:", re.IGNORECASE)
+
+
+def is_substantive_outcome(text: str) -> bool:
+    """Does this outcome say what the work actually produced?
+
+    Round 8 / R8-3: a long conversation must not outrank a finished result, and a two-word
+    receipt must not count as one. Numbers alone are not enough - a result needs a verb of
+    completion or comparison, applied to something.
+    """
+    clean = " ".join(str(text or "").split())
+    if len(clean) < 20 or _RECEIPT.match(clean) or _BOILERPLATE.search(clean):
+        return False
+    words = {
+        word.strip(".,;:!?()[]\"'\u2014-").lower() for word in clean.split()
+    }
+    if not words & _RESULT_CUES:
+        return False
+    # "passed" alone on a receipt is not a result; it needs some substance around it.
+    return len([word for word in words if len(word) > 3]) >= 4
+
+
 def _content_words(text: str) -> int:
     return len([word for word in re.findall(r"[A-Za-z][A-Za-z'\-]+", text or "") if len(word) > 2])
 
@@ -102,8 +134,17 @@ class StoryCandidate:
 
     @property
     def score(self) -> tuple[int, int, int, int]:
-        """User involvement, then a clear outcome, then text, then size."""
-        return (self.user_turns, 1 if self.outcome else 0, self.text_chars, len(self.event_ids))
+        """A substantive result first, then user involvement, text, size.
+
+        Round 8 / R8-3: length is a tie-breaker, not a reason to tell a story. A finished
+        result - qualitative or measured - outranks a long conversation about nothing.
+        """
+        return (
+            1 if is_substantive_outcome(self.outcome) else 0,
+            self.user_turns,
+            self.text_chars,
+            len(self.event_ids),
+        )
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -218,6 +259,11 @@ def _task_candidates(events: Sequence[GatedEvent]) -> list[StoryCandidate]:
 def build_candidates(events: Iterable[GatedEvent]) -> list[StoryCandidate]:
     gated = require_gated(list(events), stage="selection")
     return _session_candidates(gated) + _task_candidates(gated)
+
+
+def rank_candidates(candidates: Sequence[StoryCandidate]) -> list[StoryCandidate]:
+    """Best first, using the same score the selector uses."""
+    return sorted(candidates, key=lambda candidate: candidate.score, reverse=True)
 
 
 def select_stories(

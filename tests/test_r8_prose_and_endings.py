@@ -120,3 +120,8 @@ def test_a_finished_story_with_a_visible_outcome_exports():
     ir = plan(Talker(GOOD))
     assert ir.cliffhanger is False
     assert any("87.3" in panel.caption for panel in ir.panels if panel.caption)
+
+
+def plan_with(writer, *, caption_by_role=None):
+    """Plan the fixture with the given writer (no grounder), for reuse by other tests."""
+    return plan(writer)

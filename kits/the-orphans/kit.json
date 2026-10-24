@@ -1,0 +1,11 @@
+{
+ "name": "The Orphans",
+ "role": "villain",
+ "real_person": false,
+ "description": "Small gremlin-like orphaned background processes that hide in server racks.",
+ "sheets": {
+  "anime": "anime.jpg",
+  "ink-pen-sketch": "ink-pen-sketch.jpg"
+ },
+ "licence": "Generated for this project (bake-off r2 23/10/26); fictional."
+}

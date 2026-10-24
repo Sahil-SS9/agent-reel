@@ -1,0 +1,11 @@
+{
+ "name": "Kensei",
+ "role": "agent",
+ "real_person": false,
+ "description": "KENSEI, the sword-saint agent: calm visor, katana, dark armour.",
+ "sheets": {
+  "anime": "anime.jpg",
+  "ink-pen-sketch": "ink-pen-sketch.jpg"
+ },
+ "licence": "Generated for this project (bake-off 23/10/26); fictional."
+}

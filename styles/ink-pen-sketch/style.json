@@ -1,0 +1,16 @@
+{
+ "name": "ink-pen-sketch",
+ "title": "Ink pen manga",
+ "prompt_block": "Single comic panel, black-and-white ink pen manga style with hatching and screentone, matching the reference sheets exactly.",
+ "negative_block": "No text, letters, words, numbers, speech bubbles, captions or logos anywhere. No colour. No watermark. No extra characters beyond those named.",
+ "tested_on": [
+  "openai-codex gpt-image-2 (bake-off r2, approved by Sahil 23/10/26)"
+ ],
+ "status": "approved",
+ "refs": [
+  "../../kits/kensei/ink-pen-sketch.jpg",
+  "../../kits/the-orphans/ink-pen-sketch.jpg"
+ ],
+ "staging_rules": "Keep the top 25 percent of the frame as uncluttered background (wall, ceiling or sky) for speech balloons added later.",
+ "licence": "Prompt text: MIT (this repo). Reference sheets: generated for this project with the owner's image account; fictional characters only."
+}

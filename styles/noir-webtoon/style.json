@@ -1,0 +1,11 @@
+{
+ "name": "noir-webtoon",
+ "title": "Noir webtoon (experimental)",
+ "prompt_block": "Single comic panel, moody noir webtoon illustration: deep shadows, limited teal and amber palette, clean digital line art, cinematic lighting.",
+ "negative_block": "No text, letters, words, numbers, speech bubbles, captions or logos anywhere. No watermark. No extra characters beyond those named.",
+ "tested_on": [],
+ "status": "experimental",
+ "refs": [],
+ "staging_rules": "Keep the top 25 percent of the frame as uncluttered background (wall, ceiling or sky) for speech balloons added later.",
+ "licence": "Prompt text: MIT (this repo). Reference sheets: generated for this project with the owner's image account; fictional characters only."
+}

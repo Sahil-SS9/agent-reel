@@ -1,0 +1,16 @@
+{
+ "name": "anime",
+ "title": "Modern anime",
+ "prompt_block": "Single comic panel, full-colour modern anime / manga illustration matching the reference sheets exactly.",
+ "negative_block": "No text, letters, words, numbers, speech bubbles, captions or logos anywhere. No watermark. No extra characters beyond those named.",
+ "tested_on": [
+  "openai-codex gpt-image-2 (bake-off r2, approved by Sahil 23/10/26)"
+ ],
+ "status": "approved",
+ "refs": [
+  "../../kits/kensei/anime.jpg",
+  "../../kits/the-orphans/anime.jpg"
+ ],
+ "staging_rules": "Keep the top 25 percent of the frame as uncluttered background (wall, ceiling or sky) for speech balloons added later.",
+ "licence": "Prompt text: MIT (this repo). Reference sheets: generated for this project with the owner's image account; fictional characters only."
+}

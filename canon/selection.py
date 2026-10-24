@@ -125,6 +125,43 @@ def _event_text(event: GatedEvent) -> str:
     return ""
 
 
+#: V2 (25/10/26): stories are scored for drama - a problem, a fight, a result.
+_PROBLEM_CUES = {
+    "failure": re.compile(r"\b(fail(ed|s|ing|ure)?|broke(n)?|crash(ed|es)?|error(s)?|exception|traceback)\b", re.I),
+    "blocker": re.compile(r"\b(blocked|stuck|hung|hang(s|ing)?|timed? ?out|time ?out|deadlock|refus(ed|al))\b", re.I),
+    "defect": re.compile(r"\b(bug(s)?|regression|leak(s|ed|ing)?|corrupt(ed|ion)?|drift(ed)?|flaky)\b", re.I),
+    "limit": re.compile(r"\b(rate[- ]?limit(ed)?|quota|usage limit|429|403|out of memory|oom)\b", re.I),
+}
+_FIX_CUES = re.compile(
+    r"\b(fixed|resolved|repaired|restored|passes|passed|green|shipped|merged|works now|"
+    r"recovered|beat|outperform(s|ed)?|cleared|unblocked)\b",
+    re.I,
+)
+
+
+def drama_score(texts: Sequence[str]) -> int:
+    """0..6: how much conflict a thread carries (problem kinds, struggle, a result)."""
+    kinds: set[str] = set()
+    struggling_turns = 0
+    fixed = False
+    for text in texts:
+        hit = False
+        for kind, pattern in _PROBLEM_CUES.items():
+            if pattern.search(text or ""):
+                kinds.add(kind)
+                hit = True
+        struggling_turns += 1 if hit else 0
+        fixed = fixed or bool(_FIX_CUES.search(text or ""))
+    score = 0
+    if kinds:
+        score += 2 + (1 if len(kinds) >= 2 else 0)
+    if struggling_turns >= 2:
+        score += 1
+    if kinds and fixed:
+        score += 2
+    return score
+
+
 @dataclass(slots=True)
 class StoryCandidate:
     """One possible story, before ranking."""
@@ -138,6 +175,7 @@ class StoryCandidate:
     text_chars: int = 0
     event_ids: tuple[str, ...] = ()
     excluded: str = ""
+    drama: int = 0
 
     @property
     def eligible(self) -> bool:
@@ -148,13 +186,14 @@ class StoryCandidate:
         return not is_plumbing(self.title or self.goal)
 
     @property
-    def score(self) -> tuple[int, int, int, int]:
-        """A substantive result first, then user involvement, text, size.
+    def score(self) -> tuple[int, int, int, int, int]:
+        """Drama first (V2), then a substantive result, user involvement, text, size.
 
         Round 8 / R8-3: length is a tie-breaker, not a reason to tell a story. A finished
         result - qualitative or measured - outranks a long conversation about nothing.
         """
         return (
+            self.drama,
             1 if is_substantive_outcome(self.outcome) else 0,
             self.user_turns,
             self.text_chars,
@@ -173,6 +212,7 @@ class StoryCandidate:
             "events": len(self.event_ids),
             "eligible": self.eligible,
             "excluded": self.excluded,
+            "drama": self.drama,
             "score": list(self.score),
         }
 
@@ -201,6 +241,7 @@ def _session_candidates(events: Sequence[GatedEvent]) -> list[StoryCandidate]:
             event_ids=tuple(row.id for row in rows),
             user_turns=len(user_rows),
             text_chars=sum(len(_event_text(row)) for row in rows),
+            drama=drama_score([_event_text(row) for row in rows]),
         )
         if user_rows:
             # The goal is the first thing the user actually asked for.
@@ -248,6 +289,7 @@ def _task_candidates(events: Sequence[GatedEvent]) -> list[StoryCandidate]:
             event_ids=tuple(row.id for row in rows),
             user_turns=sum(1 for _row, text in texts if text),
             text_chars=sum(len(text) for _row, text in texts),
+            drama=drama_score([text for _row, text in texts]),
         )
         completed = next(
             (

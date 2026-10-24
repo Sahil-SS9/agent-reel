@@ -356,7 +356,11 @@ def build_brief_arc(
         roles_list = ["setup", "hidden_problem", "climax"][-count:] if count < 3 else ["setup", "hidden_problem", "climax"]
     roles = {role: beat.id for role, beat in zip(roles_list, beats)}
 
-    completed = bool(getattr(brief, "outcome", ""))
+    # Round 10: a last message is not a result. Only a finished, substantive outcome
+    # resolves the arc; a forecast ("should land around 22:45") ends on a continuation.
+    from canon.selection import outcome_is_finished
+
+    completed = outcome_is_finished(str(getattr(brief, "outcome", "") or ""))
     arc = Arc(
         id=make_event_id("arc", "brief", beats[0].ts, {"thread": getattr(brief, "thread_key", "")}),
         title=str(getattr(brief, "goal", "") or getattr(brief, "thread_key", "")),

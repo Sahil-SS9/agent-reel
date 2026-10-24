@@ -93,6 +93,21 @@ def is_substantive_outcome(text: str) -> bool:
     return len([word for word in words if len(word) > 3]) >= 4
 
 
+#: Round 10: words that say the work is still going. A forecast is not a result.
+_IN_PROGRESS = re.compile(
+    r"\b(still (running|going|in progress|waiting)|in progress|should (now )?(land|finish|complete|be done)|"
+    r"will (land|finish|complete)|eta|estimated?|not (yet|finished|done)|pending|halfway|"
+    r"about half|roughly half|waiting (for|on))\b",
+    re.IGNORECASE,
+)
+
+
+def outcome_is_finished(text: str) -> bool:
+    """An outcome that is not a forecast or a still-running status update."""
+    clean = " ".join(str(text or "").split())
+    return bool(clean) and not _IN_PROGRESS.search(clean)
+
+
 def _content_words(text: str) -> int:
     return len([word for word in re.findall(r"[A-Za-z][A-Za-z'\-]+", text or "") if len(word) > 2])
 

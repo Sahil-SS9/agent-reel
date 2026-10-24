@@ -105,6 +105,13 @@ def write_title(
             verdict = gate.check(candidate, evidence, layer="dialogue")
             if not verdict.supported:
                 return False
+            if getattr(gate, "llm", None) is not None:
+                # Round 10: with a model judge, a title is a headline and is judged like a
+                # caption (vocabulary floor + entailment) against the brief and the beats.
+                # The verbatim-word rule below refused every reworded model title, which
+                # is why strips were headed "A session".
+                haystack = evidence + "\n" + "\n".join(beat.summary for beat in beats)
+                return gate.check(candidate, haystack, layer="caption").supported
         return _grounded(candidate, beats)
 
     if llm is None:

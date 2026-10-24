@@ -530,7 +530,16 @@ def run_pipeline(
         # R3-F1: pick stories by meaning (sessions with a goal and an outcome, or task
         # families whose titles describe real work). Bookkeeping is never a story.
         selected, all_candidates = select_stories(gated, limit=max(4, config.episodes * 4))
-        result.stories = [candidate.as_dict() for candidate in all_candidates[:12]]
+        # Round 10: story rows carry text cut at 160 characters, and a cut can leave a
+        # fragment the evidence writer reads as a secret (it refused the whole metrics file
+        # on the September window). Re-gate the cut text so evidence holds the gated form.
+        result.stories = []
+        for candidate in all_candidates[:12]:
+            row = candidate.as_dict()
+            for field_name in ("title", "goal", "outcome"):
+                if isinstance(row.get(field_name), str) and row[field_name]:
+                    row[field_name], _ = gate.redact_text(row[field_name])
+            result.stories.append(row)
         threads_index = {thread.key: thread for thread in threads}
         # Round 10: a selected session can be a child in a lineage, whose thread key is the
         # lineage root, so lookup by key missed it ("no thread for this story" for 5 of 11

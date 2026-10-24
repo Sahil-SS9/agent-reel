@@ -178,17 +178,13 @@ class TemplateDialogueWriter:
         return pool[index % len(pool)]
 
     def caption_for(self, panel: Mapping[str, Any]) -> str:
-        """The panel's fact sentence, or nothing (round 6).
+        """Nothing (round 8 / R7-F1).
 
-        A caller that supplies facts gets facts or silence - never a summary, which is
-        what produced "Kensei worked on ..." on the page.
+        A caption is written prose, so the template writer does not produce one. Stitching
+        actor + verb + object from a clipped input produced "Sahil wants please read and
+        review this idea/concept." - mechanical, not readable.
         """
-        structured = str(panel.get("structured_caption", "")).strip()
-        if structured:
-            return structured
-        if panel.get("facts_only"):
-            return ""
-        return self._summary_caption(panel)
+        return ""
 
     def _summary_caption(self, panel: Mapping[str, Any]) -> str:
         summary = str(panel.get("summary", "")).strip()
@@ -225,9 +221,14 @@ class LLMDialogueWriter:
         "You write one panel of a weekly comic that replays an AI agent's real work. "
         "Return two layers. "
         'JSON only: {"caption": "...", "lines": [{"speaker": "...", "text": "..."}]}. '
-        "caption: ONE plain factual sentence, narrator voice, built from the 'fact' "
-        "line and using only what the evidence says. No cause, no outcome, no number, no name that the evidence does "
-        "not contain. "
+        "caption: ONE grammatical narrator sentence about this panel, written as prose - "
+        "subject, verb, object - in at most eighteen words. Build it from the 'facts' list, "
+        "which is the only thing you may state: no cause, no outcome, no number and no name "
+        "that the facts do not contain. Compress the facts into English; never paste a "
+        "fragment of the source text, never open with 'X asked for' or 'X reported', and "
+        "never quote the owner's words for more than six words in a row. If you cannot "
+        "write a sentence that is both grammatical and true to the facts, return an empty "
+        "caption. "
         "lines: at most 2; each under 100 characters; speakers must be from the cast "
         "list AND must be the actor of a cited event. Dialogue MAY dramatise tone, "
         "emotion, sarcasm and metaphor - it may NOT add a fact: no new names, numbers, "
@@ -256,7 +257,7 @@ class LLMDialogueWriter:
             payload = {
                 "role": panel["role"],
                 "cast": list(panel.get("actors") or self.cast),
-                "beat": panel.get("summary", ""),
+                "facts": panel.get("fact_sentence", ""),
                 "evidence": panel.get("evidence", ""),
                 "previous": context[-1] if context else "",
                 "setting": panel.get("setting", ""),
@@ -276,10 +277,8 @@ class LLMDialogueWriter:
             except (LLMError, ValueError):
                 self.failures += 1
                 caption, lines = "", []
-            if not lines and self.fallback is not None:
-                fallback = self.fallback.write([panel]).get(panel["role"], {})
-                caption = caption or str(fallback.get("caption", ""))
-                lines = [list(pair) for pair in fallback.get("lines", [])]
+            # Round 8 / R7-F1: no template caption and no template line. A panel whose
+            # panel the model could not write stays empty and is dropped by the planner.
             out[panel["role"]] = {"caption": caption, "lines": lines}
             context.append(lines[0][1] if lines else str(panel.get("summary", "")))
         return out
@@ -383,34 +382,83 @@ def _is_generic(line: str, evidence_text: str, caption: str) -> bool:
     return not any(word in haystack for word in words)
 
 
+class EpisodeRefused(Exception):
+    """The story cannot be told honestly; the pipeline records the reason and moves on."""
+
+
+_COMPLETION_CUES = {
+    "done", "finished", "complete", "completed", "green", "passed", "pass", "shipped",
+    "landed", "fixed", "merged", "closed", "measured", "verified", "deployed",
+}
+_STOPWORDS = {
+    "the", "a", "an", "and", "or", "of", "to", "in", "on", "for", "with", "at", "by",
+    "is", "was", "were", "are", "it", "this", "that", "i", "we", "you", "they", "he",
+    "she", "my", "our", "their", "as", "but", "so", "if", "then", "than", "from",
+}
+
+
+def _content_words(text: str) -> set[str]:
+    return {
+        word.strip(".,;:!?()[]\"'\u2014-").lower()
+        for word in str(text or "").split()
+        if word.strip(".,;:!?()[]\"'\u2014-").lower() not in _STOPWORDS
+        and len(word.strip(".,;:!?()[]\"'\u2014-")) > 2
+    }
+
+
+def _ending_supported(
+    panels: Sequence[Panel], facts: Sequence[Any], outcome_text: str
+) -> tuple[bool, str]:
+    """Is there a visible, sourced outcome for a finished thread?
+
+    The strip may only export as complete when a panel actually shows the result. A panel
+    that merely moves the story along is not an ending, and dropping the result panel must
+    refuse the episode rather than quietly present a finished story without its outcome.
+    """
+    units = [str(getattr(fact, "sentence", "") or "") for fact in facts
+             if getattr(fact, "kind", "") == "outcome"]
+    units = [unit for unit in units if unit] or [outcome_text]
+    units = [unit for unit in units if unit.strip()]
+    if not units:
+        # No structured outcome to judge against: the caller has no brief (tests, or a
+        # thread whose brief could not be built). Nothing is claimed, so nothing to refuse.
+        return True, ""
+    shown = " ".join(
+        [panel.caption for panel in panels if panel.caption]
+        + [line.text for panel in panels for line in panel.lines]
+    )
+    shown_words = _content_words(shown)
+    shown_low = shown.lower()
+    for unit in units:
+        numbers = {token for token in unit.split() if any(ch.isdigit() for ch in token)}
+        if numbers and any(number.strip(".,;:") in shown for number in numbers):
+            return True, ""
+        unit_words = _content_words(unit)
+        if unit_words and len(unit_words & shown_words) >= max(2, len(unit_words) // 2):
+            return True, ""
+        if unit_words & _COMPLETION_CUES and unit_words & shown_words:
+            return True, ""
+    return False, "no panel states it"
+
+
 def _policy_caption(
     spec: Mapping[str, Any],
     *,
-    fallback: str = "",
+    candidate: str = "",
     seen: set[str] | None = None,
 ) -> str:
-    """The panel's fact sentence if it passes the caption policy, else the fallback.
+    """A written caption that passes the policy, or nothing (round 8 / R7-F1).
 
-    Round 7: the repair path and the empty-panel path both come through here. Their only
-    source is the fact-list sentence (canon/facts.py); the per-event composer map
-    (compose_caption) is debug output and never reaches a page.
+    Only the writer's own sentence can reach the page. Facts are evidence: turning them
+    into prose by concatenation is what produced clipped, mechanical captions, so the
+    planner refuses rather than fills.
     """
-    if not spec.get("facts_only"):
-        # A caller that supplies no fact list is outside the round-7 guarantee (the
-        # pipeline always supplies one); keep its previous caption source so older
-        # fixtures still produce a strip.
-        return str(spec.get("structured_caption") or fallback or "").strip()
-
-    candidates = [str(spec.get("fact_sentence") or "").strip(), fallback]
-    for candidate in candidates:
-        if not candidate:
+    for text in (candidate, trim_caption(candidate)):
+        if not text or not acceptable_text(spec, text):
             continue
-        for text in (candidate, trim_caption(candidate)):
-            if not text or not acceptable_text(spec, text):
-                continue
-            if seen is not None and text.lower().strip() in seen:
-                continue
-            return text
+        if seen is not None and text.lower().strip() in seen:
+            continue
+        return text
     return ""
 
 
@@ -536,6 +584,12 @@ def plan_episode(
     def facts_for(role: str) -> str:
         if role == "setup" and goal_facts:
             return goal_facts[0].sentence
+        if role in {"climax", "win"} and not result_facts:
+            # No structured result: the brief's own outcome sentence is the result the
+            # panel must show (round 8 / R7-F2).
+            outcome_line = str(getattr(brief, "outcome", "") or "").strip()
+            if outcome_line:
+                return outcome_line
         if role in {"climax", "win"} and result_facts:
             parts: list[str] = []
             for fact in result_facts:
@@ -573,27 +627,8 @@ def plan_episode(
                 # A caption comes from the fact list (round 6). The composed
                 # "actor + verb + object" sentence is not a caption source: it produced
                 # every template shape the audit refused.
+                # The facts this panel may state, handed to the writer as its source.
                 "fact_sentence": fact_sentence,
-                "structured_caption": fact_sentence
-                or (
-                    outcome_caption
-                    if role in {"climax", "win"} and outcome_caption
-                    else ""
-                )
-                # Only a caller that supplies no facts at all may fall back to the
-                # composed sentence; the pipeline always supplies them.
-                or (
-                    ""
-                    if facts
-                    else next(
-                        (
-                            structured.get(event_id, "")
-                            for event_id in (beat.event_ids if beat else ())
-                            if structured.get(event_id, "")
-                        ),
-                        "",
-                    )
-                ),
                 "facts_only": bool(facts),
                 "owner_texts": tuple(owner_texts),
                 "actors": [],
@@ -664,10 +699,9 @@ def plan_episode(
         written = dialogue.get(role, {})
 
         # ---- layer 1: the fact caption -----------------------------------
-        # R3-F4: the caption is composed from structured facts. A model caption is an
-        # improvement only when it passes the strict caption check; otherwise the
-        # composed sentence stands and nothing is counted as a repair.
-        structured_caption = str(spec.get("structured_caption", "")).strip()
+        # Round 8 / R7-F1: the caption is the writer's sentence. Facts are evidence for the
+        # check, never a page source, so there is nothing to fall back to and nothing to
+        # "repair" - a caption either passes or the panel goes without one.
         model_caption = str(written.get("caption", "")).strip() if isinstance(written, dict) else ""
         owner_texts = tuple(str(t) for t in (owner_texts or ()) if str(t).strip())
 
@@ -687,25 +721,10 @@ def plan_episode(
         caption = ""
         if acceptable(model_caption):
             caption = model_caption
-        elif acceptable(structured_caption, composed=True):
-            caption = structured_caption
-        elif structured_caption:
-            trimmed = trim_caption(structured_caption)
-            if acceptable(trimmed, composed=True):
-                caption = trimmed
         elif model_caption:
             trimmed = trim_caption(model_caption)
             if acceptable(trimmed):
                 caption = trimmed
-        if not caption and not facts:
-            # Last resort for a caller that supplies no facts: the beat's own summary. The
-            # pipeline always supplies facts, so this cannot put a composer sentence on the
-            # page in a real run.
-            fallback = TemplateDialogueWriter(cast_names, hero=hero).caption_for(spec)
-            for candidate_text in (fallback, trim_caption(fallback)):
-                if acceptable(candidate_text, composed=True):
-                    caption = candidate_text
-                    break
         if caption and (len(caption.split()) < 3 or looks_like_provenance(caption)):
             caption = ""
         if grounder is not None and caption:
@@ -718,18 +737,10 @@ def plan_episode(
             if verdict.supported:
                 report.captions_supported += 1
             else:
-                # A repair may only be the panel's own fact sentence, under the same
-                # caption policy as every other path.
-                repaired = _policy_caption(
-                    spec, fallback=grounder.literal_caption(judge_text), seen=seen_text
-                )
+                # Round 8 / R7-F1: a caption that fails its check is dropped, not
+                # replaced with a mechanical sentence. The writer gets one turn.
                 report.reasons.append(f"{role} caption: {verdict.reason}")
-                if repaired:
-                    caption = repaired
-                    report.captions_repaired += 1
-                    report.captions_supported += 1
-                else:
-                    caption = ""
+                caption = ""
         if caption and looks_like_provenance(caption):
             caption = ""
         caption_key = caption.lower().strip()
@@ -789,16 +800,9 @@ def plan_episode(
         if not lines and duplicates:
             lines.append(duplicates[0])
         if not caption and not lines:
-            # Nothing survived. The only remaining source is the panel's fact sentence,
-            # and it has to pass the same policy as everything else. The composer's
-            # sentence is not a page source; if the fact does not pass, the panel is
-            # dropped rather than filled.
-            structural = _policy_caption(spec, seen=seen_text)
-            if not structural:
-                report.reasons.append(f"{role}: dropped, no caption or line survived")
-                continue
-            caption = structural
-            caption_key = caption.lower().strip()
+            # Nothing written survived, and a panel is never filled mechanically.
+            report.reasons.append(f"{role}: dropped, nothing written survived")
+            continue
         if caption_key:
             seen_text.add(caption_key)
 
@@ -817,8 +821,14 @@ def plan_episode(
             )
         )
 
-    # ---- the arc ends properly (round 3, item 4) --------------------------
+    # ---- the ending must be earned (round 8 / R7-F2) ----------------------
     cliffhanger = arc.status != "resolved"
+    if not cliffhanger and panels:
+        supported, why = _ending_supported(panels, facts, getattr(brief, "outcome", "") or "")
+        if not supported:
+            raise EpisodeRefused(
+                f"finished thread with no visible outcome ({why})"
+            )
     if cliffhanger and panels:
         last = panels[-1]
         panels[-1] = replace(

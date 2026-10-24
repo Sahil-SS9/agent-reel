@@ -7,6 +7,7 @@ import pytest
 from canon.arcs import ARC_ROLES, build_arc, build_arcs
 from canon.beats import BEAT_TYPES, Beat, beats_from_events
 from canon.canon import Canon, build_canon
+from conftest import StubWriter
 from canon.episode import (
     LLMDialogueWriter,
     TemplateDialogueWriter,
@@ -242,6 +243,7 @@ def _ir(**kwargs):
     kwargs.setdefault(
         "structured_captions", {event.id: compose_caption(event) for event in events}
     )
+    kwargs.setdefault("writer", StubWriter())
     return events, plan_episode(arc, beats, canon, **kwargs)
 
 
@@ -305,7 +307,7 @@ def test_panels_carry_staging():
         assert panel.expression
 
 
-def test_llm_writer_falls_back_when_the_model_returns_rubbish(tmp_path):
+def test_llm_writer_emits_nothing_when_the_model_returns_rubbish(tmp_path):
     class Rubbish:
         name = "rubbish"
 
@@ -318,12 +320,11 @@ def test_llm_writer_falls_back_when_the_model_returns_rubbish(tmp_path):
     arc = build_arc(beats)
     canon = build_canon(events, beats)
     cast = ["Sahil", "wesker"]
-    writer = LLMDialogueWriter(
-        cached, cast, fallback=TemplateDialogueWriter(cast, hero="Sahil")
-    )
+    writer = LLMDialogueWriter(cached, cast)
     ir = plan_episode(arc, beats, canon, writer=writer)
     assert writer.failures > 0
-    assert ir.panels
+    # Round 8 / R7-F1: no template fallback. A model that invents a speaker leaves the
+    # panel empty, and an empty panel is dropped rather than written for.
     for panel in ir.panels:
         for line in panel.lines:
             assert line.speaker in panel.cast

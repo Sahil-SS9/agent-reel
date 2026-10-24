@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from adapters.hermes import leakscan
+from conftest import StubWriter
 from adapters.hermes.pipeline import PipelineConfig, run_pipeline
 
 
@@ -16,6 +17,7 @@ def _run(tmp_path: Path, *, data_dir: Path, **kwargs):
         use_model=False,
         snapshot_root=tmp_path / "snapshots",
         state_dir=tmp_path / "state",
+        writer=kwargs.pop("writer", StubWriter()),
         **kwargs,
     )
     return run_pipeline(config)
@@ -153,7 +155,7 @@ def test_metrics_record_the_gate_and_the_cache(hermes_env, tmp_path):
     _run(tmp_path, data_dir=data_dir)
     metrics = json.loads((data_dir / "metrics.json").read_text(encoding="utf-8"))
     assert metrics["gate"]["gated"] > 0
-    assert metrics["writer"] in {"template", "llm"}
+    assert metrics["writer"] in {"template", "llm", "stub"}
     assert "cache" in metrics
     assert metrics["problems"] == []
 

@@ -44,6 +44,7 @@ from canon.caption import compose_caption, trim_caption
 from canon.casting import build_cast_map, summarise as summarise_cast
 from canon.facts import build_facts, facts_text
 from canon.episode import (
+    EpisodeRefused,
     EpisodeIR,
     LLMDialogueWriter,
     TemplateDialogueWriter,
@@ -130,6 +131,7 @@ class PipelineConfig:
     privacy: str = "private"
     episodes: int = 1
     writer_llm: Any = None
+    writer: Any = None
     max_writer_calls: int = 150
     snapshot_root: Path | None = None
     #: Where the private memory snapshot lives. Never the evidence folder (M1-F4).
@@ -452,13 +454,13 @@ def run_pipeline(
             }
         )
         writer: Any
-        if config.use_model:
-            writer = LLMDialogueWriter(
-                writer_cached,
-                cast,
-                fallback=TemplateDialogueWriter(cast, hero=config.hero),
-            )
+        if config.writer is not None:
+            writer = config.writer
+        elif config.use_model:
+            writer = LLMDialogueWriter(writer_cached, cast)
         else:
+            # Round 8 / R7-F1: captions are written prose. With no model there is no
+            # writer, so the run produces no strip and reports why.
             writer = TemplateDialogueWriter(cast, hero=config.hero)
 
         # Round 3 item 3: a script never shows a redaction marker. Every masked value
@@ -610,7 +612,8 @@ def run_pipeline(
                 alias=alias_book.resolve,
             )
             index = len(episodes) + 1
-            episode_ir = plan_episode(
+            try:
+                episode_ir = plan_episode(
                 arc,
                 story_beats or thread_beats,
                 canon,
@@ -628,10 +631,13 @@ def run_pipeline(
                 thread_evidence=thread_evidence_text,
                 owner_texts=owner_texts,
                 outcome_caption=outcome_caption,
-                facts=thread_facts,
-                facts_evidence=thread_facts_text,
-                title=title,
-            )
+                    facts=thread_facts,
+                    facts_evidence=thread_facts_text,
+                    title=title,
+                )
+            except EpisodeRefused as refused:
+                skipped.append({"key": candidate.key, "reason": str(refused)})
+                continue
             if len(episode_ir.panels) < 3:
                 skipped.append({"key": candidate.key, "reason": "fewer than three panels"})
                 continue

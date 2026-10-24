@@ -23,7 +23,7 @@ def msg(kind, text, ts, role):
     return seal(event, event.payload)
 
 
-def episode():
+def episode(*, writer=None):
     rows = [
         msg(KIND_MESSAGE_USER, "Please benchmark our memory system against LCM-X properly", 1.0, "user"),
         msg(KIND_MESSAGE_ASSISTANT, "Started the benchmark harness and the scoring path", 2.0, "assistant"),
@@ -46,22 +46,42 @@ def episode():
         brief=brief, facts=facts, facts_evidence=facts_text(facts),
         structured_captions={row.id: compose_caption(row) for row in rows},
         cast_map={"owner": "Sahil", "denji": "Kensei"},
+        writer=writer,
     )
     return ir
 
 
-def test_the_setup_panel_states_the_goal_in_the_owners_voice():
-    ir = episode()
-    setup = next(panel for panel in ir.panels if panel.role == "setup")
-    assert setup.caption
-    assert "Sahil" in setup.caption
-    assert "asked for" not in setup.caption.lower()
+def test_the_writer_is_handed_the_goal_fact_for_the_setup_panel():
+    """Round 8 / R7-F1: facts are the writer's source, not the page text."""
+    seen = {}
+
+    class Recorder:
+        name = "recorder"
+
+        def write(self, panels):
+            for panel in panels:
+                seen[panel["role"]] = panel.get("fact_sentence", "")
+            return {panel["role"]: {"caption": "", "lines": []} for panel in panels}
+
+    ir = episode(writer=Recorder())
+    assert seen.get("setup", "").startswith("Sahil ")
+    assert "benchmark" in seen.get("setup", "").lower()
 
 
-def test_the_climax_states_the_numbers():
-    ir = episode()
-    climax = next(panel for panel in ir.panels if panel.role in {"climax", "win"})
-    assert "87.3" in climax.caption and "79.5" in climax.caption
+def test_the_writer_is_handed_the_outcome_numbers_for_the_climax():
+    seen = {}
+
+    class Recorder:
+        name = "recorder"
+
+        def write(self, panels):
+            for panel in panels:
+                seen[panel["role"]] = panel.get("fact_sentence", "")
+            return {panel["role"]: {"caption": "", "lines": []} for panel in panels}
+
+    episode(writer=Recorder())
+    climax = seen.get("climax", "") + seen.get("win", "")
+    assert "87.3" in climax and "79.5" in climax
 
 
 def test_no_caption_uses_a_template_opening():
@@ -72,6 +92,18 @@ def test_no_caption_uses_a_template_opening():
 
 
 def test_every_panel_has_a_caption_or_a_line():
-    ir = episode()
+    """With a writer that supplies facts, every panel carries text."""
+
+    class Talker:
+        name = "talker"
+
+        def write(self, panels):
+            return {
+                panel["role"]: {"caption": panel.get("fact_sentence", ""), "lines": []}
+                for panel in panels
+            }
+
+    ir = episode(writer=Talker())
+    assert ir.panels
     for panel in ir.panels:
         assert panel.caption or panel.lines

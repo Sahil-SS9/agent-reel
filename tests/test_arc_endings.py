@@ -6,6 +6,7 @@ from canon.arcs import build_arc, build_arcs
 from canon.beats import beats_from_events
 from canon.canon import build_canon
 from canon.episode import plan_episode
+from conftest import StubWriter
 from canon.events import build_event
 from canon.gate import seal
 from canon.threads import build_threads
@@ -55,7 +56,7 @@ def test_a_finished_thread_produces_a_resolved_arc_with_no_cliffhanger():
     arc = arcs[0]
     assert arc.status == "resolved"
     canon = build_canon(events, beats)
-    ir = plan_episode(arc, beats, canon)
+    ir = plan_episode(arc, beats, canon, writer=StubWriter())
     assert ir.cliffhanger is False
     assert all("to be continued" not in panel.label.lower() for panel in ir.panels)
 
@@ -67,6 +68,6 @@ def test_an_unfinished_thread_ends_with_a_labelled_cliffhanger():
     arc = build_arc(beats, thread=threads[0])
     assert arc is not None and arc.status == "open"
     canon = build_canon(events, beats)
-    ir = plan_episode(arc, beats, canon)
+    ir = plan_episode(arc, beats, canon, writer=StubWriter())
     assert ir.cliffhanger is True
     assert "to be continued" in ir.panels[-1].label.lower()

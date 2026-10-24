@@ -40,3 +40,51 @@ def hermes_env(monkeypatch, synthetic_home) -> Path:
 @pytest.fixture(scope="session")
 def repo_root() -> Path:
     return REPO_ROOT
+
+
+class StubWriter:
+    """A deterministic stand-in for the model: one written sentence per panel.
+
+    Captions are prose (round 8 / R7-F1), so a planner test has to supply a writer.
+    """
+
+    name = "stub"
+
+    def __init__(self, captions: dict | None = None, lines: dict | None = None):
+        self.captions = dict(captions or {})
+        self.lines = dict(lines or {})
+        self.seen: list[str] = []
+
+    def write(self, panels):
+        out = {}
+        for panel in panels:
+            role = panel["role"]
+            self.seen.append(role)
+            caption = self.captions.get(role)
+            if caption is None:
+                caption = str(panel.get("fact_sentence") or panel.get("summary") or "").strip()
+            out[role] = {"caption": caption, "lines": [list(pair) for pair in self.lines.get(role, [])]}
+        return out
+
+
+class FactCaptionWriter:
+    """A stand-in for the model that writes the panel's fact sentence as its caption.
+
+    Tests that are about dialogue, casting or plumbing need panels to exist; this writer
+    makes them exist without pretending to be the prose writer.
+    """
+
+    name = "fact-caption"
+
+    def __init__(self, lines: dict | None = None):
+        self.lines = dict(lines or {})
+
+    def write(self, panels):
+        out = {}
+        for panel in panels:
+            caption = str(panel.get("fact_sentence") or panel.get("summary") or "").strip()
+            out[panel["role"]] = {
+                "caption": caption,
+                "lines": [list(pair) for pair in self.lines.get(panel["role"], [])],
+            }
+        return out

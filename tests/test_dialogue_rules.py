@@ -8,6 +8,7 @@ from canon.brief import build_brief
 from canon.canon import build_canon
 from canon.caption import compose_caption
 from canon.facts import build_facts, facts_text
+from conftest import FactCaptionWriter, StubWriter
 from canon.episode import TemplateDialogueWriter, plan_episode, validate_ir
 from canon.events import KIND_TASK_CREATED, KIND_TASK_STATUS, build_event
 from canon.gate import seal
@@ -53,7 +54,7 @@ def plan(writer=None):
     facts = build_facts(brief, {event.id: event for event in events}, display=cast_map, hero="Sahil")
     ir = plan_episode(
         arc, beats, canon,
-        writer=writer or TemplateDialogueWriter(("Sahil", "Wesker", "Octacon", "Quan")),
+        writer=writer or FactCaptionWriter(),
         evidence=evidence, brief=brief, cast_map=cast_map,
         structured_captions={event.id: compose_caption(event) for event in events},
         thread_evidence="\n".join(evidence.values()),
@@ -76,7 +77,7 @@ def test_no_reaction_repeats_within_an_episode():
     assert len(texts) == len(set(texts))
 
 
-def test_a_silent_panel_is_allowed():
+def test_a_panel_with_no_text_is_dropped():
     """Silence beats filler: a writer may return nothing for a panel."""
 
     class Quiet:
@@ -85,8 +86,11 @@ def test_a_silent_panel_is_allowed():
         def write(self, panels):
             out = {}
             for index, panel in enumerate(panels):
+                caption = "" if index else ""
+                if panel["role"] in {"climax", "win"}:
+                    caption = str(panel.get("fact_sentence") or "")  # the outcome
                 out[panel["role"]] = {
-                    "caption": "",
+                    "caption": caption,
                     "lines": [["Wesker", "That's the one."]] if index == 0 else [],
                 }
             return out
@@ -114,7 +118,12 @@ def test_thread_cast_members_from_the_evidence_may_speak():
 
         def write(self, panels):
             return {
-                panel["role"]: {"caption": "", "lines": [["Quan", "The fixture was stale again."]]}
+                panel["role"]: {
+                    "caption": str(panel.get("fact_sentence") or "")
+                    if panel["role"] in {"climax", "win"}
+                    else "",
+                    "lines": [["Quan", "The fixture was stale again."]],
+                }
                 for panel in panels
             }
 

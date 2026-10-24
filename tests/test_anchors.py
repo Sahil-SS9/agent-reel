@@ -7,6 +7,7 @@ from canon.beats import beats_from_events
 from canon.brief import build_brief
 from canon.canon import build_canon
 from canon.episode import plan_episode, usable_anchor_count
+from conftest import StubWriter
 from canon.events import KIND_TASK_CREATED, KIND_TASK_STATUS, build_event
 from canon.gate import seal
 from canon.threads import build_threads
@@ -46,7 +47,7 @@ def plan(events, *, with_brief=True):
     evidence = evidence_of(events)
     brief = build_brief(threads[0].key, "task", events) if with_brief else None
     canon = build_canon(events, beats)
-    ir = plan_episode(arc, beats, canon, evidence=evidence, brief=brief)
+    ir = plan_episode(arc, beats, canon, evidence=evidence, brief=brief, writer=StubWriter())
     return ir, beats, brief, evidence
 
 

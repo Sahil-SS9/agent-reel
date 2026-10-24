@@ -45,6 +45,18 @@ def plan(*, facts=True):
     real = build_facts(brief, by_id, display={"owner": "Sahil", "denji": "Kensei"}, hero="Sahil")
     arc, beats = build_brief_arc(brief, by_id)
     structured = {row.id: compose_caption(row) for row in rows}  # composer output: the old trap
+    class Captions:
+        name = "captions"
+
+        def write(self, panels):
+            return {
+                panel["role"]: {
+                    "caption": str(panel.get("fact_sentence") or "").strip(),
+                    "lines": [],
+                }
+                for panel in panels
+            }
+
     return plan_episode(
         arc, list(beats), build_canon(rows, beats_from_events(rows)),
         evidence={row.id: str(row.payload.get("text", "")) for row in rows},
@@ -53,6 +65,7 @@ def plan(*, facts=True):
         facts_evidence=facts_text(real) if facts else "",
         structured_captions=structured,
         cast_map={"owner": "Sahil", "denji": "Kensei"},
+        writer=Captions(),
     )
 
 
@@ -116,53 +129,14 @@ class RecordingGrounder:
         return ""
 
 
-def test_the_repair_branch_rechecks_against_the_facts_not_the_raw_evidence():
+def test_a_rejected_caption_is_dropped_rather_than_repaired():
+    """Round 8: there is no mechanical repair any more - a bad caption leaves silence."""
     rows = fixture()
     by_id = {row.id: row for row in rows}
     brief = build_brief("s1", "session", rows)
     facts = build_facts(brief, by_id, display={"owner": "Sahil", "denji": "Kensei"}, hero="Sahil")
-    fact_text = facts_text(facts)
     arc, beats = build_brief_arc(brief, by_id)
     offered = "The team benchmarked both systems carefully."
-
-    class Talker:
-        name = "recording"
-
-        def write(self, panels):
-            return {panel["role"]: {"caption": offered, "lines": []} for panel in panels}
-
-    grounder = RecordingGrounder(reject_text=offered)
-    ir = plan_episode(
-        arc, list(beats), build_canon(rows, beats_from_events(rows)),
-        evidence={row.id: str(row.payload.get("text", "")) for row in rows},
-        brief=brief, facts=facts, facts_evidence=fact_text,
-        structured_captions={row.id: compose_caption(row) for row in rows},
-        cast_map={"owner": "Sahil", "denji": "Kensei"},
-        writer=Talker(), grounder=grounder,
-    )
-
-    # the branch ran: the rejected caption was checked, then replaced
-    rejected = [call for call in grounder.calls if call[0] == offered]
-    assert rejected, "the offered caption was never checked"
-    assert offered not in {panel.caption for panel in ir.panels}, "a rejected caption reached the page"
-    assert any(call[0] != offered for call in grounder.calls), "nothing was offered as a repair"
-    # every check after the first used the fact list, never the raw event text
-    for text, evidence, layer in grounder.calls:
-        if layer == "caption" and text != offered:
-            assert evidence == fact_text, f"checked against raw evidence: {evidence[:60]!r}"
-    # and nothing the repair emitted is a policy problem
-    for panel in ir.panels:
-        if panel.caption:
-            assert caption_problem(panel.caption, max_owner_quote=8) == ""
-
-
-def test_a_repaired_caption_is_the_panels_fact_sentence():
-    rows = fixture()
-    by_id = {row.id: row for row in rows}
-    brief = build_brief("s1", "session", rows)
-    facts = build_facts(brief, by_id, display={"owner": "Sahil", "denji": "Kensei"}, hero="Sahil")
-    arc, beats = build_brief_arc(brief, by_id)
-    offered = "An offered caption that will be rejected."
     grounder = RecordingGrounder(reject_text=offered)
 
     class Talker:
@@ -175,13 +149,11 @@ def test_a_repaired_caption_is_the_panels_fact_sentence():
         arc, list(beats), build_canon(rows, beats_from_events(rows)),
         evidence={row.id: str(row.payload.get("text", "")) for row in rows},
         brief=brief, facts=facts, facts_evidence=facts_text(facts),
-        structured_captions={row.id: compose_caption(row) for row in rows},
         cast_map={"owner": "Sahil", "denji": "Kensei"},
         writer=Talker(), grounder=grounder,
     )
-    fact_sentences = [fact.sentence for fact in facts if fact.sentence]
-    repaired = [panel.caption for panel in ir.panels if panel.caption]
-    assert repaired
-    for caption in repaired:
-        # a repair is one fact sentence, or several joined (climax and win take the outcome)
-        assert any(caption == sentence or caption.startswith(sentence) for sentence in fact_sentences), caption
+    assert ir.grounding["captions_repaired"] == 0
+    assert offered not in {panel.caption for panel in ir.panels}
+    caption_checks = [call for call in grounder.calls if call[2] == "caption"]
+    assert caption_checks
+    assert all(call[1] == facts_text(facts) for call in caption_checks)

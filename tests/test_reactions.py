@@ -62,8 +62,12 @@ def test_at_most_one_generic_interjection_survives():
         name = "interjector"
 
         def write(self, panels):
+            captions = {"win": "Benchmark complete: 87.3 against 79.5, guard held."}
             return {
-                panel["role"]: {"caption": "", "lines": [["Sahil", "Ugh."], ["Sahil", "Typical."]]}
+                panel["role"]: {
+                    "caption": captions.get(panel["role"], ""),
+                    "lines": [["Sahil", "Ugh."], ["Sahil", "Typical."]],
+                }
                 for panel in panels
             }
 
@@ -92,7 +96,8 @@ def test_the_template_writer_never_invents_a_line():
     writer = TemplateDialogueWriter(("Wesker",))
     out = writer.write([{"role": "setup", "actors": ["Wesker"], "structured_caption": "Wesker completed the adapter"}])
     assert out["setup"]["lines"] == []
-    assert out["setup"]["caption"]
+    # round 8 / R7-F1: and no stitched caption either
+    assert out["setup"]["caption"] == ""
 
 
 def test_no_caption_means_silence_not_filler():

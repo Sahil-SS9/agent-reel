@@ -10,6 +10,7 @@ from canon.beats import beats_from_events
 from canon.casting import build_cast_map, display_name, speaker_for
 from canon.arcs import build_arc
 from canon.canon import build_canon
+from conftest import StubWriter
 from canon.episode import plan_episode
 from canon.events import build_event
 from canon.gate import seal
@@ -82,7 +83,8 @@ def _episode(**kwargs):
 def test_panel_cast_uses_character_names():
     events, beats, arc, canon, evidence, cast_map = _episode()
     ir = plan_episode(
-        arc, beats, canon, evidence=evidence, cast_map=cast_map, hero="Sahil"
+        arc, beats, canon, evidence=evidence, cast_map=cast_map, hero="Sahil",
+        writer=StubWriter(),
     )
     names = {name for panel in ir.panels for name in panel.cast}
     assert "default" not in names
@@ -94,7 +96,7 @@ def test_panel_cast_uses_character_names():
 
 def test_captions_are_in_europe_london():
     _events, beats, arc, canon, evidence, cast_map = _episode()
-    ir = plan_episode(arc, beats, canon, evidence=evidence, cast_map=cast_map)
+    ir = plan_episode(arc, beats, canon, evidence=evidence, cast_map=cast_map, writer=StubWriter())
     # 2026-10-23 is BST (UTC+1): 11:20 UTC is 12:20 in London.
     first = ir.panels[0].label
     assert first

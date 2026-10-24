@@ -47,3 +47,7 @@ Kanban card: t_ec1754fc.
 | D12 | **Install into live Hermes is approved.** | KENSEI installs after the M2 audit passes: a plugin install into the default profile, verified with `hermes plugins doctor`. The weekly/daily blueprint stays disabled until Sahil enables it. |
 | D13 | **Public publication** = submission to the Hermes plugin catalog **and/or** a hosted community site. | Catalog submission is M3. The site is a separate product (below). |
 | D14 (follow-up product, not V1) | **Scrollback Reel Hub**: a hosted website where users publish their stories and series, with a news feed, following, likes and comments. | Needs its own grill and spec after M2. It is a step up from a plugin: accounts/login, storage, hosting cost, moderation and reporting, takedowns. Also UK Online Safety Act duties, because users post content and comment on each other's. The plugin's "publish" button would push a strip (already redaction-checked and owner-approved) to the Hub. Nothing is ever auto-posted. |
+
+| V1 (25/10/26) | Pictures may dramatise (monsters, fights, chases, big locations); every caption and line stays true and grounded. | M2 story pass: visual treatment per panel; truth boundary unchanged. |
+| V2 (25/10/26) | Stories chosen automatically, scored for drama: a problem, a fight, a result. | Selection ranks conflict first. |
+| V3 (25/10/26) | Every episode has a villain or problem, rising stakes, and a payoff or cliffhanger; study comic/manga craft. | docs/STORY-CRAFT.md; villain sheets; role-shaped shots. |

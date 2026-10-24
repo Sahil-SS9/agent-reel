@@ -742,6 +742,12 @@ def plan_episode(
             trimmed = trim_caption(model_caption)
             if acceptable(trimmed):
                 caption = trimmed
+            else:
+                # Round 9: a dropped caption must say why, so yield is diagnosable.
+                why = caption_problem(
+                    trimmed, owner_texts=owner_texts, max_owner_quote=8
+                ) or "not supported by the panel evidence"
+                report.reasons.append(f"{role} caption refused: {why}")
         if caption and (len(caption.split()) < 3 or looks_like_provenance(caption)):
             caption = ""
         if grounder is not None and caption:

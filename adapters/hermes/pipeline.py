@@ -33,7 +33,7 @@ from typing import Any, Mapping, Iterable, Sequence
 
 from canon.brief import build_brief
 from canon.selection import select_stories
-from canon.threads import beats_by_thread
+from canon.threads import beats_by_thread, thread_index
 from canon.arcs import build_brief_arc
 from canon.arcs import build_arcs
 from canon.beats import Beat, beats_from_events
@@ -270,6 +270,22 @@ def _text_for(source: HermesHistorySource, event: Event, limit: int) -> str | No
 # --------------------------------------------------------------------------- #
 # the pipeline
 # --------------------------------------------------------------------------- #
+
+
+def _thread_for_candidate(candidate: Any, by_event: Mapping[str, Any]) -> Any:
+    """The thread holding most of a story candidate's events, or None."""
+    counts: dict[str, int] = {}
+    holders: dict[str, Any] = {}
+    for event_id in getattr(candidate, "event_ids", ()) or ():
+        thread = by_event.get(event_id)
+        if thread is None:
+            continue
+        counts[thread.id] = counts.get(thread.id, 0) + 1
+        holders[thread.id] = thread
+    if not counts:
+        return None
+    best = max(sorted(counts), key=lambda thread_id: counts[thread_id])
+    return holders[best]
 
 
 def run_pipeline(
@@ -513,6 +529,10 @@ def run_pipeline(
         selected, all_candidates = select_stories(gated, limit=max(4, config.episodes * 4))
         result.stories = [candidate.as_dict() for candidate in all_candidates[:12]]
         threads_index = {thread.key: thread for thread in threads}
+        # Round 10: a selected session can be a child in a lineage, whose thread key is the
+        # lineage root, so lookup by key missed it ("no thread for this story" for 5 of 11
+        # r9 candidates). Resolve through the candidate's own events instead.
+        thread_by_event = thread_index(threads)
         grouped_beats = beats_by_thread(beats, threads)
         thread_events: dict[str, list[GatedEvent]] = {}
         for event in gated:
@@ -529,7 +549,9 @@ def run_pipeline(
         for candidate in selected:
             if len(episodes) >= max(1, config.episodes):
                 break
-            thread = threads_index.get(candidate.key)
+            thread = threads_index.get(candidate.key) or _thread_for_candidate(
+                candidate, thread_by_event
+            )
             if thread is None:
                 skipped.append({"key": candidate.key, "reason": "no thread for this story"})
                 continue
@@ -541,8 +563,16 @@ def run_pipeline(
                 gate=grounder if config.use_model else None,
             )
             if not brief.ok:
+                missing = [
+                    name for name, value in (("goal", brief.goal), ("outcome", brief.outcome)) if not value
+                ]
                 skipped.append(
-                    {"key": candidate.key, "reason": f"brief not usable ({len(brief.turns)} turns)"}
+                    {
+                        "key": candidate.key,
+                        "reason": f"brief not usable ({len(brief.turns)} turns"
+                        + (f"; no {' or '.join(missing)}" if missing else "")
+                        + ")",
+                    }
                 )
                 continue
             thread_beats = grouped_beats.get(thread.id, [])
@@ -643,14 +673,16 @@ def run_pipeline(
             except EpisodeRefused as refused:
                 skipped.append({"key": candidate.key, "reason": str(refused)})
                 continue
-            if len(episode_ir.panels) < 3:
+            # Round 10: D7 says a strip is 4-6 panels; three was below the spec.
+            min_panels = 4 if config.format == "strip" else 8
+            if len(episode_ir.panels) < min_panels:
                 # Round 9: a refusal must say why in terms a human can agree with.
                 why = "; ".join(episode_ir.grounding.get("reasons", [])[-3:])
                 skipped.append(
                     {
                         "key": candidate.key,
                         "reason": (
-                            f"fewer than three panels ({len(episode_ir.panels)} kept"
+                            f"fewer than {min_panels} panels ({len(episode_ir.panels)} kept"
                             + (f"; {why}" if why else "")
                             + ")"
                         ),

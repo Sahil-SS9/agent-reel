@@ -60,6 +60,8 @@ def register_cli(subparser: argparse.ArgumentParser) -> None:
         help="plan and write artefacts without any side effect beyond the output directory",
     )
     plan.add_argument("--days", type=int, default=7, help="window in days (default 7)")
+    plan.add_argument("--since", default="", help="window start, YYYY-MM-DD (overrides --days)")
+    plan.add_argument("--until", default="", help="window end, YYYY-MM-DD (default now)")
     plan.add_argument("--episodes", type=int, default=3, help="how many stories to plan")
     plan.add_argument("--format", default="strip", choices=("strip", "chapter"))
     plan.add_argument("--data-dir", default="", help="where to write artefacts")
@@ -162,9 +164,24 @@ def reel_command(args: argparse.Namespace) -> int:
     writer = PluginLLMClient(llm)
     local = OpenAICompatLLMClient(base_url=args.llm_url, model="auto")
 
+    def _day(value: str) -> float | None:
+        if not value:
+            return None
+        from datetime import datetime, timezone
+
+        return datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp()
+
+    try:
+        since, until = _day(getattr(args, "since", "")), _day(getattr(args, "until", ""))
+    except ValueError:
+        print("--since/--until must be YYYY-MM-DD")
+        return 2
+
     config = PipelineConfig(
         data_dir=data_dir,
         days=args.days,
+        since=since,
+        until=until,
         format=args.format,
         episodes=max(1, args.episodes),
         max_deep_events=args.max_deep_events,

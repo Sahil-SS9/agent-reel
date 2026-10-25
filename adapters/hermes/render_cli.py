@@ -20,6 +20,9 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 REPO = Path(__file__).resolve().parents[2]
+#: QAR-M2-07: chapter pages show two panels per row (each ~half the page), so balloon text
+#: is drawn 1.4x larger than on a single full-width panel.
+PAGE_FONT_SCALE = 1.4
 
 
 def _data_root(explicit: str, default_dir: Callable[[], Path]) -> Path:
@@ -604,6 +607,7 @@ def render_command(args: argparse.Namespace, *, ctx: Any, default_dir: Callable[
             keep_out=final_check.keep_out,
             caption=display_text(str(panel.get("caption", ""))),
             lines=[(speaker, display_text(text)) for speaker, text in lines],
+            font_scale=PAGE_FONT_SCALE if treatment is not None else 1.0,
         )
         if lines and letter_report.balloons:
             # Letterer self-check (bake-off r2): ask whether every tail points at its
@@ -636,6 +640,7 @@ def render_command(args: argparse.Namespace, *, ctx: Any, default_dir: Callable[
                     keep_out=final_check.keep_out,
                     caption=display_text(str(panel.get("caption", ""))),
                     lines=[(speaker, display_text(text)) for speaker, text in lines],
+                    font_scale=PAGE_FONT_SCALE if treatment is not None else 1.0,
                 )
                 checks[-1]["tail_misses_fixed"] = misses
         checks[-1]["lettering"] = letter_report.as_dict()

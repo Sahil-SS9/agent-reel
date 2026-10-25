@@ -77,6 +77,9 @@ def compose(panels: Sequence[Image.Image], cols: int, title: str, footer: str = 
 PAGE_WIDTH = 2400
 PAGE_RATIO = 1.45  # content height / width before a page breaks (a comic page is ~1:1.5)
 ROW_TARGET = 2.6  # a row is full once the panels' aspect ratios add up to this
+MAX_PER_ROW = 2
+#: Readability floor: a panel is never shown narrower than this share of the page width.
+MIN_PANEL_SHARE = 0.45
 MAX_ROW_HEIGHT = 0.62  # of the page width: a lone square or tall panel is not blown up
 SOLO_ROLES = ("setup", "climax", "win")
 
@@ -96,7 +99,8 @@ def layout_rows(sizes: Sequence[tuple[int, int]], roles: Sequence[str]) -> list[
             continue
         current.append(index)
         total += w / max(1, h)
-        if total >= ROW_TARGET or len(current) == 3:
+        # QAR-M2-07: at most two panels side by side, so lettering stays readable.
+        if total >= ROW_TARGET or len(current) == MAX_PER_ROW:
             rows.append(current)
             current, total = [], 0.0
     if current:

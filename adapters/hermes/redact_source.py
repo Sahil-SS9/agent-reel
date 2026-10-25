@@ -6,9 +6,8 @@ pack pinned, via `scripts/extract_hermes_redact.py`. The composing regexes below
 are written here so the core never imports Hermes (decision D2) and so each rule
 is testable on its own.
 
-When the adapter genuinely runs inside Hermes, `hermes_available()` reports it and
-callers may use Hermes' own `redact_text` instead; outside Hermes the snapshot is
-the source of truth.
+The snapshot is the source of truth inside and outside Hermes: the plugin never imports
+Hermes' private `agent.redact` module (QAR-M2-06), so a Hermes release cannot break it.
 """
 
 from __future__ import annotations
@@ -20,15 +19,6 @@ from pathlib import Path
 from canon.redact import Rule
 
 SNAPSHOT = Path(__file__).with_name("hermes_redact_patterns.json")
-
-
-def hermes_available() -> bool:
-    """True when this process is inside a Hermes install with agent.redact."""
-    try:  # pragma: no cover - depends on the host
-        import agent.redact  # noqa: F401
-    except Exception:
-        return False
-    return True
 
 
 def load_snapshot(path: Path | str = SNAPSHOT) -> dict:

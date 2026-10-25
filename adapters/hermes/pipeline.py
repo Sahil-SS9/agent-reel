@@ -588,7 +588,8 @@ def run_pipeline(
         for event in gated:
             # Prefer the profile: on message events the actor is a tool name, and a tool
             # cannot speak. Fall back to the actor only when it is a known character.
-            who = cast_map.get(event.profile) or cast_map.get(event.actor) or ""
+            # QAR-M2-01: the owner's own messages belong to the owner, whichever profile ran.
+            who = config.hero if event.actor == "owner" else (cast_map.get(event.profile) or cast_map.get(event.actor) or "")
             actors_by_event[event.id] = who
 
         evidence_map = evidence_by_event(gated, display=cast_map)

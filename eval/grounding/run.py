@@ -370,7 +370,16 @@ def main(argv: list[str] | None = None) -> int:
         )
         cached = CachedLLM(client, ModelCache(HERE / ".cache"), stage="grounding-eval")
 
-    report = run(ClaimGate(cached, allow=EVAL_CAST))
+    # QAR-M2-11: production plans in meaning mode, so the eval gates both modes.
+    strict_report = run(ClaimGate(cached, allow=EVAL_CAST))
+    meaning_report = run(ClaimGate(cached, allow=EVAL_CAST, meaning=True)) if cached is not None else None
+    report = strict_report
+    if meaning_report is not None:
+        print(f"meaning mode: {meaning_report['meaning_cases']} plain-English cases run, "
+              f"{meaning_report['meaning_accepted']} accepted, "
+              f"{len(meaning_report['released_unsupported'])} inventions released")
+        if meaning_report["released_unsupported"] or meaning_report["meaning_cases"] != len(MEANING_CASES):
+            report = dict(strict_report, ok=False, released_unsupported=strict_report["released_unsupported"] + meaning_report["released_unsupported"])
     print(f"grounding eval: {report['cases']} cases (model pass = {args.llm == 'local'})")
     print(f"  grounded lines accepted : {report['grounded_lines_passed']}/{report['cases']}")
     print(f"  invented lines refused   : {report['invented_lines_refused']}/{report['cases']}")

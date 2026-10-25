@@ -26,12 +26,19 @@ def _multiverse(tmp_path):
     (repo / "characters" / "nova").mkdir(parents=True)
     (repo / "characters" / "nova" / "README.md").write_text("# Nova\n\nA neon courier with a cat.\n")
     (repo / "characters" / "nova" / "manifest.json").write_text(json.dumps({
-        "slug": "nova", "display_name": "Nova", "rights_status": "unknown-not-cleared",
+        "slug": "nova", "display_name": "Nova", "rights_status": "community-use",
         "published_styles": [
             {"style": "anime", "preview": {"path": "previews/nova/anime.webp", "sha256": _sha(repo / "previews/nova/anime.webp")},
              "full_resolution": {"archive_path": "characters/nova/styles/anime/nova__sheet__anime__v01.png", "sha256": _sha(full / "nova__sheet__anime__v01.png")}},
             {"style": "gothic", "preview": {"path": "previews/nova/gothic.webp", "sha256": "0" * 64}},
         ]}))
+    for slug, rights in (("pendo", "approval-pending-per-profile"), ("minion", "third-party-association-not-reusable")):
+        (repo / "characters" / slug).mkdir(parents=True)
+        (repo / "characters" / slug / "manifest.json").write_text(json.dumps({
+            "slug": slug, "rights_status": rights,
+            "published_styles": [{"style": "anime", "preview": {"path": "previews/nova/anime.webp", "sha256": _sha(repo / "previews/nova/anime.webp")}}]}))
+    (repo / "manifests").mkdir()
+    (repo / "manifests" / "pending.json").write_text(json.dumps({"rights_pending": [{"slug": "pendo"}], "documentation_only": [{"slug": "ghost"}]}))
     (repo / "characters" / "ghost").mkdir(parents=True)
     (repo / "characters" / "ghost" / "manifest.json").write_text(json.dumps({"slug": "ghost", "published_styles": []}))
     return repo, tmp_path / "full"
@@ -42,6 +49,8 @@ def test_import_prefers_checked_full_res_and_skips_bad_checksums(tmp_path):
     report = import_multiverse(repo, tmp_path / "kits", full_res=full)
     assert report.imported == ["nova"] and report.sheets["nova"] == ["anime"]  # gothic checksum wrong
     assert "documentation only" in report.skipped["ghost"]
+    assert "pending" in report.skipped["pendo"] and "not cleared" in report.skipped["minion"]  # QAR-M2-03
+    assert not (tmp_path / "kits" / "pendo").exists() and not (tmp_path / "kits" / "minion").exists()
     kits = load_kits(tmp_path / "none", tmp_path / "kits")
     nova = kits["nova"]
     assert nova.public_consent and nova.real_person and "Multiverse" in nova.licence
@@ -84,6 +93,12 @@ def test_contribution_bundle_follows_multiverse_rules(tmp_path):
     assert manifest["published_styles"][0]["preview"]["sha256"] == _sha(preview)
     assert not list(bundle.rglob("*.prompt.txt")) and not list(bundle.rglob("*.png"))  # no prompts, no source images
     assert "git push" in (bundle / "PULL_REQUEST.md").read_text() and "@me" in (bundle / "PULL_REQUEST.md").read_text()
+    # QAR-M2-02: no local paths anywhere in the bundle's text files
+    import re as _re
+    local = _re.compile(r"(/home/|/Users/|/tmp/|/root/|[A-Za-z]:\\\\|file://|" + _re.escape(str(tmp_path)) + ")")
+    for path in bundle.rglob("*"):
+        if path.suffix in {".md", ".json", ".txt"}:
+            assert not local.search(path.read_text()), path
 
 
 def test_sheet_prompt_shape():

@@ -83,7 +83,8 @@ def register_cli(subparser: argparse.ArgumentParser) -> None:
         help="Run the caption/line grounding eval against the host model (reads no history)",
     )
     check.add_argument("--json-out", default="", help="where to write the eval report")
-    check.add_argument("--meaning", action="store_true", help="judge in meaning mode (V7) and add the plain-English cases")
+    check.add_argument("--meaning", action="store_true", help="(default) judge in meaning mode, as planning does, incl. the plain-English cases")
+    check.add_argument("--strict", action="store_true", help="judge in the M1 strict mode instead")
     try:
         from adapters.hermes.render_cli import register_render_cli
     except ImportError:
@@ -128,7 +129,7 @@ def eval_grounding_command(args: argparse.Namespace) -> int:
     spec.loader.exec_module(module)
 
     client = PluginLLMClient(llm)
-    report = module.run(ClaimGate(client, allow=module.EVAL_CAST, meaning=bool(getattr(args, "meaning", False))))  # type: ignore[arg-type]
+    report = module.run(ClaimGate(client, allow=module.EVAL_CAST, meaning=not bool(getattr(args, "strict", False))))  # type: ignore[arg-type]
     report["usage"] = client.usage()
     print(f"grounding eval (judge: ctx.llm): {report['cases']} cases")
     print(f"  grounded lines accepted : {report['grounded_lines_passed']}/{report['cases']}")

@@ -84,12 +84,21 @@ _EXIT = re.compile(r"\bexit(?:\s+code)?\s*\d+\b", re.I)
 _PATH = re.compile(r"(?:~?/[\w.\-]+){2,}|\b[\w\-]+\.(?:py|md|json|ya?ml|toml|sh|ts|js)\b", re.I)
 _ID = re.compile(r"\b(?:t_[0-9a-f]{6,}|ev_[0-9a-f]{6,}|local-[0-9a-f]{6,}|[a-z]+_[a-z_]+\(\))", re.I)
 _SNAKE = re.compile(r"\b[a-z]+(?:_[a-z0-9]+){1,}\b")
+#: QAR-M2-04: engineering vocabulary a general reader does not know (V6). Product names that
+#: ARE the story (Severian, LCM-X) are not here; neither are everyday words like "test".
+_TECH = re.compile(
+    r"\b(?:sqlite|postgres(?:ql)?|ranker|append-only|worktree|commit|regex|json|yaml|api|cli|pytest|"
+    r"ci|gguf|lora|vram|endpoint|repo(?:sitory)?|branch|merge|rebase|stack ?trace|traceback|"
+    r"handoff \d+|context v\d+|v\d+(?:\.\d+)+|sidecar|wal|schema|mypy|ruff|lint(?:er)?|"
+    r"subprocess|daemon|cron|dispatcher|kanban|token(?:s)? per call|prompt tokens)\b",
+    re.IGNORECASE,
+)
 
 
 def jargon_problem(text: str) -> str:
     """Why a line is too technical for the page ('' when it reads fine). V6."""
     value = text or ""
-    for name, pattern in (("hash", _HASH), ("exit code", _EXIT), ("path", _PATH), ("id", _ID), ("code name", _SNAKE)):
+    for name, pattern in (("hash", _HASH), ("exit code", _EXIT), ("path", _PATH), ("id", _ID), ("code name", _SNAKE), ("jargon", _TECH)):
         found = pattern.search(value)
         if found:
             return f"{name}: {found.group(0)}"

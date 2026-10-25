@@ -278,6 +278,8 @@ class LLMDialogueWriter:
         "in the speaker's voice, only from that panel's speakers; give EVERY main character a "
         "voice across the stretch (Kensei is the AI agent and should speak, not only be described). "
         "A caption is optional (time, stakes, or a fact nobody would say aloud), at most 15 words. "
+        "Translate engineering words for a general reader: say 'the database' not SQLite or "
+        "PostgreSQL, 'the second job' not 'Handoff 2', 'the new version' not 'v2'. "
         "Never repeat a fact the script already stated. Each panel must move the story forward "
         "from the one before. Truth: every claim (what happened, who did it, why, a number, a "
         "name, an outcome) must be in that panel's facts or evidence or the synopsis; say it in "
@@ -843,6 +845,35 @@ def plan_episode(
                 },
             )
 
+    # QAR-M2-01: the actors of this story's events, and the evidence pool a line can cite.
+    actor_lookup = actors_by_event or {}
+    story_event_ids = [event_id for beat in beats for event_id in beat.event_ids]
+    thread_actors = {actor_lookup[e] for e in story_event_ids if actor_lookup.get(e)}
+    if thread_actors:
+        thread_actors.add(hero)
+    line_pool = {e: str(evidence_map.get(e, "")) for e in story_event_ids if str(evidence_map.get(e, "")).strip()}
+
+    def line_support(text: str, own_ids: Sequence[str]) -> tuple[list[str], str]:
+        """The events that state what a line says, and their evidence blocks.
+
+        The line is judged against exactly these events and cites exactly these ids, so a
+        true fact from a different event can no longer hide behind the panel's own ids.
+        """
+        from canon.grounding import content_terms
+
+        terms = {t[:6] for t in content_terms(text, allow=())}
+        def overlap(event_id: str) -> int:
+            return len(terms & {t[:6] for t in content_terms(line_pool.get(event_id, ""), allow=())})
+        ranked = sorted(line_pool, key=lambda e: (-overlap(e), story_event_ids.index(e)))
+        chosen = [e for e in own_ids if e in line_pool and overlap(e) > 0]
+        for e in ranked:
+            if len(chosen) >= 3 or overlap(e) == 0:
+                break
+            if e not in chosen:
+                chosen.append(e)
+        blocks = "\n\n".join(" ".join(line_pool[e].split()) for e in chosen)
+        return chosen, blocks
+
     inserts = 0
     for spec in panel_specs:
         if spec["role"] == "insert":
@@ -854,19 +885,15 @@ def plan_episode(
         # Chapter-mode detail panels are built inline, so default their cast here.
         spec.setdefault("cast", _cast_for(spec["beat"], canon, hero, cast_map))
         spec["actors"] = sorted(allowed_speakers(spec["beat"], spec["cast"]))
-        # R3-F5: the thread cast who appear in the thread's evidence may speak.
-        spec["speakers"] = sorted(
-            {
-                name
-                for name in (
-                    spec["cast"] + tuple((cast_map or {}).values())
-                    if thread_haystack
-                    else spec["cast"]
-                )
-                if in_thread_evidence(name) or not thread_haystack
-            }
-            or set(spec["actors"])
-        )
+        # QAR-M2-01: who may speak comes from structured actors - the people who actually
+        # wrote or did an event in this story - never from a name merely mentioned in text.
+        if thread_actors:
+            spec["speakers"] = sorted(
+                name for name in set(spec["cast"]) | set((cast_map or {}).values()) | {hero}
+                if name in thread_actors
+            )
+        else:
+            spec["speakers"] = sorted(set(spec["actors"]) or set(spec["cast"]))
     cast = sorted({name for spec in panel_specs for name in spec["cast"]})
     active_writer = writer or TemplateDialogueWriter(cast, hero=hero)
     dialogue = active_writer.write(panel_specs)
@@ -998,9 +1025,28 @@ def plan_episode(
                 continue
             if _is_generic(candidate, evidence_text, caption):
                 generic_used += 1
+            line_ids: tuple[str, ...] = event_ids
             if grounder is not None:
                 report.lines += 1
-                verdict = grounder.check(candidate, judge_text, layer="dialogue")
+                from canon.grounding import extract_claims
+
+                support_ids, support_text = line_support(candidate, event_ids)
+                if extract_claims(candidate):
+                    if not support_ids:
+                        report.lines_dropped += 1
+                        report.reasons.append(f"{role} line: no event states this")
+                        continue
+                    # QAR-M2-01: a line that makes a claim is spoken by someone who acted in
+                    # one of the events it cites (the owner may voice his own requests).
+                    cited_actors = {actor_lookup.get(e, "") for e in support_ids}
+                    if actor_lookup and speaker not in cited_actors:
+                        report.lines_dropped += 1
+                        report.reasons.append(f"{role} line: {speaker} did not act in the events it cites")
+                        continue
+                    verdict = grounder.check(candidate, support_text, layer="dialogue")
+                    line_ids = tuple(support_ids)
+                else:
+                    verdict = grounder.check(candidate, evidence_text or support_text, layer="dialogue")
                 if verdict.supported:
                     report.lines_supported += 1
                 else:
@@ -1011,7 +1057,7 @@ def plan_episode(
             if not key:
                 report.lines_dropped += 1
                 continue
-            line = Line(speaker=speaker, text=candidate, source_event_ids=event_ids)
+            line = Line(speaker=speaker, text=candidate, source_event_ids=line_ids)
             if key in seen_text:
                 duplicates.append(line)
                 report.lines_dropped += 1

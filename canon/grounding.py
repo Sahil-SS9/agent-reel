@@ -376,6 +376,21 @@ def is_common_word(word: str) -> bool:
     return word.lower().strip(".,!?;:'\"") in _COMMON_WORDS
 
 
+#: Spoken interjections that open a line and are not names (not all are dictionary words).
+INTERJECTIONS = frozenset("ok okay yeah yep yes nope nah hmm hm huh oh ah uh um wow whoa phew ugh meh right fine".split())
+
+#: Written numbers that make a figure claim. "one" is left out: "the one before", "one
+#: question" are ordinary English far more often than a count.
+NUMBER_WORDS = {
+    "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
+    "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15,
+    "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19, "twenty": 20, "thirty": 30,
+    "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90,
+    "hundred": 100, "thousand": 1000, "dozen": 12,
+}
+_NUMBER_WORD_RE = re.compile(r"\b(" + "|".join(NUMBER_WORDS) + r")\b", re.IGNORECASE)
+
+
 def extract_claims(line: str, *, allow: Iterable[str] = ()) -> tuple[Claim, ...]:
     """Everything in the line that could be wrong."""
     allowed = {item.lower() for item in allow} | STOPWORDS | REGISTER
@@ -397,6 +412,9 @@ def extract_claims(line: str, *, allow: Iterable[str] = ()) -> tuple[Claim, ...]
             add("outcome", word)
     for token in figures_in(line):
         add("number", token)
+    for match in _NUMBER_WORD_RE.finditer(line):
+        # QAR-M2-08: "Nine runs passed" makes the same claim as "9 runs passed".
+        add("number", match.group(0).lower())
     for match in _PROPER_RE.finditer(line):
         token = " ".join(match.group(0).split())
         if token.lower() in allowed or _TECHNICAL_RE.search(token):
@@ -406,7 +424,9 @@ def extract_claims(line: str, *, allow: Iterable[str] = ()) -> tuple[Claim, ...]
         # multi-word match that starts with one ("Write the reply" -> only "the reply").
         first = token.split()[0]
         sentence_start = match.start() == 0 or bool(_SENTENCE_BREAK_RE.search(line[: match.start()]))
-        if sentence_start and len(token.split()) == 1 and (match.start() == 0 or is_common_word(first)):
+        # QAR-M2-08: only an ORDINARY word is excused at a sentence start; an unknown
+        # capitalised word there ("Priya fixed it") is still a name claim.
+        if sentence_start and len(token.split()) == 1 and (is_common_word(first) or first.lower() in INTERJECTIONS):
             continue
         if sentence_start and len(token.split()) > 1 and is_common_word(first):
             token = " ".join(token.split()[1:])
@@ -429,6 +449,10 @@ def check_claims(line: str, evidence_text: str, *, allow: Iterable[str] = ()) ->
 
     def backed(claim: Claim) -> bool:
         if claim.kind == "number":
+            word = claim.text.lower()
+            if word in NUMBER_WORDS:
+                # Written number: backed by the same word, or by the same figure in digits.
+                return bool(re.search(rf"\b{word}\b", haystack)) or canonical_number(str(NUMBER_WORDS[word])) in figures
             # QAR10-02: a complete figure, never a substring ("4" is not in "14").
             return canonical_number(claim.text) in figures
         needle = claim.text.lower()
@@ -448,6 +472,19 @@ def check_claims(line: str, evidence_text: str, *, allow: Iterable[str] = ()) ->
         if claim.kind in {"name", "number"} and not backed(claim)
     ]
     return ClaimReport(claims=claims, unbacked=tuple(unbacked))
+
+
+def _words(text: str) -> list[str]:
+    return [t.lower().strip(".,") for t in _TOKEN_RE.findall(text or "") if t.strip(".,")]
+
+
+def _clauses_verbatim(line: str, evidence_text: str) -> bool:
+    """QAR-M2-10: without a model, a cause/outcome claim stands only if every clause of it
+    appears word-for-word, in order, in the evidence - which proves the same actor and
+    polarity ("Kensei passed" is not in "Sahil passed and Kensei failed")."""
+    evidence = " " + " ".join(_words(evidence_text)) + " "
+    clauses = [c for c in re.split(r"[,;]|:(?!\d)|\b(?:and|but|while|because|so)\b", line, flags=re.I) if _words(c)]
+    return bool(clauses) and all((" " + " ".join(_words(c)) + " ") in evidence for c in clauses)
 
 
 class ClaimVerdict:
@@ -616,7 +653,9 @@ class ClaimGate:
             return ClaimVerdict(True, "no claim to verify", report)
 
         if self.llm is None:
-            if layer == "dialogue" and report.needs_model and strict:
+            # QAR-M2-10: without a model, a cause or outcome cannot be verified in any layer
+            # (a caption "Kensei passed and Sahil failed" against reversed evidence).
+            if report.needs_model and (layer == "caption" or strict) and not _clauses_verbatim(line, evidence_text):
                 return ClaimVerdict(False, "cause/outcome needs a model to verify", report)
             return ClaimVerdict(True, "claims clean (no model available)", report)
         payload: dict[str, Any] = {
@@ -669,6 +708,7 @@ class ClaimGate:
         if not content:
             return []
         blocks = attribution_blocks(evidence_text)
+        cast_lower = {n.lower() for n in self.cast} | {n.lower() for n in named}
         unbound: list[str] = []
         for name in named:
             pattern = re.compile(rf"\b{re.escape(name)}\b", re.IGNORECASE)
@@ -676,13 +716,40 @@ class ClaimGate:
             for block in blocks:
                 if not pattern.search(block):
                     continue
-                stems = {token.lower()[:6] for token in _TOKEN_RE.findall(block)}
-                if content & stems:
+                if self._agent_of(block, name.lower(), content, cast_lower):
                     bound = True
                     break
             if not bound:
                 unbound.append(name)
         return unbound
+
+    @staticmethod
+    def _agent_of(block: str, name: str, content: set[str], cast_lower: set[str]) -> bool:
+        """QAR-M2-09: the actor must be the nearest cast name before the action, not just
+        present in the block. "Kensei watched while Octacon fixed the release" does not
+        bind "Kensei fixed the release": the nearest name before "fixed" is Octacon.
+
+        A block with no other cast name keeps the r10c rule (name + a shared content word),
+        since first-person evidence ("I fixed it") never repeats the actor's name.
+        """
+        tokens = [t.lower() for t in _TOKEN_RE.findall(block)]
+        names_here = {t for t in tokens if t in cast_lower}
+        stems = [t[:6] for t in tokens]
+        if not (content & set(stems)):
+            return False
+        if names_here <= {name}:
+            return True
+        last_name = ""
+        for index, (token, stem) in enumerate(zip(tokens, stems)):
+            if token in cast_lower:
+                last_name = token
+                continue
+            if stem in content and last_name == name:
+                return True
+            # Passive voice: "created by kensei".
+            if stem in content and tokens[index + 1:index + 3] == ["by", name]:
+                return True
+        return False
 
     def quote_ok(self, text: str) -> bool:
         """A verbatim quote is grounded by construction, but a long one is lazy writing."""

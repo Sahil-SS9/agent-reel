@@ -77,11 +77,14 @@ def letter_panel(
     lines: Sequence[tuple[str, str]] = (),
     comms: Sequence[str] = (),
     step: int = 16,
+    font_scale: float = 1.0,
 ) -> tuple[Image.Image, LetterReport]:
+    """``font_scale``: QAR-M2-07 - panels shown smaller on a multi-panel page get bigger text,
+    so dialogue stays readable at whole-page view."""
     im = image.convert("RGB").copy()
     draw = ImageDraw.Draw(im)
     width, height = im.size
-    scale = width / REFERENCE_WIDTH
+    scale = width / REFERENCE_WIDTH * max(1.0, font_scale)
     report = LetterReport()
 
     head_px = {name.lower(): _px(box, width, height) for name, box in heads.items()}

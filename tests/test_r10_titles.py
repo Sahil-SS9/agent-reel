@@ -31,9 +31,9 @@ EVIDENCE = "I need you to look through all our discord output from our jobs and 
 
 
 def test_reworded_title_passes_with_a_judge():
-    llm = TitleLLM("Recon audit of failed Discord jobs")
+    llm = TitleLLM("Audit of failed Discord jobs")
     title, source = write_title(llm, beats=BEATS, derived="A session", gate=ClaimGate(llm), evidence=EVIDENCE)
-    assert (title, source) == ("Recon audit of failed Discord jobs", "model")
+    assert (title, source) == ("Audit of failed Discord jobs", "model")
     assert "grounding" in llm.stages
 
 
@@ -47,3 +47,10 @@ def test_invented_number_in_title_falls_back():
     llm = TitleLLM("Nine failed Discord jobs, 12 fixed")
     _, source = write_title(llm, beats=BEATS, derived="A session", gate=ClaimGate(llm), evidence=EVIDENCE)
     assert source == "ungrounded"
+
+
+def test_unknown_sentence_initial_word_is_refused_before_the_judge():
+    """QAR-M2-08: "Recon" is not in the evidence and not an ordinary word, so it is a name claim."""
+    llm = TitleLLM("Recon audit of failed Discord jobs")
+    title, source = write_title(llm, beats=BEATS, derived="A session", gate=ClaimGate(llm), evidence=EVIDENCE)
+    assert source != "model" and "grounding" not in llm.stages

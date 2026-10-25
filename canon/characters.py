@@ -73,6 +73,7 @@ def import_multiverse(
     characters = repo / "characters"
     if not characters.is_dir():
         raise FileNotFoundError(f"not a Hermes Multiverse checkout (no characters/): {repo}")
+    pending = _pending_slugs(repo / "manifests" / "pending.json")
     for manifest_path in sorted(characters.glob("*/manifest.json")):
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         slug = str(manifest.get("slug") or manifest_path.parent.name)
@@ -81,6 +82,12 @@ def import_multiverse(
         styles = manifest.get("published_styles") or []
         if not styles:
             report.skipped[slug] = "documentation only (no published style sheets)"
+            continue
+        # QAR-M2-03: only characters open for community use are imported. Pending creator
+        # approval and third-party associations stay out until the Multiverse clears them.
+        rights = str(manifest.get("rights_status") or "")
+        if slug in pending or rights != OPEN_RIGHTS:
+            report.skipped[slug] = f"rights not cleared for use ({rights or 'unknown'}{', pending' if slug in pending else ''})"
             continue
         target = kits_dir / slug
         sheets: dict[str, str] = {}
@@ -118,15 +125,28 @@ def import_multiverse(
             "owner": False,
             # V11: the Multiverse owner opened it for community use (25/10/26). The repo's
             # manifest still says rights "unknown-not-cleared"; both are recorded.
-            "public_consent": True,
-            "licence": "Hermes Multiverse (community use, owner decision 25/10/26); "
-                       f"manifest rights_status: {manifest.get('rights_status', 'unknown')}",
+            "public_consent": True,  # rights_status == community-use (checked above)
+            "licence": "Hermes Multiverse, community use with credit (rights_status: community-use)",
             "source": "hermes-multiverse",
         }
         (target / "kit.json").write_text(json.dumps(kit, indent=1) + "\n", encoding="utf-8")
         report.imported.append(slug)
         report.sheets[slug] = sorted(sheets)
     return report
+
+
+#: The Multiverse rights value that clears a character for use (NOTICE.md, 25/10/26).
+OPEN_RIGHTS = "community-use"
+
+
+def _pending_slugs(path: Path) -> set[str]:
+    """Slugs the Multiverse holds back: rights pending, or documentation only."""
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return set()
+    held = (data.get("rights_pending") or []) + (data.get("documentation_only") or [])
+    return {str(item["slug"]) for item in held if isinstance(item, dict) and item.get("slug")}
 
 
 def _readme_summary(path: Path) -> str:
@@ -251,9 +271,9 @@ def contribution_bundle(kit_dir: Path, out_dir: Path, *, contributor: str = "") 
         f"- Contributed by: {contributor or 'the creator'}; I made this character and agree to community use.\n"
         "- Full-resolution sheets: available through the private maintainer review path.\n"
         "- Checked: no prompts, logs, credentials or local paths are included.\n\n"
-        "Before opening the PR, from your Multiverse fork:\n\n"
-        f"```\ngit checkout -b add-{slug}\ncp -r {root}/characters/{slug} characters/\n"
-        f"mkdir -p previews/{slug} && cp {previews}/*.webp previews/{slug}/\n"
+        "Before opening the PR, from your Multiverse fork (BUNDLE = the folder holding this file):\n\n"
+        f"```\ngit checkout -b add-{slug}\ncp -r BUNDLE/characters/{slug} characters/\n"
+        f"mkdir -p previews/{slug} && cp BUNDLE/previews/{slug}/*.webp previews/{slug}/\n"
         "python3 scripts/verify_repository.py --root .\n"
         f"git add characters/{slug} previews/{slug} && git commit -m \"feat: add {slug}\"\n"
         f"git push origin add-{slug}   # then open the PR on GitHub\n```\n"

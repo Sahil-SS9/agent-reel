@@ -27,6 +27,7 @@ import base64
 import json
 import mimetypes
 import os
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -79,24 +80,26 @@ SOURCES: dict[str, SourceSpec] = {
         "openai", "GPT Image (OpenAI API)", "api", env=("OPENAI_API_KEY",),
         default_model="gpt-image-1", models=("gpt-image-1", "gpt-image-1-mini"),
         max_references=4, approx_cost="about 4-20p per image",
+        notes="25/10/26: request accepted by OpenAI up to billing (account had no credits); no image made yet.",
     ),
     "gemini": SourceSpec(
         "gemini", "Nano Banana (Gemini API)", "api", env=("GEMINI_API_KEY",),
         default_model="gemini-2.5-flash-image", models=("gemini-2.5-flash-image", "gemini-3-pro-image-preview"),
         max_references=3, approx_cost="about 3p per image",
+        notes="25/10/26: request accepted by Google up to billing (key had no quota); no image made yet.",
     ),
     "fal": SourceSpec(
         "fal", "FLUX or Nano Banana (fal.ai)", "api", env=("FAL_KEY",),
         default_model="fal-ai/flux-2-pro",
         models=("fal-ai/flux-2-pro", "fal-ai/nano-banana-pro", "fal-ai/flux-2/klein/9b"),
         max_references=4, approx_cost="about 1-12p per image",
-        notes="With reference sheets the model's /edit endpoint is used.",
+        notes="With reference sheets the model's /edit endpoint is used. 25/10/26: request reached fal; account balance empty, no image made yet.",
     ),
     "comfyui": SourceSpec(
         "comfyui", "Local ComfyUI (free)", "local", env=(),
         default_model="qwen-image-edit-2511", models=("qwen-image-edit-2511",),
         max_references=3, approx_cost="free (your GPU)",
-        notes="Runs an API-format workflow template from assets/workflows/ or your own file.",
+        notes="Runs an API-format workflow template from assets/workflows/ or your own file. 25/10/26: nodes and model files verified on the local server; no image generated (GPU use needs owner approval).",
     ),
 }
 
@@ -117,7 +120,11 @@ def urllib_transport(method: str, url: str, headers: Mapping[str, str], body: by
 def _json(status: int, body: bytes, what: str) -> dict[str, Any]:
     text = body.decode("utf-8", "replace")
     if status >= 400:
-        raise RenderError(f"{what} HTTP {status}: {text[:300]}", transient=status in {429, 500, 502, 503, 504} or is_transient(text))
+        # Out of credits or quota is not worth retrying; a busy server is.
+        billing = bool(re.search(r"quota|credit|billing|balance|insufficient", text, re.I))
+        transient = not billing and (status in {429, 500, 502, 503, 504} or is_transient(text))
+        hint = " (the account has no credit or quota left)" if billing else ""
+        raise RenderError(f"{what} HTTP {status}{hint}: {text[:300]}", transient=transient)
     try:
         data = json.loads(text)
     except json.JSONDecodeError as exc:

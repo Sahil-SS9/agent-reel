@@ -159,3 +159,14 @@ def test_check_source_never_generates():
 def test_every_source_declares_status_honestly():
     assert {s.status for s in SOURCES.values()} <= {"tested", "mapped", "unsupported"}
     assert SOURCES["host"].status == "tested"
+
+
+def test_out_of_credit_is_not_retried(tmp_path):
+    fake = Fake([(429, b'{"error": {"message": "You have no credits remaining", "type": "insufficient_quota"}}')])
+    with pytest.raises(RenderError) as err:
+        make_generator("openai", out_dir=tmp_path, env={"OPENAI_API_KEY": "k"}, transport=fake)("p", [], "square")
+    assert not err.value.transient and "no credit" in str(err.value)
+    busy = Fake([(429, b"rate limited, slow down")])
+    with pytest.raises(RenderError) as err:
+        make_generator("openai", out_dir=tmp_path, env={"OPENAI_API_KEY": "k"}, transport=busy)("p", [], "square")
+    assert err.value.transient

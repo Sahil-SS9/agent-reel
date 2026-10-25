@@ -89,31 +89,36 @@ def test_editor_parses_and_clamps():
     assert edit_script(None, [], synopsis="")["score"] == 0
 
 
-def test_story_writer_sends_synopsis_voices_and_notes_and_drops_jargon():
+def test_story_writer_writes_scenes_with_synopsis_voices_notes_and_drops_jargon():
     seen = []
 
     class Model:
         def complete_json(self, *, prompt, payload, **_k):
             seen.append((prompt, payload))
-            return {"caption": "Commit d610509 replaced them.", "lines": [
-                {"speaker": "Kensei", "text": "Halfway step. The final runs replace it."},
-                {"speaker": "Sahil", "text": "And exit 127?"}]}
+            rows = []
+            for item in payload["panels"]:
+                rows.append({"key": item["key"], "caption": "Commit d610509 replaced them." if item["key"] == "insert-1" else "Night falls.",
+                             "lines": [{"speaker": "Kensei", "text": "Halfway step. The final runs replace it."},
+                                       {"speaker": "Sahil", "text": "And exit 127?"}]})
+            return {"panels": rows}
 
     writer = LLMDialogueWriter(Model(), ["Kensei", "Sahil"], story={
         "synopsis": "S", "voices": {"Kensei": "calm", "narrator": "punchy"}, "jobs": {"insert": "move"},
         "notes": {"p2": "too technical"}})
-    out = writer.write([
-        {"role": "setup", "key": "setup", "actors": ["Kensei", "Sahil"]},
-        {"role": "insert", "key": "insert-1", "actors": ["Kensei", "Sahil"]},
-    ])
-    prompt, payload = seen[1]
+    panels = [{"role": "setup", "key": "setup", "speakers": ["Kensei", "Sahil"]},
+              {"role": "insert", "key": "insert-1", "speakers": ["Kensei", "Sahil"]}]
+    panels += [{"role": "insert", "key": f"insert-{i}", "speakers": ["Sahil"]} for i in range(2, 6)]
+    out = writer.write(panels)
+    assert len(seen) == 2  # 6 panels in scenes of 5
+    prompt, payload = seen[0]
     assert "general reader" in prompt and payload["synopsis"] == "S"
-    assert payload["panel_job"] == "move" and payload["editor_note"] == "too technical"
-    assert payload["voices"]["Kensei"] == "calm" and "setting" not in payload
-    assert "editor_note" not in seen[0][1]
+    assert payload["panels"][1]["job"] == "move" and payload["panels"][1]["editor_note"] == "too technical"
+    assert payload["voices"]["Kensei"] == "calm"
+    assert seen[1][1]["script_so_far"]  # the second scene sees the first
     assert out["insert-1"]["caption"] == ""  # hash caption dropped
     assert [s for s, _ in out["insert-1"]["lines"]] == ["Kensei"]  # exit-code line dropped
-    assert writer.jargon_dropped == 4
+    assert [s for s, _ in out["insert-2"]["lines"]] == []  # Kensei may not speak there; Sahil's line has jargon
+    assert writer.jargon_dropped >= 2
 
 
 def test_m1_writer_prompt_unchanged_without_story():

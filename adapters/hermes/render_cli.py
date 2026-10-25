@@ -51,6 +51,14 @@ def register_render_cli(subs: Any) -> None:
     render.add_argument("--workflow", default="", help="ComfyUI: workflow name in assets/workflows or a file path")
     render.add_argument("--comfyui-url", default="", help="ComfyUI server (default http://127.0.0.1:8188)")
 
+    book = subs.add_parser("book", help="Collect a month's rendered episodes into one comic-book PDF")
+    book.add_argument("--month", default="", help="YYYY-MM (default: this month)")
+    book.add_argument("--all", action="store_true", help="every rendered episode found, any month")
+    book.add_argument("--renders", nargs="*", default=[], help="folders to search for rendered episodes (default: plugin data dir)")
+    book.add_argument("--title", default="")
+    book.add_argument("--out", default="")
+    book.add_argument("--assets-dir", default="")
+
     styles = subs.add_parser("styles", help="List art styles, show one's raw prompt, or set the default")
     styles.add_argument("--show", default="")
     styles.add_argument("--set", default="", dest="set_style")
@@ -114,6 +122,28 @@ def save_settings(root: Path, updates: Mapping[str, Any]) -> dict[str, Any]:
     root.mkdir(parents=True, exist_ok=True)
     _settings_path(root).write_text(json.dumps(data, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     return data
+
+
+def book_command(args: argparse.Namespace, default_dir: Callable[[], Path]) -> int:
+    """V13: the month's rendered episodes as one comic-book PDF."""
+    import time as _time
+
+    from canon.book import build_book, find_episodes, in_month
+
+    root = _data_root(getattr(args, "assets_dir", ""), default_dir)
+    roots = [Path(p).expanduser() for p in (args.renders or [])] or [root]
+    month = args.month or _time.strftime("%Y-%m")
+    episodes = in_month(find_episodes(roots), "" if args.all else month)
+    if not episodes:
+        print(f"no rendered episodes for {month} under: {', '.join(str(r) for r in roots)}")
+        return 1
+    label = "Collected episodes" if args.all else _time.strftime("%B %Y", _time.strptime(month, "%Y-%m"))
+    out = Path(args.out).expanduser() if args.out else root / "books" / f"scrollback-reel-{month}.pdf"
+    report = build_book(episodes, out, title=args.title or "Scrollback Reel", subtitle=label)
+    print(f"book: {report['pdf']} ({report['episodes']} episodes, {report['pages']} pages)")
+    for name in report["titles"]:
+        print(f"  - {name}")
+    return 0
 
 
 def styles_command(args: argparse.Namespace, default_dir: Callable[[], Path]) -> int:
@@ -320,6 +350,13 @@ def render_command(args: argparse.Namespace, *, ctx: Any, default_dir: Callable[
         return 2
     ir = json.loads(ir_path.read_text(encoding="utf-8"))
     title = ir.get("logline") or "Scrollback Reel"
+    trace_path = plan_dir / f"episode-{args.episode}-trace.json"
+    if trace_path.is_file():
+        try:
+            arc = json.loads(trace_path.read_text(encoding="utf-8")).get("arc") or {}
+            ir["episode_time"] = arc.get("resolved") or arc.get("opened")
+        except (OSError, json.JSONDecodeError):
+            pass
     root, styles, kits, approvals = _assets(args, default_dir)
     args.style = args.style or load_settings(root).get("style", "anime")
     style = styles.get(args.style)

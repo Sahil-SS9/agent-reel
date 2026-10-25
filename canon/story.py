@@ -41,7 +41,7 @@ DEFAULT_VOICES: dict[str, str] = {
 
 #: What each arc role must do for the reader (craft notes, docs/STORY-CRAFT.md).
 PANEL_JOBS: dict[str, str] = {
-    "setup": "who the hero is, what they want and why it matters",
+    "setup": "introduce the characters (Sahil, the builder; Kensei, his AI agent), what Sahil wants and why it matters",
     "insert": "move the story one step: what was tried, found or learned",
     "hidden_problem": "the first sign that something is wrong",
     "diagnosis": "the moment the real cause becomes clear",

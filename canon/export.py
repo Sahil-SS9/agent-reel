@@ -185,9 +185,15 @@ def caption_draft(title: str, ir: Mapping[str, Any], *, hashtags: Sequence[str] 
     return "\n\n".join(line for line in lines if line)
 
 
-def sidecar(ir: Mapping[str, Any], *, style: str, render_report: Mapping[str, Any], checks: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+def sidecar(ir: Mapping[str, Any], *, style: str, render_report: Mapping[str, Any], checks: Sequence[Mapping[str, Any]],
+            title: str = "") -> dict[str, Any]:
+    import time as _time
+
     return {
         "episode_id": ir.get("episode_id"),
+        "title": title or ir.get("logline", ""),
+        # V13: the monthly book orders and filters episodes by when the story happened.
+        "episode_time": float(ir.get("episode_time") or ir.get("resolved") or ir.get("opened") or _time.time()),
         "style": style,
         "panels": [
             {
@@ -259,7 +265,7 @@ def export_episode(
     files["caption"].write_text(draft + "\n", encoding="utf-8")
     files["sidecar"] = out / "sidecar.json"
     files["sidecar"].write_text(
-        json.dumps(sidecar(ir, style=style, render_report=render_report, checks=checks), indent=1) + "\n",
+        json.dumps(sidecar(ir, style=style, render_report=render_report, checks=checks, title=title), indent=1) + "\n",
         encoding="utf-8",
     )
     return ExportSet(files=files, caption_draft=draft)

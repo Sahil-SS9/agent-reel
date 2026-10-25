@@ -246,28 +246,6 @@ class LLMDialogueWriter:
         "No text inside the image."
     )
 
-    #: V6-V8 (25/10/26): the writer tells a story from the synopsis instead of
-    #: rewording one chat message per panel.
-    STORY_PROMPT = (
-        "You are writing one panel of a comic that retells real work with an AI agent, for a "
-        "general reader. The pictures are epic; the words are plain, human and a little witty. "
-        "You get the whole story (synopsis), this panel's job in it, the facts this panel may "
-        "use, the evidence behind them, the previous panel's words, and each character's voice. "
-        "Return JSON only: {\"caption\": \"...\", \"lines\": [{\"speaker\": \"...\", \"text\": \"...\"}]}. "
-        "The DIALOGUE carries the scene: at most 2 lines, each under 90 characters, in the "
-        "speaker's voice, from the cast list, and only someone who acted in this panel's events. "
-        "The CAPTION is optional: use it only for time, stakes or a fact the reader needs that no "
-        "one would say aloud; at most 15 words; empty is fine when the lines carry the panel. "
-        "Truth: every claim (what happened, who did it, why, a number, a name, an outcome) must "
-        "be in the facts or evidence; you may say it in plain English by what it meant. Tone, "
-        "jokes and metaphor are free; new facts are not. "
-        + "Write for a general reader who has never seen a terminal: explain technical detail by "
-        "what it meant. Never show commit hashes, exit codes, file paths, task ids or tool names "
-        "unless the name or number IS the story (a score, a count, a product name). "
-        "Connect to the previous panel so it reads as one story. If an editor note is given, "
-        "fix exactly that. No text inside the image."
-    )
-
     def __init__(
         self,
         llm: CachedLLM,
@@ -287,10 +265,97 @@ class LLMDialogueWriter:
         self.story = dict(story) if story else None
         self.jargon_dropped = 0
 
+    #: V6 (25/10/26): story mode writes the script in scenes of a few panels at a time,
+    #: so panels connect, facts are not repeated and every character gets a voice.
+    SCENE_PROMPT = (
+        "You are writing a stretch of a comic script that retells real work with an AI agent, "
+        "for a general reader. The pictures are epic; the words are plain, human and a little "
+        "witty. You get the whole story (synopsis), the script so far, and the next panels: "
+        "each with its job in the story, the facts it may use, the evidence behind them, and "
+        "who may speak. Return JSON only: {\"panels\": [{\"key\": \"...\", \"caption\": \"...\", "
+        "\"lines\": [{\"speaker\": \"...\", \"text\": \"...\"}]}]} with one entry per panel, same keys. "
+        "Rules: dialogue carries the scene - at most 2 lines per panel, each under 90 characters, "
+        "in the speaker's voice, only from that panel's speakers; give EVERY main character a "
+        "voice across the stretch (Kensei is the AI agent and should speak, not only be described). "
+        "A caption is optional (time, stakes, or a fact nobody would say aloud), at most 15 words. "
+        "Never repeat a fact the script already stated. Each panel must move the story forward "
+        "from the one before. Truth: every claim (what happened, who did it, why, a number, a "
+        "name, an outcome) must be in that panel's facts or evidence or the synopsis; say it in "
+        "plain English by what it meant. Tone, jokes and metaphor are free; new facts are not. "
+        "Never show commit hashes, exit codes, file paths, task ids or tool names unless the name "
+        "or number IS the story. If an editor note is given for a panel, fix exactly that."
+    )
+    SCENE_SIZE = 5
+
+    def _write_story(self, panels: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
+        from canon.story import jargon_problem
+
+        story = self.story or {}
+        voices = story.get("voices", {})
+        notes = story.get("notes", {})
+        out: dict[str, dict[str, Any]] = {}
+        so_far: list[str] = []
+        indexed = list(enumerate(panels, start=1))
+        for start in range(0, len(indexed), self.SCENE_SIZE):
+            chunk = indexed[start:start + self.SCENE_SIZE]
+            items = []
+            for position, panel in chunk:
+                speakers = [s for s in (panel.get("speakers") or panel.get("actors") or self.cast) if s in self.cast]
+                item = {
+                    "key": panel.get("key", panel["role"]),
+                    "job": story.get("jobs", {}).get(panel["role"], ""),
+                    "facts": panel.get("fact_sentence", ""),
+                    "evidence": str(panel.get("evidence", ""))[:700],
+                    "speakers": speakers,
+                }
+                if notes.get(f"p{position}"):
+                    item["editor_note"] = notes[f"p{position}"]
+                items.append(item)
+            cast_here = sorted({s for item in items for s in item["speakers"]})
+            payload = {
+                "synopsis": story.get("synopsis", ""),
+                "script_so_far": so_far[-12:],
+                "voices": {name: voices.get(name, "natural") for name in cast_here} | {"narrator": voices.get("narrator", "")},
+                "panels": items,
+            }
+            try:
+                response = self.llm.complete_json(
+                    prompt=self.SCENE_PROMPT,
+                    payload=payload,
+                    schema_hint={"panels": [{"key": "string", "caption": "string", "lines": [{"speaker": "string", "text": "string"}]}]},
+                    stage="episode.scene",
+                )
+                rows = response.get("panels")
+                if not isinstance(rows, list):
+                    raise ValueError("scene reply has no panels list")
+            except (LLMError, ValueError):
+                self.failures += 1
+                rows = []
+            by_key = {str(row.get("key")): row for row in rows if isinstance(row, Mapping)}
+            for item in items:
+                row = by_key.get(str(item["key"]), {})
+                try:
+                    caption, lines = self._validate(row) if row else ("", [])
+                except ValueError:
+                    caption, lines = "", []
+                lines = [line for line in lines if line[0] in item["speakers"]]
+                if caption and jargon_problem(caption):
+                    caption = ""
+                    self.jargon_dropped += 1
+                kept = [line for line in lines if not jargon_problem(line[1])]
+                self.jargon_dropped += len(lines) - len(kept)
+                out[str(item["key"])] = {"caption": caption, "lines": kept}
+                said = " / ".join(([caption] if caption else []) + [f"{s}: {t}" for s, t in kept])
+                if said:
+                    so_far.append(said)
+        return out
+
     def write(self, panels: Sequence[Mapping[str, Any]]) -> dict[str, list[list[str]]]:
+        if self.story is not None:
+            return self._write_story(panels)  # type: ignore[return-value]
         out: dict[str, list[list[str]]] = {}
         context: list[str] = []
-        for position, panel in enumerate(panels, start=1):
+        for panel in panels:
             payload = {
                 "role": panel["role"],
                 "cast": list(panel.get("actors") or self.cast),
@@ -300,22 +365,9 @@ class LLMDialogueWriter:
                 "setting": panel.get("setting", ""),
                 "format": panel.get("format", "strip"),
             }
-            if self.story is not None:
-                cast_now = payload["cast"]
-                voices = self.story.get("voices", {})
-                payload.update(
-                    synopsis=self.story.get("synopsis", ""),
-                    panel_job=self.story.get("jobs", {}).get(panel["role"], ""),
-                    voices={name: voices.get(name, "natural") for name in cast_now} | {"narrator": voices.get("narrator", "")},
-                )
-                payload.pop("setting", None)  # the director decides the look, not the writer
-                # Editor notes are keyed by panel position ("p3"), matching the panel id suffix.
-                note = self.story.get("notes", {}).get(f"p{position}")
-                if note:
-                    payload["editor_note"] = note
             try:
                 response = self.llm.complete_json(
-                    prompt=self.STORY_PROMPT if self.story is not None else self.PROMPT,
+                    prompt=self.PROMPT,
                     payload=payload,
                     schema_hint={
                         "caption": "string",
@@ -331,22 +383,8 @@ class LLMDialogueWriter:
             # panel the model could not write stays empty and is dropped by the planner.
             # V4: keyed per panel - a chapter has several "insert" panels, and keying by
             # role made each one overwrite the last (all but one came back empty).
-            if self.story is not None:
-                # V6: jargon never reaches the page; drop the part, not the panel.
-                from canon.story import jargon_problem
-
-                if caption and jargon_problem(caption):
-                    caption = ""
-                    self.jargon_dropped += 1
-                kept = [line for line in lines if not jargon_problem(line[1])]
-                self.jargon_dropped += len(lines) - len(kept)
-                lines = kept
             out[panel.get("key", panel["role"])] = {"caption": caption, "lines": lines}
-            if self.story is not None:
-                said = " / ".join([caption] + [f"{s}: {t}" for s, t in lines]).strip(" /")
-                context.append(said or str(panel.get("summary", "")))
-            else:
-                context.append(lines[0][1] if lines else str(panel.get("summary", "")))
+            context.append(lines[0][1] if lines else str(panel.get("summary", "")))
         return out
 
     def _validate(self, response: Mapping[str, Any]) -> tuple[str, list[list[str]]]:

@@ -749,7 +749,7 @@ def run_pipeline(
                         writer_cached.complete_json, title=title, facts_text=thread_facts_text,
                         brief_text=brief.text(), gate=grounder,
                     )
-                    if synopsis.fields.get("title") and title_source != "model":
+                    if synopsis.fields.get("title"):
                         # V6: a story title from the checked synopsis beats "A session".
                         title, title_source = synopsis.fields["title"], "synopsis"
                     story_ctx = {"synopsis": synopsis.text(), "voices": DEFAULT_VOICES,

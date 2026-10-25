@@ -119,6 +119,8 @@ class PipelineConfig:
     harnesses: tuple[str, ...] = ("hermes",)
     #: Per-harness options: {"codex": {"root": "...", "agent": "Codex"}, "jsonl": {"mapping": {...}}}.
     harness_options: Mapping[str, Mapping[str, Any]] | None = None
+    #: V11: character voices from the user's kits (tone only), merged over the defaults.
+    voices: Mapping[str, str] | None = None
     #: V7: "meaning" judges captions and lines on meaning (plain English allowed);
     #: "strict" keeps the M1 vocabulary floor. The library default stays strict so the
     #: M1 tests and evals keep measuring the accepted gate; the plugin CLI defaults to meaning.
@@ -767,7 +769,7 @@ def run_pipeline(
                     if synopsis.fields.get("title"):
                         # V6: a story title from the checked synopsis beats "A session".
                         title, title_source = synopsis.fields["title"], "synopsis"
-                    story_ctx = {"synopsis": synopsis.text(), "voices": DEFAULT_VOICES,
+                    story_ctx = {"synopsis": synopsis.text(), "voices": {**DEFAULT_VOICES, **dict(config.voices or {})},
                                  "jobs": PANEL_JOBS, "notes": {}}
                     first_writer = LLMDialogueWriter(writer_cached, cast, story=story_ctx)
                     episode_ir = _plan(first_writer)

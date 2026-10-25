@@ -89,7 +89,22 @@ def register_render_cli(subs: Any) -> None:
     approve.add_argument("key")
     approve.add_argument("--style", required=True)
     approve.add_argument("--yes", action="store_true", help="confirm you have looked at the sheet")
-    for sub in (kit, listing, add, approve):
+    imp = kit_subs.add_parser("import-multiverse", help="Import Hermes Multiverse characters as kits")
+    imp.add_argument("--repo", default="~/repos/hermes-multiverse-public", help="a Multiverse checkout")
+    imp.add_argument("--full-res", default="", help="unpacked full-resolution release ZIP (else WebP previews)")
+    imp.add_argument("--only", default="", help="comma-separated character slugs")
+    create = kit_subs.add_parser("create", help="Create your own character (a short set-up exercise)")
+    create.add_argument("--style", default="anime")
+    create.add_argument("--source", default="", help="image source for the sheet (see `hermes reel sources`)")
+    create.add_argument("--photo", default="", help="your own photo for your own likeness (stays local unless your source needs it)")
+    create.add_argument("--owner", action="store_true", help="this character is you")
+    create.add_argument("--dry-run", action="store_true", help="write the sheet prompt only; make no image")
+    for question, _text in (("name", ""), ("who", ""), ("look", ""), ("outfit", ""), ("colours", ""), ("signature", ""), ("voice", "")):
+        create.add_argument(f"--{question}", default="")
+    contribute = kit_subs.add_parser("contribute", help="Prepare your character for a Hermes Multiverse pull request (nothing is pushed)")
+    contribute.add_argument("key")
+    contribute.add_argument("--contributor", default="", help="your handle, for the PR text")
+    for sub in (kit, listing, add, approve, imp, create, contribute):
         sub.add_argument("--assets-dir", default="")
 
 
@@ -202,7 +217,7 @@ def sources_command(args: argparse.Namespace, default_dir: Callable[[], Path]) -
     return 0
 
 
-def kit_command(args: argparse.Namespace, default_dir: Callable[[], Path]) -> int:
+def kit_command(args: argparse.Namespace, default_dir: Callable[[], Path], ctx: Any = None) -> int:
     root, styles, kits, approvals = _assets(args, default_dir)
     action = getattr(args, "kit_action", None)
     if action == "list" or action is None:
@@ -259,8 +274,79 @@ def kit_command(args: argparse.Namespace, default_dir: Callable[[], Path]) -> in
         digest = approvals.approve(kit, args.style)
         print(f"approved {args.key} in {args.style} (sheet sha256 {digest[:12]})")
         return 0
-    print("Usage: hermes reel kit list|add|approve")
+    if action == "import-multiverse":
+        from canon.characters import import_multiverse
+
+        try:
+            report = import_multiverse(Path(args.repo), root / "kits", full_res=Path(args.full_res) if args.full_res else None,
+                                       only=[s.strip() for s in args.only.split(",") if s.strip()])
+        except FileNotFoundError as exc:
+            print(exc)
+            return 2
+        print(f"imported {len(report.imported)} Multiverse characters into {root / 'kits'}")
+        for slug in report.imported:
+            print(f"  {slug:22} {', '.join(report.sheets[slug])}")
+        for slug, why in sorted(report.skipped.items()):
+            print(f"  skipped {slug}: {why}")
+        if report.previews_used:
+            print(f"note: {len(report.previews_used)} sheets are 960px previews; pass --full-res <unpacked release ZIP> for full size")
+        print("Each sheet renders only after you approve it: hermes reel kit approve <slug> --style <style> --yes")
+        return 0
+    if action == "create":
+        return _kit_create(args, root, styles, ctx)
+    if action == "contribute":
+        from canon.characters import contribution_bundle
+
+        kit = kits.get(args.key)
+        if kit is None:
+            print(f"unknown kit {args.key!r}")
+            return 2
+        result = contribution_bundle(root / "kits" / args.key, root / "contributions", contributor=args.contributor)
+        print(f"contribution bundle: {result['bundle']} ({result['previews']} preview(s))")
+        print(f"PR text and the exact commands to run: {result['pr']}")
+        print("Nothing has been pushed. Review the bundle, then follow PULL_REQUEST.md from your own Multiverse fork.")
+        return 0
+    print("Usage: hermes reel kit list|add|create|approve|import-multiverse|contribute")
     return 2
+
+
+def _kit_create(args: argparse.Namespace, root: Path, styles: Mapping[str, Any], ctx: Any) -> int:
+    import sys
+
+    from canon.characters import SETUP_QUESTIONS, create_character
+    from canon.providers import make_generator
+
+    answers = {key: str(getattr(args, key, "") or "") for key, _q in SETUP_QUESTIONS}
+    if not answers["name"] and sys.stdin.isatty():
+        print("Character set-up: answer a few questions (press Enter to skip optional ones).")
+        for key, question in SETUP_QUESTIONS:
+            if not answers[key]:
+                answers[key] = input(f"  {question} ").strip()
+    if not answers["name"]:
+        print("A character needs at least --name (or run in a terminal for the set-up questions).")
+        return 2
+    style = styles.get(args.style)
+    if style is None:
+        print(f"unknown style {args.style!r}")
+        return 2
+    style_block = style.prompt_block or (style.summary and f"Art style: {style.summary}.") or ""
+    generate = None
+    if not args.dry_run:
+        settings = load_settings(root)
+        source = args.source or settings.get("source", "host")
+        dispatch = getattr(ctx, "dispatch_tool", None) if ctx is not None else None
+        from adapters.hermes.images import host_generator
+
+        generate = make_generator(source, out_dir=root / "cache" / "source-out",
+                                  host=host_generator(dispatch) if dispatch else None)
+    result = create_character(answers, root / "kits", style=args.style, style_block=style_block, generate=generate,
+                              photo=Path(args.photo).expanduser() if args.photo else None, is_owner=args.owner)
+    if result["generated"]:
+        print(f"character {result['slug']!r} created; sheet: {root / 'kits' / result['slug'] / result['sheet']}")
+        print(f"Look at it, then approve: hermes reel kit approve {result['slug']} --style {args.style} --yes")
+    else:
+        print(f"character {result['slug']!r} saved (dry run). Sheet prompt written next to {result['kit']}")
+    return 0
 
 
 def _story_text(plan_dir: Path, episode: int, ir: Mapping[str, Any]) -> str:

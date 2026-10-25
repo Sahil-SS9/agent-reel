@@ -69,6 +69,8 @@ class CharacterKit:
     public_consent: bool
     licence: str
     source: str
+    #: V11: how the character talks (tone only), used by the story writer.
+    voice: str = ""
 
     def sheet_for(self, style: str) -> tuple[Path, bool]:
         """The sheet for ``style``, or another style's sheet used for identity only.
@@ -193,6 +195,7 @@ def _kit(path: Path, source: str) -> CharacterKit:
         public_consent=bool(data.get("public_consent", False)),
         licence=str(data["licence"]),
         source=source,
+        voice=str(data.get("voice", "")),
     )
 
 

@@ -146,6 +146,18 @@ def eval_grounding_command(args: argparse.Namespace) -> int:
     return 0 if report["ok"] else 1
 
 
+def _kit_voices() -> dict[str, str]:
+    """Voices from built-in and user character kits (V11)."""
+    try:
+        from canon.assets import load_kits
+
+        repo = Path(__file__).resolve().parents[2]
+        kits = load_kits(repo / "kits", _default_data_dir() / "kits")
+    except Exception:  # noqa: BLE001 - voices are optional
+        return {}
+    return {kit.name: kit.voice for kit in kits.values() if kit.voice}
+
+
 def _harness_options(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
     options: dict[str, dict[str, Any]] = {}
     for item in getattr(args, "harness_root", []) or []:
@@ -167,7 +179,7 @@ def reel_command(args: argparse.Namespace) -> int:
         from adapters.hermes import render_cli
 
         if action == "kit":
-            return render_cli.kit_command(args, _default_data_dir)
+            return render_cli.kit_command(args, _default_data_dir, ctx=_CTX)
         if action == "sources":
             return render_cli.sources_command(args, _default_data_dir)
         if action == "book":
@@ -228,6 +240,7 @@ def reel_command(args: argparse.Namespace) -> int:
         wording=getattr(args, "wording", "meaning"),
         harnesses=tuple(h.strip() for h in str(getattr(args, "harness", "hermes")).split(",") if h.strip()),
         harness_options=_harness_options(args),
+        voices=_kit_voices(),
         episodes=max(1, args.episodes),
         max_deep_events=args.max_deep_events,
         use_model=True,

@@ -155,7 +155,7 @@ class DialogueWriter(Protocol):
     name: str
 
     def write(self, panels: Sequence[Mapping[str, Any]]) -> dict[str, list[list[str]]]:
-        """Return {panel_role: [[speaker, text], ...]}."""
+        """Return {panel_key: ...}; the key is the role, or ``insert-N`` for chapter inserts."""
 
 
 class TemplateDialogueWriter:
@@ -215,7 +215,7 @@ class TemplateDialogueWriter:
         """
         out: dict[str, dict[str, Any]] = {}
         for panel in panels:
-            out[panel["role"]] = {"caption": self.caption_for(panel), "lines": []}
+            out[panel.get("key", panel["role"])] = {"caption": self.caption_for(panel), "lines": []}
         return out
 
 
@@ -289,7 +289,9 @@ class LLMDialogueWriter:
                 caption, lines = "", []
             # Round 8 / R7-F1: no template caption and no template line. A panel whose
             # panel the model could not write stays empty and is dropped by the planner.
-            out[panel["role"]] = {"caption": caption, "lines": lines}
+            # V4: keyed per panel - a chapter has several "insert" panels, and keying by
+            # role made each one overwrite the last (all but one came back empty).
+            out[panel.get("key", panel["role"])] = {"caption": caption, "lines": lines}
             context.append(lines[0][1] if lines else str(panel.get("summary", "")))
         return out
 
@@ -737,6 +739,13 @@ def plan_episode(
                 },
             )
 
+    inserts = 0
+    for spec in panel_specs:
+        if spec["role"] == "insert":
+            inserts += 1
+            spec["key"] = f"insert-{inserts}"
+        else:
+            spec["key"] = spec["role"]
     for spec in panel_specs:
         # Chapter-mode detail panels are built inline, so default their cast here.
         spec.setdefault("cast", _cast_for(spec["beat"], canon, hero, cast_map))
@@ -794,7 +803,7 @@ def plan_episode(
             f"{fact_blocks}\n\n{evidence_text}".strip() if fact_blocks else evidence_text
         )
         speakers_allowed = set(spec.get("speakers") or spec.get("actors") or ())
-        written = dialogue.get(role, {})
+        written = dialogue.get(spec.get("key", role), {})
 
         # ---- layer 1: the fact caption -----------------------------------
         # Round 8 / R7-F1: the caption is the writer's sentence. Facts are evidence for the

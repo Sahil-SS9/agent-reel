@@ -107,3 +107,18 @@ def test_thin_chapter_gets_more_fillers_up_to_one_each():
     assert len(ir["panels"]) + len(t.fillers) >= 16
     afters = [f.after for f in t.fillers]
     assert len(afters) == len(set(afters))  # at most one filler per story panel
+
+
+def test_llm_writer_keys_each_insert_panel_separately():
+    from canon.episode import LLMDialogueWriter
+
+    class Fake:
+        def complete_json(self, *, payload, **_k):
+            return {"caption": f"Caption for {payload['facts']}.", "lines": []}
+
+    writer = LLMDialogueWriter(Fake(), ["Sahil"])
+    out = writer.write([
+        {"role": "insert", "key": "insert-1", "fact_sentence": "one"},
+        {"role": "insert", "key": "insert-2", "fact_sentence": "two"},
+    ])
+    assert out["insert-1"]["caption"] != out["insert-2"]["caption"]

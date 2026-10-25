@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Any, Mapping, Iterable, Sequence
 
 from canon.brief import CHAPTER_MAX_TURNS, MAX_TURNS, build_brief
-from canon.story import DEFAULT_VOICES, PANEL_JOBS, behind_the_panels, edit_script, write_synopsis
+from canon.story import DEFAULT_VOICES, PANEL_JOBS, edit_script, write_synopsis
 from canon.selection import select_stories
 from canon.threads import beats_by_thread, thread_index
 from canon.arcs import build_brief_arc
@@ -938,9 +938,16 @@ def run_pipeline(
                         )
                         for panel in episode_ir.panels
                     }
-                    write_text(
-                        config.data_dir / f"episode-{row['number']}-behind-the-panels.md",
-                        behind_the_panels([p.as_dict() for p in episode_ir.panels], facts_by_panel),
+                    # Evidence files carry short strings only, so the notes go out per panel.
+                    write_json(
+                        config.data_dir / f"episode-{row['number']}-behind-the-panels.json",
+                        {"panels": [
+                            {"panel": number, "id": panel.id, "role": panel.role,
+                             "details": facts_by_panel.get(panel.id, ""),
+                             "sources": list(panel.caption_source_event_ids[:3])}
+                            for number, panel in enumerate(episode_ir.panels, start=1)
+                            if facts_by_panel.get(panel.id)
+                        ]},
                         gate,
                     )
                 write_json(

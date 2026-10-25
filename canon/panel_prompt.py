@@ -132,7 +132,7 @@ def build_panel_request(
     if staging_bits:
         parts.append("STAGING: " + "; ".join(staging_bits) + ".")
     else:
-        parts.append("STAGING: no characters; an empty scene.")
+        parts.append("STAGING: no people in this panel." if treatment is not None else "STAGING: no characters; an empty scene.")
     villain_shown = (
         treatment is not None and villain is not None and treatment.villain_presence != "absent"
     )
@@ -147,7 +147,8 @@ def build_panel_request(
                     "defeated": "defeated, breaking apart"}.get(treatment.villain_presence, "present")
         parts.append(f"VILLAIN: {name.upper()} ({look}), {presence}.")
         references = references + (Path(sheet),)
-        model_line += f", {name.upper()} is exactly as in the {ORDINALS[len(resolved)]} reference sheet"
+        villain_ref = f"{name.upper()} is exactly as in the {ORDINALS[len(resolved)]} reference sheet"
+        model_line = f"{model_line}, {villain_ref}" if model_line else villain_ref
     if resolved or villain_shown:
         extra = " Draw no other people." if resolved else ""
         parts.append(
@@ -179,13 +180,42 @@ def build_episode_requests(
     """Requests for every panel, plus the reasons any panel could not be prompted."""
     requests: list[PanelRequest] = []
     problems: list[str] = []
-    for panel in ir.get("panels", []) or []:
-        item = treatment.panels.get(str(panel.get("id"))) if treatment is not None else None
+    by_id = {str(p.get("id")): p for p in ir.get("panels", []) or []}
+    if treatment is None:
+        order = [(str(p.get("id")), None) for p in ir.get("panels", []) or []]
+    else:
+        order = treatment.sequence(ir)
+    for pid, item in order:
+        panel = by_id.get(pid) or filler_panel(item)
         try:
-            requests.append(build_panel_request(panel, style=style, kits=kits, treatment=item, villain=villain))
+            requests.append(build_panel_request(
+                panel, style=style, kits=kits, treatment=item, villain=villain,
+                aspect=panel_aspect(str(panel.get("role", ""))) if treatment is not None else "landscape",
+            ))
         except PromptError as exc:
             problems.append(str(exc))
     return requests, problems
+
+
+#: V4 layout: big story moments are wide, fillers are tall, the rest square. Providers
+#: may ignore the aspect when given reference sheets; the page layout copes either way.
+SOLO_ROLES = ("setup", "climax", "win")
+
+
+def panel_aspect(role: str) -> str:
+    if role in SOLO_ROLES:
+        return "landscape"
+    if role == "filler":
+        return "portrait"
+    return "square"
+
+
+def filler_panel(item: Any) -> dict[str, Any]:
+    """A wordless panel spec for a director filler: no caption, no lines, nothing to ground."""
+    return {
+        "id": item.panel_id, "role": "filler", "shot": "medium", "setting": "",
+        "cast": list(item.cast), "pose": "", "expression": "", "caption": "", "lines": [],
+    }
 
 
 def episode_cast(ir: Mapping[str, Any]) -> list[str]:

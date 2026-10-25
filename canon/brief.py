@@ -167,12 +167,38 @@ def _outcome_score(event: GatedEvent) -> float:
     return digits * 3 + hits * 2 + min(words, 60) / 60.0 + event.ts / 1e12
 
 
+#: V4 (25/10/26): a chapter tells 16-24 panels, so its brief keeps more turns.
+CHAPTER_MAX_TURNS = 14
+
+
+def _spread(candidates: list[tuple[GatedEvent, str]], limit: int) -> list[tuple[GatedEvent, str]]:
+    """Distinct texts sampled evenly from start to end (first and last kept)."""
+    distinct: list[tuple[GatedEvent, str]] = []
+    seen: set[str] = set()
+    for event, text in candidates:
+        if text.lower() not in seen:
+            seen.add(text.lower())
+            distinct.append((event, text))
+    if len(distinct) <= limit:
+        return distinct
+    step = (len(distinct) - 1) / (limit - 1)
+    picked = sorted({round(i * step) for i in range(limit)})
+    return [distinct[i] for i in picked]
+
+
 def _key_turns(events: Sequence[GatedEvent], *, limit: int = MAX_TURNS) -> tuple[BriefTurn, ...]:
     """Text-bearing events, distinct, spread across the thread, best first."""
     candidates = [(event, event_text(event)) for event in events if is_story_event(event)]
     candidates = [(event, text) for event, text in candidates if len(text) >= 12]
     if not candidates:
         return ()
+    if limit > MAX_TURNS:
+        # A chapter covers the whole thread, beginning to end, not its first exchanges.
+        chosen_long = _spread(sorted(candidates, key=lambda pair: pair[0].ts), limit)
+        return tuple(
+            BriefTurn(event_id=event.id, actor=event.actor or event.profile or "", text=text)
+            for event, text in chosen_long
+        )
 
     chosen: list[tuple[GatedEvent, str]] = []
     seen_text: set[str] = set()
@@ -211,6 +237,7 @@ def build_brief(
     events: Iterable[GatedEvent],
     *,
     gate: Any | None = None,
+    max_turns: int = MAX_TURNS,
 ) -> ThreadBrief:
     """Build a gated brief, dropping any line the events do not support."""
     rows = require_gated(list(events), stage="brief")
@@ -264,7 +291,7 @@ def build_brief(
         )
         outcome = finished or ""
 
-    turns = _key_turns(rows)
+    turns = _key_turns(rows, limit=max_turns)
 
     brief = ThreadBrief(
         thread_key=thread_key,

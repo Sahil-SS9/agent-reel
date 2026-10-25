@@ -48,6 +48,9 @@ ROLE_STAGING: dict[str, tuple[str, str, str, str, str]] = {
 
 STRIP_ROLES = ARC_ROLES  # 6 panels: one per role
 CHAPTER_EXTRA = ("insert", "insert")  # chapter adds detail beats
+#: V4 (25/10/26): a chapter has up to 14 story panels (fillers come on top, in the
+#: director), giving 16-24 panels over 3-4 pages.
+CHAPTER_MAX_STORY = 14
 
 
 @dataclass(frozen=True, slots=True)
@@ -710,21 +713,25 @@ def plan_episode(
     if format == "chapter":
         # Detail panels: the arc's own beats that no role used, up to 12 panels.
         used = set(arc.roles.values())
-        extra = [
-            beat
-            for beat in beats
-            if beat.id not in used and usable(beat) and len(panel_specs) < 10
-        ]
+        extra = [beat for beat in beats if beat.id not in used and usable(beat)]
+        extra = extra[: max(0, CHAPTER_MAX_STORY - len(panel_specs))]
         for beat in extra:
+            # V4: a development panel sits where it happened in time, between the roles.
+            position = len(panel_specs)
+            for index, spec in enumerate(panel_specs):
+                if spec["beat"].ts > beat.ts:
+                    position = index
+                    break
+            position = max(1, min(position, len(panel_specs) - 1))
             panel_specs.insert(
-                max(1, len(panel_specs) - 2),
+                position,
                 {
                     "role": "insert",
                     "beat": beat,
-                    "shot": "insert",
-                    "pose": "detail of the screen",
-                    "expression": "n/a",
-                    "setting": "the terminal glow",
+                    "shot": "medium",
+                    "pose": "working",
+                    "expression": "focused",
+                    "setting": "the rig",
                     "summary": beat.summary,
                     "format": format,
                 },

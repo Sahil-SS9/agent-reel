@@ -31,7 +31,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Iterable, Sequence
 
-from canon.brief import build_brief
+from canon.brief import CHAPTER_MAX_TURNS, MAX_TURNS, build_brief
 from canon.selection import select_stories
 from canon.threads import beats_by_thread, thread_index
 from canon.arcs import build_brief_arc
@@ -618,6 +618,7 @@ def run_pipeline(
                 thread.kind,
                 thread_events.get(thread.id, []),
                 gate=grounder if config.use_model else None,
+                max_turns=CHAPTER_MAX_TURNS if config.format == "chapter" else MAX_TURNS,
             )
             if not brief.ok:
                 missing = [

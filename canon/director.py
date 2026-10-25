@@ -88,10 +88,17 @@ DIRECTOR_PROMPT = (
     "panel; the setup is an establishing extreme-long or long shot; never ask for text, "
     "signs, labels or writing in the image. shot is one of "
     + ", ".join(SHOTS) + "; angle is one of " + ", ".join(ANGLES) + "; villain_presence is "
-    "one of absent, lurking, attacking, defeated. Answer JSON only: "
+    "one of absent, lurking, attacking, defeated. Also add wordless FILLER panels like a "
+    "real comic book, about one for every two story panels: establishing shots of the "
+    "world, reaction close-ups, the villain lurking, the calm before the fight, the impact "
+    "after it, a quiet closing beat. A filler goes after a story panel (never after the "
+    "last one), has no words, and may show only the episode's cast or the villain. "
+    "Answer JSON only: "
     '{"villain": {"name": "...", "look": "..."}, "world": "...", "panels": '
     '[{"id": "...", "location": "...", "action": "...", "villain_presence": "...", '
-    '"shot": "...", "angle": "..."}]}'
+    '"shot": "...", "angle": "..."}], "fillers": [{"after": "<story panel id>", '
+    '"kind": "...", "location": "...", "action": "...", "cast": ["..."], '
+    '"villain_presence": "...", "shot": "...", "angle": "..."}]}'
 )
 
 
@@ -104,9 +111,12 @@ class PanelTreatment:
     villain_presence: str
     shot: str
     angle: str
+    #: Filler panels only (V5): the story panel this one follows, and who is drawn.
+    after: str = ""
+    cast: tuple[str, ...] = ()
 
     def as_dict(self) -> dict[str, Any]:
-        return {
+        data = {
             "panel_id": self.panel_id,
             "role": self.role,
             "location": self.location,
@@ -115,6 +125,9 @@ class PanelTreatment:
             "shot": self.shot,
             "angle": self.angle,
         }
+        if self.role == "filler":
+            data.update(after=self.after, cast=list(self.cast))
+        return data
 
 
 @dataclass
@@ -125,6 +138,8 @@ class Treatment:
     panels: dict[str, PanelTreatment] = field(default_factory=dict)
     source: str = "rules"  # rules | model
     repairs: list[str] = field(default_factory=list)
+    #: V5: wordless filler panels (establishing, reaction, lurking, impact, quiet beat).
+    fillers: list[PanelTreatment] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -133,7 +148,95 @@ class Treatment:
             "source": self.source,
             "repairs": self.repairs,
             "panels": [p.as_dict() for p in self.panels.values()],
+            "fillers": [f.as_dict() for f in self.fillers],
         }
+
+    def sequence(self, ir: Mapping[str, Any]) -> list[tuple[str, PanelTreatment | None]]:
+        """Reading order: every story panel id, each followed by its fillers."""
+        order: list[tuple[str, PanelTreatment | None]] = []
+        for panel in ir.get("panels", []) or []:
+            pid = str(panel.get("id"))
+            order.append((pid, self.panels.get(pid)))
+            order += [(f.panel_id, f) for f in self.fillers if f.after == pid]
+        return order
+
+
+FILLER_KINDS = ("establishing", "reaction", "lurk", "calm", "impact", "quiet")
+
+
+def _episode_cast(ir: Mapping[str, Any]) -> list[str]:
+    seen: list[str] = []
+    for panel in ir.get("panels", []) or []:
+        for name in panel.get("cast", []) or []:
+            if name not in seen:
+                seen.append(str(name))
+    return seen
+
+
+def _rule_fillers(treatment: "Treatment", ir: Mapping[str, Any]) -> list[PanelTreatment]:
+    """About one wordless panel for every two story panels (V5), chosen by what comes next."""
+    panels = list(ir.get("panels", []) or [])
+    cast = _episode_cast(ir)
+    hero = "Sahil" if "Sahil" in cast else (cast[0] if cast else "")
+    name = treatment.villain_name
+    fillers: list[PanelTreatment] = []
+    toggle = 0
+    for index, panel in enumerate(panels[:-1]):
+        if index % 2 == 0:
+            continue
+        pid = str(panel.get("id"))
+        role = str(panel.get("role", ""))
+        upcoming = str(panels[index + 1].get("role", ""))
+        if upcoming == "climax":
+            kind, who, shot, angle, presence = "calm", (hero,), "extreme-close", "eye", "absent"
+            action = f"{hero}'s eyes narrow in the half-light, a breath before the storm"
+        elif role == "climax":
+            kind, who, shot, angle, presence = "impact", (), "extreme-long", "overhead", "defeated"
+            action = f"the shockwave of the clash rolls out; fragments of {name} scatter across the ground"
+        elif upcoming in {"hidden_problem", "diagnosis", "insert"} and index < len(panels) * 0.7:
+            kind, who, shot, angle, presence = "lurk", (), "long", "dutch", "lurking"
+            action = f"{name} stir in the shadows, unseen, closer than before"
+        elif toggle % 2 == 0:
+            kind, who, shot, angle, presence = "establishing", (), "extreme-long", "high", "absent"
+            action = "the world in silence: vast, glowing, still"
+            toggle += 1
+        else:
+            kind, who, shot, angle, presence = "reaction", (hero,) if hero else (), "close", "low", "absent"
+            action = f"{hero} pauses, taking in what just happened" if hero else "a quiet moment"
+            toggle += 1
+        if role in {"aftermath", "win"} and kind in {"lurk", "calm"}:
+            kind, who, shot, angle, presence = "quiet", (), "long", "eye", "absent"
+            action = "a quiet beat: the dust settles and the light returns"
+        fillers.append(PanelTreatment(
+            panel_id=f"{pid}-f{len(fillers) + 1}", role="filler", location=treatment.world,
+            action=action, villain_presence=presence, shot=shot, angle=angle, after=pid,
+            cast=tuple(n for n in who if n),
+        ))
+    return fillers
+
+
+def _model_fillers(raw: Any, treatment: "Treatment", ir: Mapping[str, Any]) -> list[PanelTreatment] | None:
+    """The director's own fillers, if they obey the rules; ``None`` means use the rules."""
+    if not isinstance(raw, list):
+        return None
+    ids = [str(p.get("id")) for p in ir.get("panels", []) or []]
+    cast = set(_episode_cast(ir))
+    target = len(ids) // 2
+    fillers: list[PanelTreatment] = []
+    for item in raw:
+        if not isinstance(item, dict) or str(item.get("after")) not in ids[:-1]:
+            continue
+        after = str(item.get("after"))
+        who = tuple(str(n) for n in item.get("cast", []) or [] if str(n) in cast)[:2]
+        fillers.append(PanelTreatment(
+            panel_id=f"{after}-f{len(fillers) + 1}", role="filler",
+            location=str(item.get("location") or treatment.world),
+            action=str(item.get("action") or ""), villain_presence=str(item.get("villain_presence") or "absent"),
+            shot=str(item.get("shot") or ""), angle=str(item.get("angle") or ""), after=after, cast=who,
+        ))
+    if not target or abs(len(fillers) - target) > 1:
+        return None
+    return fillers
 
 
 def pick_villain(text: str) -> tuple[str, str]:
@@ -167,6 +270,7 @@ def _rules(ir: Mapping[str, Any], story_text: str) -> Treatment:
             panel_id=str(panel.get("id")), role=role, location=WORLD_DEFAULT,
             action=action, villain_presence=presence, shot=shot, angle=angle,
         )
+    treatment.fillers = _rule_fillers(treatment, ir)
     return treatment
 
 
@@ -201,6 +305,22 @@ def _repair(treatment: Treatment, ir: Mapping[str, Any]) -> Treatment:
         previous = (item.shot, item.angle)
     treatment.villain_look = no_text(treatment.villain_look)
     treatment.world = no_text(treatment.world) or WORLD_DEFAULT
+    for filler in treatment.fillers:
+        filler.shot = filler.shot if filler.shot in SHOTS else "extreme-long"
+        filler.angle = filler.angle if filler.angle in ANGLES else "high"
+        if filler.villain_presence not in {"absent", "lurking", "attacking", "defeated"}:
+            filler.villain_presence = "absent"
+        filler.location = no_text(filler.location) or treatment.world
+        filler.action = no_text(filler.action) or "a quiet beat"
+    # No two consecutive panels - story or filler - share both shot and angle.
+    previous = None
+    for pid, item in treatment.sequence(ir):
+        if item is None:
+            continue
+        if previous == (item.shot, item.angle):
+            treatment.repairs.append(f"{pid}: repeated shot varied")
+            item.angle = next(a for a in ANGLES if a != item.angle and a != "overhead")
+        previous = (item.shot, item.angle)
     return treatment
 
 
@@ -223,7 +343,7 @@ def direct(
         answer = complete_json(
             prompt=DIRECTOR_PROMPT,
             payload={"title": ir.get("logline", ""), "story": story_text[:3000], "panels": panels},
-            schema_hint={"villain": {"name": "str", "look": "str"}, "world": "str", "panels": ["object"]},
+            schema_hint={"villain": {"name": "str", "look": "str"}, "world": "str", "panels": ["object"], "fillers": ["object"]},
             stage="episode.director",
         )
     except Exception:  # noqa: BLE001 - a missing director never blocks a render
@@ -250,6 +370,12 @@ def direct(
             villain_presence=str(item.get("villain_presence") or "absent"),
             shot=str(item.get("shot") or ""), angle=str(item.get("angle") or ""),
         )
+    model_fillers = _model_fillers(answer.get("fillers"), treatment, ir)
+    if model_fillers is None:
+        treatment.fillers = _rule_fillers(treatment, ir)
+        treatment.repairs.append("fillers: model count off target; rule fillers used")
+    else:
+        treatment.fillers = model_fillers
     return _repair(treatment, ir)
 
 

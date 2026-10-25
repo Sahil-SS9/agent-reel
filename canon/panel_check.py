@@ -31,8 +31,8 @@ CHECK_QUESTION = (
     "balloons can go without covering faces or key objects. keep_out = key objects or "
     "action that must stay visible. extra_people = people or characters drawn who are not "
     "in the scripted list. text_in_image = READABLE words or letters, speech bubbles or "
-    "captions drawn in the art; tiny unreadable interface or code squiggles on screens do not "
-    "count."
+    "captions drawn in the art; tiny unreadable interface or code squiggles on screens, "
+    "numerals on clock faces or dials, and lone symbols (?, !, arrows) do not count."
 )
 
 LETTER_QUESTION = (

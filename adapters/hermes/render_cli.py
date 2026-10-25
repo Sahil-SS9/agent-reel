@@ -288,6 +288,7 @@ def render_command(args: argparse.Namespace, *, ctx: Any, default_dir: Callable[
     panels_by_id = {p.get("id"): p for p in ir.get("panels", [])}
     checks: list[dict[str, Any]] = []
     lettered: list[Image.Image] = []
+    lettered_roles: list[str] = []
     flagged: list[str] = []
 
     for request in requests:
@@ -370,6 +371,7 @@ def render_command(args: argparse.Namespace, *, ctx: Any, default_dir: Callable[
         if not letter_report.complete:
             flagged.append(f"{request.panel_id}: could not place {', '.join(letter_report.unplaced)}")
         lettered.append(image)
+        lettered_roles.append(str(panel.get("role", "filler")) if panel else "filler")
 
     write_render_manifest(out / "render-manifest.json", requests, report)
     if not lettered:
@@ -380,11 +382,14 @@ def render_command(args: argparse.Namespace, *, ctx: Any, default_dir: Callable[
     if flagged:
         ir = dict(ir, flagged=flagged)
     exports = export_episode(lettered, out_dir=out, title=title, ir=ir, style=style.key,
-                             render_report=report.as_dict(), checks=checks)
+                             render_report=report.as_dict(), checks=checks,
+                             roles=lettered_roles if treatment is not None else None)
     print(f"rendered {len(lettered)}/{len(requests)} panels in {style.key}: {report.calls} new images, "
           f"{report.cache_hits} from cache, {report.retries} retries")
     print(f"files: {out}")
-    for name in ("page", "strip", "x-wide", "linkedin-portrait", "discord", "caption", "sidecar"):
+    pages = sorted(k for k in exports.files if k.startswith("page-"))
+    print(f"  {'pages':18} {len(pages)} (+ chapter.pdf)")
+    for name in ("page", "chapter-pdf", "strip", "x-wide", "linkedin-portrait", "discord", "caption", "sidecar"):
         print(f"  {name:18} {exports.files[name]}")
     if flagged or report.failures:
         print("FLAGGED - review before sharing:")

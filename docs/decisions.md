@@ -51,3 +51,5 @@ Kanban card: t_ec1754fc.
 | V1 (25/10/26) | Pictures may dramatise (monsters, fights, chases, big locations); every caption and line stays true and grounded. | M2 story pass: visual treatment per panel; truth boundary unchanged. |
 | V2 (25/10/26) | Stories chosen automatically, scored for drama: a problem, a fight, a result. | Selection ranks conflict first. |
 | V3 (25/10/26) | Every episode has a villain or problem, rising stakes, and a payoff or cliffhanger; study comic/manga craft. | docs/STORY-CRAFT.md; villain sheets; role-shaped shots. |
+| V4 (25/10/26) | Main episode = chapter of 3-4 pages, 16-24 panels (~£4-5); short strip stays but scales up (6 story + 3 fillers, one page). | Chapter briefs keep 14 turns spread across the thread; roles spread; up to 14 story panels; comic-book page layout + chapter.pdf. |
+| V5 (25/10/26) | Wordless filler panels, balanced: ~1 for every 2 story panels (establishing, reaction, villain lurking, calm before, impact after, quiet beat). | Director plans fillers; no words, so nothing to ground; cast limited to the episode cast or the villain. |

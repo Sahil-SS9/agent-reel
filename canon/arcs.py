@@ -348,13 +348,24 @@ def build_brief_arc(
 
     # Assign roles by position so every brief turn becomes a panel.
     count = len(beats)
-    if count >= len(ARC_ROLES):
+    roles: dict[str, str] = {}
+    if count > len(ARC_ROLES):
+        # V4: a long brief (chapter) spreads the six roles across the whole thread -
+        # setup first, win last - and the beats in between become development panels.
+        last = count - 1
+        positions = [0, round(last * 0.2), round(last * 0.4), round(last * 0.7), round(last * 0.85), last]
+        for index in range(1, len(positions)):
+            positions[index] = max(positions[index], positions[index - 1] + 1)
+        roles = {role: beats[pos].id for role, pos in zip(ARC_ROLES, positions)}
+        roles_list = []
+    elif count >= len(ARC_ROLES):
         roles_list = list(ARC_ROLES)
     elif count >= 4:
         roles_list = ["setup", "hidden_problem", "climax", "win"]
     else:
         roles_list = ["setup", "hidden_problem", "climax"][-count:] if count < 3 else ["setup", "hidden_problem", "climax"]
-    roles = {role: beat.id for role, beat in zip(roles_list, beats)}
+    if roles_list:
+        roles = {role: beat.id for role, beat in zip(roles_list, beats)}
 
     # Round 10: a last message is not a result. Only a finished, substantive outcome
     # resolves the arc; a forecast ("should land around 22:45") ends on a continuation.

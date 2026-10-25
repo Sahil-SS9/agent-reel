@@ -2,7 +2,8 @@
 
 Nothing is posted anywhere. The files land in the episode folder, and the user decides what to share.
 
-- **page:** a 2-column page (6 panels → 2×3)
+- **page-N / page:** comic-book pages (V4): justified rows, big moments (setup, climax, win) across the full width, fillers and smaller beats side by side; ``page`` is page 1
+- **chapter.pdf:** every page in one PDF, the comic-book version
 - **x-wide:** X 16:9, 3 columns (1600×900)
 - **x-square:** X 1:1 (1080×1080)
 - **linkedin-wide:** LinkedIn 1.91:1 (1200×628)
@@ -73,6 +74,95 @@ def compose(panels: Sequence[Image.Image], cols: int, title: str, footer: str = 
     return page
 
 
+PAGE_WIDTH = 2400
+PAGE_RATIO = 1.45  # content height / width before a page breaks (a comic page is ~1:1.5)
+ROW_TARGET = 2.6  # a row is full once the panels' aspect ratios add up to this
+MAX_ROW_HEIGHT = 0.62  # of the page width: a lone square or tall panel is not blown up
+SOLO_ROLES = ("setup", "climax", "win")
+
+
+def layout_rows(sizes: Sequence[tuple[int, int]], roles: Sequence[str]) -> list[list[int]]:
+    """Group panels, in reading order, into rows. Big story moments get a row alone."""
+    rows: list[list[int]] = []
+    current: list[int] = []
+    total = 0.0
+    for index, (w, h) in enumerate(sizes):
+        role = roles[index] if index < len(roles) else ""
+        if role in SOLO_ROLES:
+            if current:
+                rows.append(current)
+                current, total = [], 0.0
+            rows.append([index])
+            continue
+        current.append(index)
+        total += w / max(1, h)
+        if total >= ROW_TARGET or len(current) == 3:
+            rows.append(current)
+            current, total = [], 0.0
+    if current:
+        rows.append(current)
+    return rows
+
+
+def _row_geometry(row: list[int], sizes: Sequence[tuple[int, int]], width: int, gap: int) -> tuple[int, list[int]]:
+    ratios = [sizes[i][0] / max(1, sizes[i][1]) for i in row]
+    usable = width - gap * (len(row) + 1)
+    height = int(min(usable / sum(ratios), width * MAX_ROW_HEIGHT))
+    return height, [int(height * r) for r in ratios]
+
+
+def compose_pages(
+    panels: Sequence[Image.Image],
+    roles: Sequence[str],
+    title: str,
+    footer: str = "",
+    credit: str = "",
+    width: int = PAGE_WIDTH,
+) -> list[Image.Image]:
+    """Comic-book pages with justified rows (V4). Panels keep their own aspect; nothing is cropped."""
+    if not panels:
+        raise ValueError("no panels to compose")
+    sizes = [p.size for p in panels]
+    gap = max(12, width // 100)
+    head, foot = int(width * 0.09), int(width * 0.05)
+    title_font = ImageFont.truetype(str(TITLE_FONT), max(24, int(width * 0.05)))
+    small = ImageFont.truetype(str(BODY_FONT), max(14, int(width * 0.014)))
+    pages_rows: list[list[tuple[list[int], int, list[int]]]] = [[]]
+    used = 0
+    for row in layout_rows(sizes, roles):
+        height, widths = _row_geometry(row, sizes, width, gap)
+        limit = width * PAGE_RATIO - (head if len(pages_rows) == 1 else 0)
+        if pages_rows[-1] and used + height + gap > limit:
+            pages_rows.append([])
+            used = 0
+        pages_rows[-1].append((row, height, widths))
+        used += height + gap
+    pages: list[Image.Image] = []
+    for number, rows in enumerate(pages_rows, start=1):
+        top = head if number == 1 else gap * 2
+        content = sum(h + gap for _r, h, _w in rows) + gap
+        page = Image.new("RGB", (width, top + content + foot), "white")
+        draw = ImageDraw.Draw(page)
+        if number == 1:
+            draw.text((width / 2, head / 2 + gap), title, font=title_font, fill="black", anchor="mm")
+        y = top + gap
+        for row, height, widths in rows:
+            x = (width - (sum(widths) + gap * (len(widths) - 1))) // 2
+            for index, w in zip(row, widths):
+                page.paste(panels[index].convert("RGB").resize((w, height)), (x, y))
+                draw.rectangle([x, y, x + w, y + height], outline="black", width=max(3, width // 400))
+                x += w + gap
+            y += height + gap
+        last = number == len(pages_rows)
+        right = footer if (last and footer) else (f"{number} / {len(pages_rows)}" if len(pages_rows) > 1 else "")
+        if right:
+            draw.text((width - gap, page.size[1] - foot / 2), right, font=small, fill="black", anchor="rm")
+        if credit:
+            draw.text((gap, page.size[1] - foot / 2), credit, font=small, fill="#555", anchor="lm")
+        pages.append(page)
+    return pages
+
+
 def fit(image: Image.Image, size: tuple[int, int]) -> Image.Image:
     """Letterbox ``image`` into exactly ``size`` on white, never cropping a panel."""
     canvas = Image.new("RGB", size, "white")
@@ -126,7 +216,9 @@ def export_episode(
     render_report: Mapping[str, Any],
     checks: Sequence[Mapping[str, Any]],
     credit: str = "Hermes Scrollback Reel",
+    roles: Sequence[str] | None = None,
 ) -> ExportSet:
+    """``roles``: the role of each lettered panel (story roles or ``filler``), for layout."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     footer = "To be continued…" if ir.get("cliffhanger") else ""
@@ -135,14 +227,25 @@ def export_episode(
         path = out / f"panel-{index}.jpg"
         panel.convert("RGB").save(path, quality=90)
         files[f"panel-{index}"] = path
-    page = compose(lettered, 2, title, footer, credit)
+    if roles is None:
+        page = compose(lettered, 2, title, footer, credit)
+        pages = [page]
+    else:
+        pages = compose_pages(lettered, roles, title, footer, credit)
+        page = pages[0]
+    for number, image in enumerate(pages, start=1):
+        files[f"page-{number}"] = out / f"page-{number}.jpg"
+        image.save(files[f"page-{number}"], quality=88, optimize=True)
     files["page"] = out / "page.jpg"
     page.save(files["page"], quality=88, optimize=True)
+    files["chapter-pdf"] = out / "chapter.pdf"
+    pages[0].save(files["chapter-pdf"], save_all=True, append_images=pages[1:], resolution=150)
     strip = compose(lettered, 1, title, footer, credit)
     files["strip"] = out / "strip.jpg"
     strip.save(files["strip"], quality=86, optimize=True)
     for name, (size, cols) in SOCIAL_SIZES.items():
-        grid = compose(lettered, cols, title, footer, credit)
+        # A long chapter is shared by its first page; a short episode as one grid.
+        grid = page if len(pages) > 1 or roles is not None else compose(lettered, cols, title, footer, credit)
         files[name] = out / f"{name}.jpg"
         fit(grid, size).save(files[name], quality=90)
     files["discord"] = out / "discord.jpg"

@@ -261,6 +261,53 @@ PARAPHRASE_CASES: list[tuple[str, str, str]] = [
 ]
 
 
+#: V7 (25/10/26): plain-English retellings. The true line explains jargon by what it
+#: meant; the invented line keeps the plain tone but adds or flips a fact. Run with the
+#: gate in meaning mode; the old floor refuses most of the true lines by design.
+MEANING_CASES: list[tuple[str, str, str]] = [
+    (
+        "The first verify attempt failed with exit 127 because the probe worktree lacked hermes.",
+        "The first check failed because the test copy was missing a tool, not because of the code.",
+        "The first check failed because the code had a bug in it.",
+    ),
+    (
+        "kensei stopped the run on purpose; exit 143 was a SIGTERM, not a crash.",
+        "Kensei pulled the plug himself. It wasn't a crash.",
+        "The run crashed and Kensei had to restart it.",
+    ),
+    (
+        "Commit bd1a001 was an intermediate pair, superseded by the final d610509 runs and verification.",
+        "Those earlier runs were only a halfway step; the final runs replaced them.",
+        "Those earlier runs were wrong and had to be thrown away.",
+    ),
+    (
+        "512-character reads ran 12-27% faster but lost four questions on one set.",
+        "Shorter reads made it 12-27% faster, but it got four questions wrong on one set.",
+        "Shorter reads made it 12-27% faster with no loss in accuracy.",
+    ),
+    (
+        "Handoff 3 measured: none of the eight arms passes the acceptance rule as written.",
+        "Eight attempts, and not one cleared the bar.",
+        "Eight attempts, and one finally cleared the bar.",
+    ),
+    (
+        "Round-two corrections are applied and await re-check; not accepted yet.",
+        "The fixes are in, but nobody has signed them off yet.",
+        "The fixes are in and the reviewer has signed them off.",
+    ),
+    (
+        "The gateway OOM-killed the worker at 02:10; Wesker raised the memory cap to 4 GB.",
+        "At 02:10 the worker ran out of memory, so Wesker gave it more room: 4 GB.",
+        "At 02:10 the worker ran out of memory, so Wesker gave it more room: 8 GB.",
+    ),
+    (
+        "CI is red on main: the Windows runner times out installing deps.",
+        "The build is failing because the Windows machine runs out of time setting up.",
+        "The build is failing because a test on Linux broke.",
+    ),
+]
+
+
 #: The cast the pipeline passes to its gate as allowed names (production does the same
 #: with the run's cast map): a character naming another character is judged by meaning.
 EVAL_CAST = ("Sahil", "Kensei", "Quan", "Octacon", "Wesker", "Severian")
@@ -269,7 +316,8 @@ EVAL_CAST = ("Sahil", "Kensei", "Quan", "Octacon", "Wesker", "Severian")
 def run(gate: ClaimGate) -> dict[str, Any]:
     released_unsupported: list[dict[str, str]] = []
     rejected_supported: list[dict[str, str]] = []
-    for index, (evidence, grounded, invented) in enumerate(CASES + PARAPHRASE_CASES, start=1):
+    cases = CASES + PARAPHRASE_CASES + (MEANING_CASES if getattr(gate, "meaning", False) else [])
+    for index, (evidence, grounded, invented) in enumerate(cases, start=1):
         good = gate.check(grounded, evidence, layer="caption")
         if not good.supported:
             rejected_supported.append(
@@ -278,9 +326,14 @@ def run(gate: ClaimGate) -> dict[str, Any]:
         bad = gate.check(invented, evidence, layer="caption")
         if bad.supported:
             released_unsupported.append({"case": index, "line": invented})
-    total = len(CASES) + len(PARAPHRASE_CASES)
-    paraphrase_ids = set(range(len(CASES) + 1, total + 1))
+    total = len(cases)
+    paraphrase_ids = set(range(len(CASES) + 1, len(CASES) + len(PARAPHRASE_CASES) + 1))
+    meaning_ids = set(range(len(CASES) + len(PARAPHRASE_CASES) + 1, total + 1))
     return {
+        "meaning_mode": bool(getattr(gate, "meaning", False)),
+        "meaning_cases": len(meaning_ids),
+        "meaning_accepted": len(meaning_ids)
+        - sum(1 for row in rejected_supported if row["case"] in meaning_ids),
         "paraphrase_cases": len(PARAPHRASE_CASES),
         "paraphrases_accepted": len(PARAPHRASE_CASES)
         - sum(1 for row in rejected_supported if row["case"] in paraphrase_ids),

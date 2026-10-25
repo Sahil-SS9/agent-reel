@@ -475,9 +475,29 @@ class ClaimGate:
         "unsure, answer false."
     )
 
+    #: V7 (25/10/26, owner decision): "true in meaning". Plain-English retelling of a
+    #: technical detail is a rewording, not a new fact. Names, numbers and who-did-what
+    #: stay deterministic; only the vocabulary floor goes, and the judge decides meaning.
+    MEANING_PROMPT = (
+        "You check one line of a comic that retells real work for a general reader, against "
+        "the evidence it cites. "
+        'Answer JSON only: {"supported": true|false, "unbacked": ["..."]}. '
+        "The line may use plain English instead of the evidence's jargon: an exit code, a "
+        "commit hash or a tool name explained by what it MEANT (\"the checker itself was "
+        "broken\", \"the test copy was missing a tool\") is a rewording and is supported. "
+        "Tone, emotion, metaphor and reaction are not claims. The line is NOT supported if it "
+        "adds anything the evidence does not say or directly imply: a wrong actor, a flipped "
+        "or invented outcome, an added cause, a time, a number, a name or a detail. A vivid "
+        "metaphor that implies a new fact (\"the server caught fire\") is not supported. "
+        "terms_not_in_evidence lists words not in the evidence; for each decide whether it is "
+        "a plain-English rewording or a new fact. When unsure, answer false."
+    )
+
     #: With a model, a caption must share at least this much vocabulary with its
     #: evidence before the model is asked; below it the caption is about something else.
+    #: In meaning mode (V7) there is no vocabulary floor; the judge decides meaning.
     MIN_CAPTION_OVERLAP = 0.5
+    MIN_MEANING_OVERLAP = 0.0
 
     def __init__(
         self,
@@ -486,8 +506,11 @@ class ClaimGate:
         allow: Iterable[str] = (),
         cast: Iterable[str] = (),
         max_quote_words: int = 12,
+        meaning: bool = False,
     ) -> None:
         self.llm = llm
+        #: V7: judge captions and lines on meaning (plain-English retelling allowed).
+        self.meaning = meaning
         self.allow = tuple(allow)
         #: Character names. They are legal vocabulary (allow), but a caption that names
         #: one is claiming that person was involved, so the name must be in the cited
@@ -549,7 +572,10 @@ class ClaimGate:
             # absolute. With a model it is a relevance floor; the model decides whether
             # the remaining words are rewording or new facts. Demanding full overlap with
             # a model refused every paraphrase before the model was ever asked (r9).
-            required = 1.0 if self.llm is None else self.MIN_CAPTION_OVERLAP
+            if self.llm is None:
+                required = 1.0  # no model: fail closed, exactly as before
+            else:
+                required = self.MIN_MEANING_OVERLAP if self.meaning else self.MIN_CAPTION_OVERLAP
             if terms.overlap < required:
                 return ClaimVerdict(
                     False,
@@ -572,9 +598,13 @@ class ClaimGate:
         }
         if terms is not None:
             payload["terms_not_in_evidence"] = list(terms.invented)
+        if self.meaning:
+            prompt = self.MEANING_PROMPT
+        else:
+            prompt = self.CAPTION_PROMPT if layer == "caption" else self.PROMPT
         try:
             response = self.llm.complete_json(
-                prompt=self.CAPTION_PROMPT if layer == "caption" else self.PROMPT,
+                prompt=prompt,
                 payload=payload,
                 schema_hint={"supported": "bool", "unbacked": ["string"]},
                 stage="grounding",

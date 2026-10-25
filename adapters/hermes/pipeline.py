@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Any, Mapping, Iterable, Sequence
 
 from canon.brief import CHAPTER_MAX_TURNS, MAX_TURNS, build_brief
+from canon.story import DEFAULT_VOICES, PANEL_JOBS, behind_the_panels, edit_script, write_synopsis
 from canon.selection import select_stories
 from canon.threads import beats_by_thread, thread_index
 from canon.arcs import build_brief_arc
@@ -114,6 +115,10 @@ TEXT_PRIORITY: dict[str, int] = {
 @dataclass
 class PipelineConfig:
     data_dir: Path
+    #: V7: "meaning" judges captions and lines on meaning (plain English allowed);
+    #: "strict" keeps the M1 vocabulary floor. The library default stays strict so the
+    #: M1 tests and evals keep measuring the accepted gate; the plugin CLI defaults to meaning.
+    wording: str = "strict"
     days: float = 7.0
     since: float | None = None
     until: float | None = None
@@ -557,6 +562,7 @@ def run_pipeline(
             # r10b / QAR10-01: a caption naming a character must find that name in its
             # cited evidence; the allowlist only makes the name legal vocabulary.
             cast=tuple(dict.fromkeys(tuple(cast_map.values()) + (config.hero,))),
+            meaning=config.wording == "meaning",
         )
         # Who did what: only an actor of a cited event may speak its panel (R2-F2).
         actors_by_event: dict[str, str] = {}
@@ -705,29 +711,69 @@ def run_pipeline(
                 skipped.append({"key": candidate.key, "reason": "thread already told"})
                 continue
             index = len(episodes) + 1
-            try:
-                episode_ir = plan_episode(
-                arc,
-                story_beats or thread_beats,
-                canon,
-                format=config.format,
-                season=config.season,
-                number=config.number + index - 1,
-                writer=writer,
-                hero=config.hero,
-                grounder=grounder,
-                evidence=evidence_map,
-                brief=brief,
-                structured_captions=structured_captions,
-                actors_by_event=actors_by_event,
-                cast_map=cast_map,
-                thread_evidence=thread_evidence_text,
-                owner_texts=owner_texts,
-                outcome_caption=outcome_caption,
+
+            def _plan(episode_writer: Any) -> EpisodeIR:
+                return plan_episode(
+                    arc,
+                    story_beats or thread_beats,
+                    canon,
+                    format=config.format,
+                    season=config.season,
+                    number=config.number + index - 1,
+                    writer=episode_writer,
+                    hero=config.hero,
+                    grounder=grounder,
+                    evidence=evidence_map,
+                    brief=brief,
+                    structured_captions=structured_captions,
+                    actors_by_event=actors_by_event,
+                    cast_map=cast_map,
+                    thread_evidence=thread_evidence_text,
+                    owner_texts=owner_texts,
+                    outcome_caption=outcome_caption,
                     facts=thread_facts,
                     facts_evidence=thread_facts_text,
                     title=title,
                 )
+
+            # V6-V8: story mode - a plain-English synopsis first, the script written from
+            # it in character voices, then an editor read and at most one rewrite pass.
+            story_mode = (
+                config.wording == "meaning" and config.use_model
+                and config.writer is None and isinstance(writer, LLMDialogueWriter)
+            )
+            story_info: dict[str, Any] | None = None
+            try:
+                if story_mode:
+                    synopsis = write_synopsis(
+                        writer_cached.complete_json, title=title, facts_text=thread_facts_text,
+                        brief_text=brief.text(), gate=grounder,
+                    )
+                    story_ctx = {"synopsis": synopsis.text(), "voices": DEFAULT_VOICES,
+                                 "jobs": PANEL_JOBS, "notes": {}}
+                    first_writer = LLMDialogueWriter(writer_cached, cast, story=story_ctx)
+                    episode_ir = _plan(first_writer)
+                    review = edit_script(writer_cached.complete_json,
+                                         [p.as_dict() for p in episode_ir.panels], synopsis=synopsis.text())
+                    reviews = [review]
+                    jargon = first_writer.jargon_dropped
+                    if 0 < review["score"] < 4 and review["problems"]:
+                        notes = {str(item["panel"]).rsplit("-", 1)[-1]: item["issue"] for item in review["problems"]}
+                        second_writer = LLMDialogueWriter(writer_cached, cast, story=dict(story_ctx, notes=notes))
+                        try:
+                            second = _plan(second_writer)
+                        except EpisodeRefused:
+                            second = None
+                        if second is not None:
+                            review2 = edit_script(writer_cached.complete_json,
+                                                  [p.as_dict() for p in second.panels], synopsis=synopsis.text())
+                            reviews.append(review2)
+                            if len(second.panels) >= len(episode_ir.panels) - 1 and review2["score"] >= review["score"]:
+                                episode_ir = second
+                                jargon = second_writer.jargon_dropped
+                    story_info = {"synopsis": synopsis.as_dict(), "editor": reviews, "jargon_dropped": jargon}
+                else:
+                    episode_ir = _plan(writer)
             except EpisodeRefused as refused:
                 skipped.append({"key": candidate.key, "reason": str(refused)})
                 continue
@@ -774,6 +820,7 @@ def run_pipeline(
                     "ir": episode_ir,
                     "arc": arc,
                     "story_beats": tuple(story_beats or ()),
+                    "story": story_info,
                 }
             )
             used_anchors |= anchor_events
@@ -793,7 +840,7 @@ def run_pipeline(
             result.timings["episode_s"] = round(time.time() - started, 2)
             result.timings["writer"] = "none"
         result.episodes = [
-            {key: value for key, value in row.items() if key not in {"ir", "arc", "story_beats"}}
+            {key: value for key, value in row.items() if key not in {"ir", "arc", "story_beats", "story"}}
             for row in episodes
         ]
         if ir is not None:
@@ -881,6 +928,21 @@ def run_pipeline(
                     render_script_markdown(episode_ir),
                     gate,
                 )
+                if row.get("story"):
+                    write_json(config.data_dir / f"episode-{row['number']}-story.json", row["story"], gate)
+                    facts_by_panel = {
+                        panel.id: " / ".join(
+                            " ".join(str(evidence_map.get(event_id, "")).split())[:240]
+                            for event_id in panel.caption_source_event_ids[:2]
+                            if evidence_map.get(event_id)
+                        )
+                        for panel in episode_ir.panels
+                    }
+                    write_text(
+                        config.data_dir / f"episode-{row['number']}-behind-the-panels.md",
+                        behind_the_panels([p.as_dict() for p in episode_ir.panels], facts_by_panel),
+                        gate,
+                    )
                 write_json(
                     config.data_dir / f"episode-{row['number']}-trace.json",
                     episode_trace(

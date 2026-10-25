@@ -68,11 +68,14 @@ def register_cli(subparser: argparse.ArgumentParser) -> None:
     plan.add_argument("--llm-url", default=DEFAULT_LOCAL_URL, help="local route for redaction")
     plan.add_argument("--max-deep-events", type=int, default=90)
     plan.add_argument("--json", action="store_true", help="print the metrics JSON")
+    plan.add_argument("--wording", default="meaning", choices=("meaning", "strict"),
+                      help="meaning (V7, default): true in meaning, plain English; strict: close to the source words")
     check = subs.add_parser(
         "eval-grounding",
         help="Run the caption/line grounding eval against the host model (reads no history)",
     )
     check.add_argument("--json-out", default="", help="where to write the eval report")
+    check.add_argument("--meaning", action="store_true", help="judge in meaning mode (V7) and add the plain-English cases")
     try:
         from adapters.hermes.render_cli import register_render_cli
     except ImportError:
@@ -117,12 +120,14 @@ def eval_grounding_command(args: argparse.Namespace) -> int:
     spec.loader.exec_module(module)
 
     client = PluginLLMClient(llm)
-    report = module.run(ClaimGate(client, allow=module.EVAL_CAST))  # type: ignore[arg-type]
+    report = module.run(ClaimGate(client, allow=module.EVAL_CAST, meaning=bool(getattr(args, "meaning", False))))  # type: ignore[arg-type]
     report["usage"] = client.usage()
     print(f"grounding eval (judge: ctx.llm): {report['cases']} cases")
     print(f"  grounded lines accepted : {report['grounded_lines_passed']}/{report['cases']}")
     print(f"  paraphrases accepted    : {report['paraphrases_accepted']}/{report['paraphrase_cases']}")
     print(f"  invented lines refused  : {report['invented_lines_refused']}/{report['cases']}")
+    if report.get("meaning_mode"):
+        print(f"  plain-English accepted  : {report['meaning_accepted']}/{report['meaning_cases']}")
     for row in report["released_unsupported"]:
         print(f"  RELEASED: case {row['case']}: {row['line']}")
     for row in report["rejected_supported"]:
@@ -197,6 +202,7 @@ def reel_command(args: argparse.Namespace) -> int:
         since=since,
         until=until,
         format=args.format,
+        wording=getattr(args, "wording", "meaning"),
         episodes=max(1, args.episodes),
         max_deep_events=args.max_deep_events,
         use_model=True,

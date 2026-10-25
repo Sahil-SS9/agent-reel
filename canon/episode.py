@@ -878,7 +878,8 @@ def plan_episode(
                 report.reasons.append(f"{role}: speaker {speaker!r} is not an actor")
                 continue
             candidate = text
-            if _is_generic(candidate, evidence_text, caption) and generic_used >= 1:
+            # V4: one generic interjection per six panels (a chapter is longer than a strip).
+            if _is_generic(candidate, evidence_text, caption) and generic_used >= max(1, len(panel_specs) // 6):
                 report.lines_dropped += 1
                 report.reasons.append(f"{role}: second generic interjection dropped")
                 continue

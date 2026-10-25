@@ -174,7 +174,8 @@ def reel_command(args: argparse.Namespace) -> int:
     from adapters.hermes.plugin_llm import PluginLLMClient
 
     data_dir = Path(args.data_dir).expanduser() if args.data_dir else _default_data_dir()
-    writer = PluginLLMClient(llm)
+    # V4: a chapter needs about twice the writer calls of a strip per story tried.
+    writer = PluginLLMClient(llm, max_calls=300 if getattr(args, "format", "strip") == "chapter" else 150)
     local = OpenAICompatLLMClient(base_url=args.llm_url, model="auto")
 
     def _day(value: str) -> float | None:

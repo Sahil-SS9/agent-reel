@@ -161,6 +161,8 @@ class Treatment:
         return order
 
 
+#: V4: a chapter reaches at least this many panels with its fillers.
+MIN_CHAPTER_PANELS = 16
 FILLER_KINDS = ("establishing", "reaction", "lurk", "calm", "impact", "quiet")
 
 
@@ -181,8 +183,17 @@ def _rule_fillers(treatment: "Treatment", ir: Mapping[str, Any]) -> list[PanelTr
     name = treatment.villain_name
     fillers: list[PanelTreatment] = []
     toggle = 0
+    # Balanced (V5): after every second story panel. A chapter must still reach 16 panels
+    # (V4), so a thin chapter gets a filler after more story panels - never more than one each.
+    every_other = [i for i in range(len(panels) - 1) if i % 2 == 1]
+    slots = set(every_other)
+    if len(panels) >= 7:
+        for i in range(len(panels) - 1):
+            if len(panels) + len(slots) >= MIN_CHAPTER_PANELS:
+                break
+            slots.add(i)
     for index, panel in enumerate(panels[:-1]):
-        if index % 2 == 0:
+        if index not in slots:
             continue
         pid = str(panel.get("id"))
         role = str(panel.get("role", ""))
@@ -221,7 +232,7 @@ def _model_fillers(raw: Any, treatment: "Treatment", ir: Mapping[str, Any]) -> l
         return None
     ids = [str(p.get("id")) for p in ir.get("panels", []) or []]
     cast = set(_episode_cast(ir))
-    target = len(ids) // 2
+    target = len(_rule_fillers(treatment, ir))
     fillers: list[PanelTreatment] = []
     for item in raw:
         if not isinstance(item, dict) or str(item.get("after")) not in ids[:-1]:

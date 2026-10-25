@@ -97,3 +97,13 @@ def test_pipeline_names_resolve():
     from adapters.hermes import pipeline
 
     assert callable(pipeline.build_arc)
+
+
+def test_thin_chapter_gets_more_fillers_up_to_one_each():
+    ir = {"logline": "x", "panels": [
+        {"id": f"q{i}", "role": r, "caption": "c", "lines": [], "cast": ["Kensei"]}
+        for i, r in enumerate(["setup", "insert", "hidden_problem", "diagnosis", "insert", "climax", "aftermath", "insert", "win"], 1)]}
+    t = direct(ir, story_text="crash")
+    assert len(ir["panels"]) + len(t.fillers) >= 16
+    afters = [f.after for f in t.fillers]
+    assert len(afters) == len(set(afters))  # at most one filler per story panel

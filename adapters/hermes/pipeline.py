@@ -732,7 +732,8 @@ def run_pipeline(
                 skipped.append({"key": candidate.key, "reason": str(refused)})
                 continue
             # Round 10: D7 says a strip is 4-6 panels; three was below the spec.
-            min_panels = config.min_strip_panels if config.format == "strip" else 8
+            # V4: a chapter needs 7 true story panels; fillers bring it to 16+ panels.
+            min_panels = config.min_strip_panels if config.format == "strip" else 7
             if len(episode_ir.panels) < min_panels:
                 # Round 9: a refusal must say why in terms a human can agree with.
                 why = "; ".join(episode_ir.grounding.get("reasons", [])[-3:])

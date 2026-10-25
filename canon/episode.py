@@ -492,6 +492,21 @@ def _is_generic(line: str, evidence_text: str, caption: str) -> bool:
     return not any(word in haystack for word in words)
 
 
+_QUESTION_RE = re.compile(r"[^.!?]*\?")
+
+
+def _states_something(line: str) -> bool:
+    """True when the line asserts something a source must back (QAR-M2-01).
+
+    Questions are removed first; a lone reaction word ("Understood.", "Okay.") is not a
+    statement. Two or more content words outside a question are.
+    """
+    from canon.grounding import content_terms
+
+    statement = _QUESTION_RE.sub(" ", line or "")
+    return len(content_terms(statement, allow=())) >= 2
+
+
 class EpisodeRefused(Exception):
     """The story cannot be told honestly; the pipeline records the reason and moves on."""
 
@@ -865,9 +880,13 @@ def plan_episode(
         def overlap(event_id: str) -> int:
             return len(terms & {t[:6] for t in content_terms(line_pool.get(event_id, ""), allow=())})
         ranked = sorted(line_pool, key=lambda e: (-overlap(e), story_event_ids.index(e)))
-        chosen = [e for e in own_ids if e in line_pool and overlap(e) > 0]
+        best = overlap(ranked[0]) if ranked else 0
+        # An event that shares only a stray word with the line does not state it: keep
+        # events whose overlap is at least half the best one (takeover tightening).
+        floor = max(1, (best + 1) // 2)
+        chosen = [e for e in own_ids if e in line_pool and overlap(e) >= floor]
         for e in ranked:
-            if len(chosen) >= 3 or overlap(e) == 0:
+            if len(chosen) >= 3 or overlap(e) < floor:
                 break
             if e not in chosen:
                 chosen.append(e)
@@ -1045,7 +1064,20 @@ def plan_episode(
                         continue
                     verdict = grounder.check(candidate, support_text, layer="dialogue")
                     line_ids = tuple(support_ids)
+                elif _states_something(candidate):
+                    # QAR-M2-01 (takeover fix): most story statements ("Every test passes on
+                    # both databases") carry no extractable claim token, so they used to be
+                    # judged against the whole panel and cite the panel's ids. A statement
+                    # now cites, and is judged against, only the events that state it.
+                    if not support_ids:
+                        report.lines_dropped += 1
+                        report.reasons.append(f"{role} line: no event states this")
+                        continue
+                    verdict = grounder.check(candidate, support_text, layer="dialogue")
+                    line_ids = tuple(support_ids)
                 else:
+                    # A pure question or reaction ("Okay.", "What's that one?") states
+                    # nothing; it keeps the panel's ids as context.
                     verdict = grounder.check(candidate, evidence_text or support_text, layer="dialogue")
                 if verdict.supported:
                     report.lines_supported += 1

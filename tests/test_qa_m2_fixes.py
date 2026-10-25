@@ -2,7 +2,7 @@
 
 from types import SimpleNamespace
 
-from canon.grounding import ClaimGate, check_claims
+from canon.grounding import ClaimGate, check_claims, extract_claims
 
 
 class Accepting:
@@ -102,6 +102,29 @@ def test_a_comical_unsupported_line_is_dropped():
     lines = _plan({"win": [["Kensei", "Brilliant: Octacon deleted the whole database. Twice!"], CONTROL]}, EVIDENCE, ACTORS)
     assert any(l.text == CONTROL[1] for l in lines)
     assert not any("database" in l.text for l in lines)
+
+
+def test_a_statement_without_claim_tokens_cites_the_event_that_states_it():
+    # Takeover finding on d7bc116: lines with no extractable claim token kept the panel's
+    # ids. "Corrections are ready for re-check" has no number/name/outcome token.
+    assert not extract_claims("Corrections are ready for a re-check.")
+    lines = _plan({"setup": [["Kensei", "Corrections are ready for a re-check."]], "win": [CONTROL]}, EVIDENCE, ACTORS)
+    hit = [l for l in lines if "Corrections" in l.text]
+    assert hit and hit[0].source_event_ids == ("e4",)
+
+
+def test_a_statement_no_event_states_is_dropped_even_by_an_accepting_judge():
+    lines = _plan({"win": [["Kensei", "The rocket garden sailed over the moonlit harbour."], CONTROL]}, EVIDENCE, ACTORS)
+    assert any(l.text == CONTROL[1] for l in lines)
+    assert not any("rocket" in l.text for l in lines)
+
+
+def test_a_question_or_reaction_is_not_treated_as_a_statement():
+    from canon.episode import _states_something
+
+    assert not _states_something("What's that one? Another disaster I should know about?")
+    assert not _states_something("Understood.")
+    assert _states_something("Every test passes on both databases. Not one failure.")
 
 
 

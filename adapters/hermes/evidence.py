@@ -101,10 +101,19 @@ def write_json(path: Path | str, payload: Any, gate: Any, *, indent: int = 1) ->
     return target
 
 
-def write_text(path: Path | str, text: str, gate: Any) -> Path:
+#: A rendered chapter script is gated prose and longer than any single field (V4).
+MAX_SCRIPT_CHARS = 20000
+
+
+def write_text(path: Path | str, text: str, gate: Any, *, max_chars: int = MAX_PLAIN_STRING) -> Path:
     """Write gated prose (a rendered script) after re-checking it."""
     target = Path(path)
-    _check_string(text, target.name, gate)
+    if len(text) > max_chars:
+        raise EvidenceLeak(f"{target.name}: string of {len(text)} chars looks like raw text")
+    findings = gate.scan(text)  # scan, not redact: no clipping of a long script
+    if findings:
+        categories = sorted({finding.category for finding in findings})
+        raise EvidenceLeak(f"{target.name}: value would be changed by the gate ({', '.join(categories)})")
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(text, encoding="utf-8")
     return target

@@ -63,7 +63,7 @@ from canon.threads import build_threads
 from canon.titling import write_title
 
 from adapters.hermes import leakscan
-from adapters.hermes.evidence import EvidenceLeak, write_json, write_text
+from adapters.hermes.evidence import MAX_SCRIPT_CHARS, EvidenceLeak, write_json, write_text
 from adapters.hermes.history import HermesHistorySource
 from adapters.hermes.llm import FallbackLLM, OpenAICompatLLMClient
 from adapters.hermes.redact_source import public_rules, rules_from_snapshot
@@ -947,6 +947,7 @@ def run_pipeline(
                     config.data_dir / f"episode-{row['number']}-script.md",
                     render_script_markdown(episode_ir),
                     gate,
+                    max_chars=MAX_SCRIPT_CHARS,
                 )
                 if row.get("story"):
                     write_json(config.data_dir / f"episode-{row['number']}-story.json", row["story"], gate)
@@ -988,7 +989,7 @@ def run_pipeline(
                 gate,
             )
             script_path = config.data_dir / "episode-script.md"
-            write_text(script_path, markdown, gate)
+            write_text(script_path, markdown, gate, max_chars=MAX_SCRIPT_CHARS)
             write_json(
                 config.data_dir / "metrics.json",
                 {

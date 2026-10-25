@@ -102,7 +102,7 @@ def test_story_writer_writes_scenes_with_synopsis_voices_notes_and_drops_jargon(
                                        {"speaker": "Sahil", "text": "And exit 127?"}]})
             return {"panels": rows}
 
-    writer = LLMDialogueWriter(Model(), ["Kensei", "Sahil"], story={
+    writer = LLMDialogueWriter(Model(), ["default"], story={  # profile ids, as the pipeline passes
         "synopsis": "S", "voices": {"Kensei": "calm", "narrator": "punchy"}, "jobs": {"insert": "move"},
         "notes": {"p2": "too technical"}})
     panels = [{"role": "setup", "key": "setup", "speakers": ["Kensei", "Sahil"]},
@@ -147,3 +147,20 @@ def test_interjections_at_sentence_start_are_not_names():
     assert names("Right. Brilliant!") == []
     assert names("Okay. Octacon fixed it.") == ["Octacon"]
     assert names("Fine. Paris it is.") == ["Paris"]
+
+
+def test_long_chapter_script_is_written_but_scanned(tmp_path):
+    import pytest
+
+    from adapters.hermes.evidence import EvidenceLeak, write_text
+
+    class Gate:
+        def scan(self, text):
+            from types import SimpleNamespace
+            return (SimpleNamespace(category="secret"),) if "sk-" in text else ()
+
+    write_text(tmp_path / "s.md", "panel words. " * 500, Gate(), max_chars=20000)
+    with pytest.raises(EvidenceLeak):
+        write_text(tmp_path / "s.md", "panel words. " * 500, Gate())  # default limit unchanged
+    with pytest.raises(EvidenceLeak):
+        write_text(tmp_path / "s.md", "a key sk-123 " * 400, Gate(), max_chars=20000)

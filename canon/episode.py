@@ -300,7 +300,9 @@ class LLMDialogueWriter:
             chunk = indexed[start:start + self.SCENE_SIZE]
             items = []
             for position, panel in chunk:
-                speakers = [s for s in (panel.get("speakers") or panel.get("actors") or self.cast) if s in self.cast]
+                # Character names from the planner (who appears in this thread's evidence). The
+                # writer's own cast list holds profile ids, so it must not filter these.
+                speakers = list(dict.fromkeys(panel.get("speakers") or panel.get("actors") or self.cast))
                 item = {
                     "key": panel.get("key", panel["role"]),
                     "job": story.get("jobs", {}).get(panel["role"], ""),
@@ -335,10 +337,9 @@ class LLMDialogueWriter:
             for item in items:
                 row = by_key.get(str(item["key"]), {})
                 try:
-                    caption, lines = self._validate(row) if row else ("", [])
+                    caption, lines = self._validate(row, allowed=item["speakers"]) if row else ("", [])
                 except ValueError:
                     caption, lines = "", []
-                lines = [line for line in lines if line[0] in item["speakers"]]
                 if caption and jargon_problem(caption):
                     caption = ""
                     self.jargon_dropped += 1
@@ -387,7 +388,8 @@ class LLMDialogueWriter:
             context.append(lines[0][1] if lines else str(panel.get("summary", "")))
         return out
 
-    def _validate(self, response: Mapping[str, Any]) -> tuple[str, list[list[str]]]:
+    def _validate(self, response: Mapping[str, Any], *, allowed: Sequence[str] | None = None) -> tuple[str, list[list[str]]]:
+        allowed_names = set(allowed) if allowed is not None else set(self.cast)
         rows = response.get("lines")
         if not isinstance(rows, list):
             raise ValueError("model returned no lines array")
@@ -398,7 +400,7 @@ class LLMDialogueWriter:
                 continue
             speaker = str(row.get("speaker", "")).strip()
             text = " ".join(str(row.get("text", "")).split())
-            if speaker not in self.cast:
+            if speaker not in allowed_names:
                 # A line for someone who was not there is dropped, not fatal: losing the
                 # whole panel (caption included) over one bad speaker is worse.
                 continue

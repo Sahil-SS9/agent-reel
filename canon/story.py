@@ -62,7 +62,7 @@ SYNOPSIS_PROMPT = (
     "panel is written, tell the whole story in plain English. Use ONLY what the facts say: no "
     "new event, cause, outcome, number or name. "
     + AUDIENCE_RULE
-    + " Answer JSON only: {\"logline\": \"one sentence\", \"want\": \"...\", \"stakes\": \"...\", "
+    + " Answer JSON only: {\"title\": \"a punchy comic title, at most 6 words\", \"logline\": \"one sentence\", \"want\": \"...\", \"stakes\": \"...\", "
     "\"obstacle\": \"...\", \"turn\": \"...\", \"ending\": \"...\", \"meaning\": \"...\"}. "
     "Each value is one short sentence, or empty if the facts do not support it."
 )
@@ -75,7 +75,9 @@ EDITOR_PROMPT = (
     "\"issue\": \"what is wrong, in a few words\"}]}. List only real problems."
 )
 
-SYNOPSIS_FIELDS = ("logline", "want", "stakes", "obstacle", "turn", "ending", "meaning")
+SYNOPSIS_FIELDS = ("title", "logline", "want", "stakes", "obstacle", "turn", "ending", "meaning")
+#: Fields that tell the story (the title is used as the episode title, not story text).
+STORY_FIELDS = SYNOPSIS_FIELDS[1:]
 
 _HASH = re.compile(r"\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b", re.I)
 _EXIT = re.compile(r"\bexit(?:\s+code)?\s*\d+\b", re.I)
@@ -101,7 +103,7 @@ class Synopsis:
     source: str = "none"  # model | none
 
     def text(self) -> str:
-        return " ".join(self.fields.get(name, "") for name in SYNOPSIS_FIELDS if self.fields.get(name))
+        return " ".join(self.fields.get(name, "") for name in STORY_FIELDS if self.fields.get(name))
 
     def as_dict(self) -> dict[str, Any]:
         return {"fields": dict(self.fields), "refused": dict(self.refused), "source": self.source}
@@ -130,7 +132,33 @@ def write_synopsis(
     except Exception:  # noqa: BLE001 - no synopsis means the old per-panel path
         return synopsis
     synopsis.source = "model"
-    for name in SYNOPSIS_FIELDS:
+    _accept(synopsis, answer, SYNOPSIS_FIELDS, evidence, gate)
+    if synopsis.refused:
+        # One repair pass: the writer sees why each refused sentence failed.
+        retry = dict(synopsis.refused)
+        try:
+            answer = complete_json(
+                prompt=SYNOPSIS_PROMPT + " Some sentences were refused by the fact checker. "
+                "Rewrite ONLY those fields so they are true to the facts; keep them short and "
+                "plain. Return the same JSON with only the rewritten fields.",
+                payload={"title": title, "facts": facts_text[:3500], "brief": brief_text[:2500],
+                         "refused": retry},
+                schema_hint={name: "string" for name in retry},
+                stage="story.synopsis.repair",
+            )
+        except Exception:  # noqa: BLE001
+            return synopsis
+        for name in retry:
+            synopsis.refused.pop(name, None)
+        _accept(synopsis, answer, tuple(retry), evidence, gate)
+    if "title" in synopsis.fields and len(synopsis.fields["title"].split()) > 6:
+        synopsis.refused["title"] = "over 6 words"
+        synopsis.fields.pop("title")
+    return synopsis
+
+
+def _accept(synopsis: Synopsis, answer: Mapping[str, Any], names: Sequence[str], evidence: str, gate: Any) -> None:
+    for name in names:
         sentence = " ".join(str(answer.get(name) or "").split())
         if not sentence:
             continue
@@ -142,8 +170,7 @@ def write_synopsis(
             if not verdict.supported:
                 synopsis.refused[name] = verdict.reason
                 continue
-        synopsis.fields[name] = sentence
-    return synopsis
+        synopsis.fields[name] = sentence.rstrip(".") if name == "title" else sentence
 
 
 def edit_script(complete_json: Any, panels: Sequence[Mapping[str, Any]], *, synopsis: str) -> dict[str, Any]:
@@ -163,8 +190,8 @@ def edit_script(complete_json: Any, panels: Sequence[Mapping[str, Any]], *, syno
             schema_hint={"score": "int", "problems": [{"panel": "str", "issue": "str"}]},
             stage="story.editor",
         )
-    except Exception:  # noqa: BLE001
-        return {"score": 0, "problems": [], "source": "unavailable"}
+    except Exception as exc:  # noqa: BLE001 - recorded, so a failed editor is diagnosable
+        return {"score": 0, "problems": [], "source": "unavailable", "error": f"{type(exc).__name__}: {str(exc)[:200]}"}
     problems = [
         {"panel": str(item.get("panel")), "issue": str(item.get("issue", ""))[:200]}
         for item in answer.get("problems") or []

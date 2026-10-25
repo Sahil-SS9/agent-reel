@@ -356,6 +356,26 @@ class ClaimReport:
         }
 
 
+_SENTENCE_BREAK_RE = re.compile(r"[.!?\u2026\"'\u201c\u2018]\s*$")
+_COMMON_WORDS: frozenset[str] | None = None
+
+
+def is_common_word(word: str) -> bool:
+    """An ordinary English word (SCOWL list, assets/words), not a proper name."""
+    global _COMMON_WORDS
+    if _COMMON_WORDS is None:
+        import gzip
+        from pathlib import Path
+
+        path = Path(__file__).resolve().parents[1] / "assets" / "words" / "common-english.txt.gz"
+        try:
+            with gzip.open(path, "rt", encoding="utf-8") as handle:
+                _COMMON_WORDS = frozenset(line.strip() for line in handle if line.strip())
+        except OSError:
+            _COMMON_WORDS = frozenset()
+    return word.lower().strip(".,!?;:'\"") in _COMMON_WORDS
+
+
 def extract_claims(line: str, *, allow: Iterable[str] = ()) -> tuple[Claim, ...]:
     """Everything in the line that could be wrong."""
     allowed = {item.lower() for item in allow} | STOPWORDS | REGISTER
@@ -381,9 +401,17 @@ def extract_claims(line: str, *, allow: Iterable[str] = ()) -> tuple[Claim, ...]
         token = " ".join(match.group(0).split())
         if token.lower() in allowed or _TECHNICAL_RE.search(token):
             continue
-        # A capitalised first word is a sentence start, not a claim.
-        if match.start() == 0 and len(token.split()) == 1:
+        # A capitalised first word is a sentence start, not a claim. So is a capitalised
+        # ordinary English word after a sentence break ("Right. Brilliant!"), and a
+        # multi-word match that starts with one ("Write the reply" -> only "the reply").
+        first = token.split()[0]
+        sentence_start = match.start() == 0 or bool(_SENTENCE_BREAK_RE.search(line[: match.start()]))
+        if sentence_start and len(token.split()) == 1 and (match.start() == 0 or is_common_word(first)):
             continue
+        if sentence_start and len(token.split()) > 1 and is_common_word(first):
+            token = " ".join(token.split()[1:])
+            if token.lower() in allowed or is_common_word(token):
+                continue
         add("name", token)
     for match in _ACRONYM_RE.finditer(line):
         token = match.group(0)

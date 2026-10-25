@@ -61,6 +61,27 @@ def test_synopsis_sentences_are_gated_and_jargon_refused():
     assert "Exit" not in syn.text()
 
 
+def test_synopsis_repair_pass_rewrites_only_refused_fields():
+    calls = []
+
+    def model(*, payload, **_k):
+        calls.append(payload)
+        if "refused" not in payload:
+            return {"title": "The Checker That Lied", "logline": "Kensei ships it.", "ending": "Nothing passes."}
+        assert set(payload["refused"]) == {"logline"}
+        return {"logline": "Kensei measures eight options."}
+
+    class Gate:
+        def check(self, line, evidence, layer="caption"):
+            from types import SimpleNamespace
+            return SimpleNamespace(supported="ships" not in line, reason="not entailed")
+
+    syn = write_synopsis(model, title="t", facts_text="f", brief_text="b", gate=Gate())
+    assert len(calls) == 2 and syn.fields["logline"] == "Kensei measures eight options."
+    assert syn.fields["title"] == "The Checker That Lied" and not syn.refused
+    assert "Checker That Lied" not in syn.text()
+
+
 def test_editor_parses_and_clamps():
     out = edit_script(lambda **_k: {"score": 9, "problems": [{"panel": "x-p2", "issue": "jargon"}, "junk"]},
                       [{"id": "x-p1", "role": "setup", "caption": "c", "lines": []}], synopsis="s")
@@ -111,3 +132,13 @@ def test_behind_the_panels_lists_real_details():
     md = behind_the_panels([{"id": "a-p1", "role": "setup", "caption_source_event_ids": ["ev_1"]}],
                            {"a-p1": "verify failed with exit 127"})
     assert "exit 127" in md and "Panel 1" in md
+
+
+def test_interjections_at_sentence_start_are_not_names():
+    from canon.grounding import extract_claims
+
+    names = lambda s: [c.text for c in extract_claims(s) if c.kind == "name"]
+    assert names("Brilliant. Write the reply.") == []
+    assert names("Right. Brilliant!") == []
+    assert names("Okay. Octacon fixed it.") == ["Octacon"]
+    assert names("Fine. Paris it is.") == ["Paris"]

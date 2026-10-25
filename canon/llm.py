@@ -108,13 +108,27 @@ class CachedLLM:
         cached = self.cache.get(key)
         if cached is not None:
             return cached
+        extra: dict[str, Any] = {}
+        if _accepts_stage(self.client):
+            # The stage reaches the client's per-call log, so a failed call can be traced.
+            extra["stage"] = stage or self.stage
         value = self.client.complete_json(
-            prompt=prompt, payload=payload, schema_hint=schema_hint
+            prompt=prompt, payload=payload, schema_hint=schema_hint, **extra
         )
         if not isinstance(value, dict):  # pragma: no cover - defensive
             raise LLMError(f"model returned {type(value).__name__}, expected an object")
         self.cache.set(key, value)
         return value
+
+
+def _accepts_stage(client: Any) -> bool:
+    import inspect
+
+    try:
+        params = inspect.signature(client.complete_json).parameters
+    except (TypeError, ValueError, AttributeError):
+        return False
+    return "stage" in params or any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values())
 
 
 class NullLLM:

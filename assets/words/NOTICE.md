@@ -1,0 +1,15 @@
+# common-english.txt.gz
+
+Lower-case words (2-14 letters) from the Debian `wbritish` package, which is built from
+SCOWL (Spell Checker Oriented Word Lists) by Kevin Atkinson. Used only to tell an ordinary
+word at the start of a sentence ("Brilliant.", "Lovely!") from a proper name, so that
+the grounding gate does not refuse an interjection as an invented name.
+
+Copyright 2000-2011 by Kevin Atkinson
+
+Permission to use, copy, modify, distribute and sell these word lists, the associated
+scripts, the output created from the scripts, and its documentation for any purpose is
+hereby granted without fee, provided that the above copyright notice appears in all copies
+and that both that copyright notice and this permission notice appear in supporting
+documentation. Kevin Atkinson makes no representations about the suitability of this array
+for any purpose. It is provided "as is" without express or implied warranty.

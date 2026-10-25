@@ -56,3 +56,10 @@ Kanban card: t_ec1754fc.
 | V6 (25/10/26) | Reader = both: the story is plain English for anyone; a "behind the panels" note keeps the real technical detail for builders. | Synopsis-first writing; jargon guard on the page; episode-N-behind-the-panels.md. |
 | V7 (25/10/26) | Truth rule = true in meaning, not close to the source words. Names, numbers and who-did-what stay exact; nothing invented. | ClaimGate(meaning=True): no vocabulary floor, meaning judge; deterministic name/number/actor checks unchanged; no model still fails closed. Plugin default `--wording meaning`. |
 | V8 (25/10/26) | Tone = epic pictures, witty dialogue. | Voice sheet per character (tone only); dialogue carries scenes, captions optional; editor read + one rewrite before drawing. |
+| V9 (25/10/26) | V1 scope widened: other image tools (API or local), community + user-made characters, other AI harnesses, monthly comic book PDF, selectable formats and a style library. Podcast/video and the community website stay out. | docs/M2-SCOPE-v2.md |
+| V10 (25/10/26) | Image tools: local ComfyUI, Nano Banana and FLUX (plus the existing GPT Image). Light test: prove the mapping works with one call each, not a full bake-off. | canon/providers.py |
+| V11 (25/10/26) | Characters: Hermes Multiverse is open for community use. Users can create their own character sheet through a set-up exercise, and optionally prepare an upstream PR to add it to the Multiverse. Nothing is pushed by the tool. | hermes reel kit create / kit contribute |
+| V12 (25/10/26) | Harnesses: Claude Code, Codex, Command Code, OpenCode, Pi and more, following the pattern of our harness-agnostic repos. | adapters/<harness>/ |
+| V13 (25/10/26) | Monthly comic book PDF of the month's episodes. | hermes reel book |
+| V14 (25/10/26) | Users choose output format and art style. About 12 built-in styles from the existing style skills plus the owner ukiyo-e example, each as a raw prompt file; users can drop in their own. No copying of third-party style libraries. | styles/<key>/style.md |
+| V15 (25/10/26) | One independent Quan review at the end, after everything is built. | |

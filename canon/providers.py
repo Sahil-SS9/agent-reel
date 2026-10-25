@@ -98,8 +98,8 @@ SOURCES: dict[str, SourceSpec] = {
     "comfyui": SourceSpec(
         "comfyui", "Local ComfyUI (free)", "local", env=(),
         default_model="qwen-image-edit-2511", models=("qwen-image-edit-2511",),
-        max_references=3, approx_cost="free (your GPU)",
-        notes="Runs an API-format workflow template from assets/workflows/ or your own file. 25/10/26: nodes and model files verified on the local server; no image generated (GPU use needs owner approval).",
+        max_references=3, approx_cost="free (your GPU)", status="tested",
+        notes="Runs an API-format workflow template from assets/workflows/ or your own file. 25/10/26: real 1536x1024 panel made with Qwen-Image-Edit-2511 and a reference sheet (owner-approved GPU run, 308 s with partial offload).",
     ),
 }
 

@@ -158,7 +158,7 @@ def test_check_source_never_generates():
 
 def test_every_source_declares_status_honestly():
     assert {s.status for s in SOURCES.values()} <= {"tested", "mapped", "unsupported"}
-    assert SOURCES["host"].status == "tested"
+    assert SOURCES["host"].status == "tested" and SOURCES["comfyui"].status == "tested"
 
 
 def test_out_of_credit_is_not_retried(tmp_path):

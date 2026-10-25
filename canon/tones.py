@@ -33,6 +33,18 @@ TONES: dict[str, tuple[str, str]] = {
 }
 DEFAULT_TONE = "witty"
 
+#: One example line per tone, so the writer hears the register (V16 tuning: an
+#: instruction alone moved the delivery only slightly).
+EXAMPLES: dict[str, str] = {
+    "witty": "Kensei: 'The code is fine. The checker, less so.'",
+    "comical": "Sahil: 'Eight attempts and NOT ONE passes? Brilliant. I'll just lie down, then.'",
+    "serious": "Kensei: 'Eight candidates. None pass the rule as written.'",
+    "quirky": "Kensei: 'The checker tripped over its own shoelaces. Five times. Same shoelace.'",
+    "epic": "Kensei: 'Eight challengers entered. The rule still stands.'",
+    "wholesome": "Sahil: 'None passed, but we know exactly why. That's a good night's work.'",
+    "noir": "Narrator: 'Eight suspects. Every alibi checked out. None of them walked free.'",
+}
+
 
 @dataclass(frozen=True)
 class Tone:
@@ -46,9 +58,12 @@ class Tone:
         return " + ".join(f"{name} {weight}%" for name, weight in self.parts)
 
     def writer_text(self) -> str:
+        examples = " ".join(f"Example of the register ({name}): {EXAMPLES[name]}" for name, _w in self.parts)
         if len(self.parts) == 1:
-            return TONES[self.parts[0][0]][0]
-        return "a blend - " + "; ".join(f"{weight}% {name}: {TONES[name][0]}" for name, weight in self.parts)
+            body = TONES[self.parts[0][0]][0]
+        else:
+            body = "a blend - " + "; ".join(f"{weight}% {name}: {TONES[name][0]}" for name, weight in self.parts)
+        return f"{body}. Commit to it: most lines should clearly sound like this. {examples} (Examples show voice only; never reuse their facts.)"
 
     def director_text(self) -> str:
         if len(self.parts) == 1:

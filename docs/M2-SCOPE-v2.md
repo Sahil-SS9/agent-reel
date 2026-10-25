@@ -1,0 +1,20 @@
+# M2 scope v2 (owner decisions V6-V15, 25/10/26)
+
+This is what was built after Sahil widened version 1 on 25/10/26, and the honest status of each part. "Tested" means it ran for real on the owner's rig. "Mapped" means it is implemented and unit-tested against recorded shapes or fixtures, but has not yet made a real result.
+
+| Area | What a user can do | Status |
+|---|---|---|
+| Story (V6-V8) | Plain-English story first: synopsis → scene-by-scene script in character voices → editor read → one rewrite. Truth is checked in meaning: names, numbers and who-did-what stay exact, nothing invented. "Behind the panels" notes keep the real technical detail. | Tested: real chapter plans (`build-evidence/M2/story-v6/plan-*`). ctx.llm safety eval: 52/52 inventions refused, 8/8 plain-English rewrites accepted (two runs). |
+| Long chapters (V4/V5) | 3-4 page chapters (16-24 panels) with wordless filler panels (about 1 per 2 story panels), comic-book page layout and `chapter.pdf`. The short strip is one page (6 story + 3 fillers). | Tested: 18-panel, 4-page chapter rendered (`render-chapter1-anime`). |
+| Image sources (V10) | `hermes reel sources` lists them, `--check` verifies one at no cost, and `--set` saves the default. Render takes `--source/--model/--workflow`. | Host (Hermes `image_generate`): tested. OpenAI, Gemini (Nano Banana), fal (FLUX, Nano Banana): mapped. On 25/10/26 each live request reached the provider and stopped at billing (no credit). ComfyUI (Qwen-Image-Edit-2511 workflow): mapped; nodes and model files verified on the local server, but no GPU job was run without owner approval. |
+| Styles (V14) | 13 built-in styles, 10 of them raw prompt files (`styles/<key>/style.md`), including the owner's ukiyo-e folktale. Users drop in their own `style.md`. Any style works with any character: another style's approved sheet fixes identity. Choose with `--style` or `hermes reel styles --set`. | anime and ink-pen-sketch: tested. The other 11 are experimental (not yet rendered). Render warns; `--strict-styles` refuses them. |
+| Characters (V11) | `kit import-multiverse` imports the 32 Hermes Multiverse characters with published sheets (checksum-verified; full resolution from the release ZIP, or 960px previews). `kit create` runs a set-up exercise; photo likeness is allowed only for yourself. `kit contribute` builds a Multiverse-shaped bundle and PR text, and pushes nothing. Kit voices feed the writer. | Import: tested on the real Multiverse checkout (32 imported, 2 documentation-only skipped, 286 previews). Create and contribute: unit-tested; no real sheet generated yet. |
+| Harnesses (V12) | `hermes reel plan --harness claude-code,codex,…` reads other agents' local logs read-only, alone or alongside Hermes. A generic JSONL mapping covers Command Code and others. | Claude Code, Codex, OpenCode: tested read-only on local logs (text round-trips). Pi and generic JSONL: mapped (fixtures; no local sessions exist). |
+| Monthly book (V13) | `hermes reel book --month YYYY-MM` builds a cover, contents and every episode's pages into one PDF. A monthly blueprint runs it on the 1st. | Tested: a real 8-page book from three existing renders. |
+| Schedule (item 4) | Daily strip, weekly strip or chapter, and monthly book blueprints, each with time, format and style slots. Nothing runs until the user creates an automation. | Tested in live Hermes: all three register and fill to valid schedules (`30 18 * * *`, `30 18 * * 5`, `0 9 1 * *`). No automation created. |
+
+## Owner actions still open
+
+- **Multiverse rights text.** The Multiverse repo's NOTICE.md and manifests still say "inclusion is not a reuse licence" and `rights_status: unknown-not-cleared`. That contradicts V11 ("open for community use"). Imported kits record both. Updating the Multiverse repo is the owner's change to make.
+- **ComfyUI.** One approved local GPU job would move ComfyUI from mapped to tested.
+- **Paid APIs.** Credit on OpenAI, Gemini or fal would let one real image move each from mapped to tested.

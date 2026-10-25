@@ -35,7 +35,7 @@ from canon.brief import CHAPTER_MAX_TURNS, MAX_TURNS, build_brief
 from canon.selection import select_stories
 from canon.threads import beats_by_thread, thread_index
 from canon.arcs import build_brief_arc
-from canon.arcs import build_arcs
+from canon.arcs import build_arc, build_arcs
 from canon.beats import Beat, beats_from_events
 from canon.cache import ModelCache
 from canon.aliases import AliasBook, apply_to_ir, masks_in

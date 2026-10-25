@@ -90,3 +90,10 @@ def test_chapter_brief_samples_beginning_to_end():
     pairs = [(SimpleNamespace(ts=float(i)), f"text {i}") for i in range(40)]
     picked = _spread(pairs, 14)
     assert len(picked) == 14 and picked[0][1] == "text 0" and picked[-1][1] == "text 39"
+
+
+def test_pipeline_names_resolve():
+    """The kanban-thread arc path imports build_arc (latent NameError found 25/10/26)."""
+    from adapters.hermes import pipeline
+
+    assert callable(pipeline.build_arc)

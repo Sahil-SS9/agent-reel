@@ -63,3 +63,5 @@ Kanban card: t_ec1754fc.
 | V13 (25/10/26) | Monthly comic book PDF of the month's episodes. | hermes reel book |
 | V14 (25/10/26) | Users choose output format and art style. About 12 built-in styles from the existing style skills plus the owner ukiyo-e example, each as a raw prompt file; users can drop in their own. No copying of third-party style libraries. | styles/<key>/style.md |
 | V15 (25/10/26) | One independent Quan review at the end, after everything is built. | |
+| V16 (25/10/26) | The user picks the story tone (witty, comical, serious, quirky, epic, wholesome, noir), blends them (comical+serious, comical:70,serious:30) or uses auto (a blend chosen from the story). The tone changes delivery, never facts. | canon/tones.py; plan --tone; hermes reel tones; blueprint slot; director visual tone. |
+| V11 follow-up (25/10/26) | Multiverse rights text updated: open for community use (third-party and pending-approval exceptions kept). Pushed to Sahil-SS9/hermes-multiverse 89f942b. | |

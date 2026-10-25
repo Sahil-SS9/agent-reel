@@ -70,8 +70,8 @@ SYNOPSIS_PROMPT = (
 EDITOR_PROMPT = (
     "You are a comic editor. Read this script as a reader who knows nothing about software. "
     "For each panel, judge whether its words are clear, connected to the story and free of "
-    "jargon, and whether the whole reads as a story with a want, a problem, a turn and an "
-    "ending. Answer JSON only: {\"score\": 1-5, \"problems\": [{\"panel\": \"<id>\", "
+    "jargon, whether the whole reads as a story with a want, a problem, a turn and an "
+    "ending, and whether it delivers the requested tone. Answer JSON only: {\"score\": 1-5, \"problems\": [{\"panel\": \"<id>\", "
     "\"issue\": \"what is wrong, in a few words\"}]}. List only real problems."
 )
 
@@ -173,7 +173,7 @@ def _accept(synopsis: Synopsis, answer: Mapping[str, Any], names: Sequence[str],
         synopsis.fields[name] = sentence.rstrip(".") if name == "title" else sentence
 
 
-def edit_script(complete_json: Any, panels: Sequence[Mapping[str, Any]], *, synopsis: str) -> dict[str, Any]:
+def edit_script(complete_json: Any, panels: Sequence[Mapping[str, Any]], *, synopsis: str, tone: str = "") -> dict[str, Any]:
     """The editor's read of a script: a 1-5 score and per-panel problems."""
     if complete_json is None or not panels:
         return {"score": 0, "problems": [], "source": "none"}
@@ -186,7 +186,7 @@ def edit_script(complete_json: Any, panels: Sequence[Mapping[str, Any]], *, syno
     try:
         answer = complete_json(
             prompt=EDITOR_PROMPT,
-            payload={"story": synopsis, "script": script},
+            payload={"story": synopsis, "tone": tone, "script": script},
             schema_hint={"score": "int", "problems": [{"panel": "str", "issue": "str"}]},
             stage="story.editor",
         )

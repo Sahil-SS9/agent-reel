@@ -74,7 +74,7 @@ def test_blueprints_are_templates_with_the_right_schedules():
     module._register_blueprints(BP())
     assert seen["daily-strip"]["schedule_template"] == "{minute} {hour} * * *"
     assert seen["weekly-strip"]["schedule_template"] == "{minute} {hour} * * {dow}"
-    assert [s["name"] for s in seen["weekly-strip"]["slots"]] == ["time", "day", "format", "style"]
+    assert [s["name"] for s in seen["weekly-strip"]["slots"]] == ["time", "day", "format", "tone", "style"]
     assert seen["monthly-book"]["schedule_template"] == "{minute} {hour} 1 * *"
     assert "hermes reel book --month" in seen["monthly-book"]["prompt_template"]
     styles = next(s for s in seen["weekly-strip"]["slots"] if s["name"] == "style")["options"]
@@ -83,7 +83,7 @@ def test_blueprints_are_templates_with_the_right_schedules():
         assert "Never post" in kw["prompt_template"]
         if key != "monthly-book":
             assert "--days 1" in kw["prompt_template"] or "--days 7" in kw["prompt_template"]
-            assert "--format {format}" in kw["prompt_template"]
+            assert "--format {format} --tone {tone}" in kw["prompt_template"]
 
     class Old:  # host without a blueprint catalog: nothing registered, no error
         pass

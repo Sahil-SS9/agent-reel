@@ -73,6 +73,9 @@ def register_cli(subparser: argparse.ArgumentParser) -> None:
     plan.add_argument("--harness-root", action="append", default=[], metavar="NAME=PATH",
                       help="where a harness keeps its logs, e.g. codex=~/.codex/sessions")
     plan.add_argument("--mapping", default="", help="jsonl harness: mapping file (glob + field paths)")
+    plan.add_argument("--tone", default="",
+                      help="story tone: witty, comical, serious, quirky, epic, wholesome, noir; blend with + "
+                           "(comical+serious) or weights (comical:70,serious:30); or auto (default: saved choice, else witty)")
     plan.add_argument("--wording", default="meaning", choices=("meaning", "strict"),
                       help="meaning (V7, default): true in meaning, plain English; strict: close to the source words")
     check = subs.add_parser(
@@ -146,6 +149,22 @@ def eval_grounding_command(args: argparse.Namespace) -> int:
     return 0 if report["ok"] else 1
 
 
+def _tone_choice(args: argparse.Namespace) -> str:
+    """--tone, else the saved default (`hermes reel tones --set`), else witty. Validated here."""
+    from canon.tones import DEFAULT_TONE, parse_tone
+
+    value = getattr(args, "tone", "") or ""
+    if not value:
+        try:
+            value = json.loads((_default_data_dir() / "settings.json").read_text(encoding="utf-8")).get("tone", "")
+        except (OSError, ValueError):
+            value = ""
+    value = value or DEFAULT_TONE
+    if value.strip().lower() != "auto":
+        parse_tone(value)  # raises a clear error on an unknown tone
+    return value
+
+
 def _kit_voices() -> dict[str, str]:
     """Voices from built-in and user character kits (V11)."""
     try:
@@ -174,7 +193,7 @@ def reel_command(args: argparse.Namespace) -> int:
     action = getattr(args, "reel_action", None)
     if action == "eval-grounding":
         return eval_grounding_command(args)
-    if action in {"render", "kit", "sources", "book", "styles"}:
+    if action in {"render", "kit", "sources", "book", "styles", "tones"}:
         _import_repo()
         from adapters.hermes import render_cli
 
@@ -186,6 +205,8 @@ def reel_command(args: argparse.Namespace) -> int:
             return render_cli.book_command(args, _default_data_dir)
         if action == "styles":
             return render_cli.styles_command(args, _default_data_dir)
+        if action == "tones":
+            return render_cli.tones_command(args, _default_data_dir)
         return render_cli.render_command(args, ctx=_CTX, default_dir=_default_data_dir)
     if action != "plan":
         print("Usage: hermes reel plan --dry-run | render --plan-dir DIR | sources | styles | book | kit list|add|create|approve|contribute | eval-grounding")
@@ -241,6 +262,7 @@ def reel_command(args: argparse.Namespace) -> int:
         harnesses=tuple(h.strip() for h in str(getattr(args, "harness", "hermes")).split(",") if h.strip()),
         harness_options=_harness_options(args),
         voices=_kit_voices(),
+        tone=_tone_choice(args),
         episodes=max(1, args.episodes),
         max_deep_events=args.max_deep_events,
         use_model=True,

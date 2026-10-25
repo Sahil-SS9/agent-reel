@@ -39,7 +39,7 @@ def register(ctx) -> None:
 #: user's catalog; nothing runs until the user creates an automation from it.
 _BLUEPRINT_PROMPT = (
     "Make this {cadence} Scrollback Reel strip for the owner to review. Run, in a terminal: "
-    "`hermes reel plan --dry-run --days {days} --episodes 1 --format {{format}} --data-dir PLAN_DIR` and then "
+    "`hermes reel plan --dry-run --days {days} --episodes 1 --format {{format}} --tone {{tone}} --data-dir PLAN_DIR` and then "
     "`hermes reel render --plan-dir PLAN_DIR --episode 1 --style {{style}}`, with "
     "PLAN_DIR a new folder under the plugin's data directory named by today's date. "
     "If the plan finds no story, say so in one line and stop: a quiet {unit} gets no strip. "
@@ -65,6 +65,8 @@ def _register_blueprints(ctx) -> None:
                   "options": _style_keys()}
     format_slot = {"name": "format", "type": "enum", "label": "Length", "default": "strip",
                    "options": ("strip", "chapter")}
+    tone_slot = {"name": "tone", "type": "enum", "label": "Tone", "default": "auto",
+                 "options": ("auto", "witty", "comical", "serious", "quirky", "epic", "wholesome", "noir")}
     time_slot = {"name": "time", "type": "time", "label": "Time", "default": "18:00"}
     register(
         "daily-strip",
@@ -73,7 +75,7 @@ def _register_blueprints(ctx) -> None:
         schedule_template="{minute} {hour} * * *",
         prompt_template=_BLUEPRINT_PROMPT.format(cadence="daily", days=1, unit="day"),
         category="daily",
-        slots=[time_slot, format_slot, style_slot],
+        slots=[time_slot, format_slot, tone_slot, style_slot],
         deliver_default="origin",
         tags=("comic", "scrollback-reel"),
     )
@@ -85,7 +87,7 @@ def _register_blueprints(ctx) -> None:
         prompt_template=_BLUEPRINT_PROMPT.format(cadence="weekly", days=7, unit="week"),
         category="weekly",
         slots=[time_slot, {"name": "day", "type": "enum", "label": "Which day?", "default": "friday",
-                                    "options": ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")}, format_slot, style_slot],
+                                    "options": ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")}, format_slot, tone_slot, style_slot],
         deliver_default="origin",
         tags=("comic", "scrollback-reel"),
     )

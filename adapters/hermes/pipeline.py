@@ -121,6 +121,8 @@ class PipelineConfig:
     harness_options: Mapping[str, Mapping[str, Any]] | None = None
     #: V11: character voices from the user's kits (tone only), merged over the defaults.
     voices: Mapping[str, str] | None = None
+    #: V16: story tone - a name, a blend ("comical+serious", "comical:70,serious:30") or "auto".
+    tone: str = "witty"
     #: V7: "meaning" judges captions and lines on meaning (plain English allowed);
     #: "strict" keeps the M1 vocabulary floor. The library default stays strict so the
     #: M1 tests and evals keep measuring the accepted gate; the plugin CLI defaults to meaning.
@@ -769,12 +771,19 @@ def run_pipeline(
                     if synopsis.fields.get("title"):
                         # V6: a story title from the checked synopsis beats "A session".
                         title, title_source = synopsis.fields["title"], "synopsis"
-                    story_ctx = {"synopsis": synopsis.text(), "voices": {**DEFAULT_VOICES, **dict(config.voices or {})},
+                    from canon.tones import auto_tone, parse_tone
+
+                    if str(config.tone).strip().lower() == "auto":
+                        tone = auto_tone(drama=int(getattr(candidate, "drama", 0) or 0), finished=arc.status == "resolved")
+                    else:
+                        tone = parse_tone(config.tone)
+                    story_ctx = {"tone": tone.writer_text(), "voices": {**DEFAULT_VOICES, **dict(config.voices or {})},
+                                 "synopsis": synopsis.text(),
                                  "jobs": PANEL_JOBS, "notes": {}}
                     first_writer = LLMDialogueWriter(writer_cached, cast, story=story_ctx)
                     episode_ir = _plan(first_writer)
                     review = edit_script(writer_cached.complete_json,
-                                         [p.as_dict() for p in episode_ir.panels], synopsis=synopsis.text())
+                                         [p.as_dict() for p in episode_ir.panels], synopsis=synopsis.text(), tone=tone.label)
                     reviews = [review]
                     jargon = first_writer.jargon_dropped
                     if 0 < review["score"] < 4 and review["problems"]:
@@ -786,12 +795,13 @@ def run_pipeline(
                             second = None
                         if second is not None:
                             review2 = edit_script(writer_cached.complete_json,
-                                                  [p.as_dict() for p in second.panels], synopsis=synopsis.text())
+                                                  [p.as_dict() for p in second.panels], synopsis=synopsis.text(), tone=tone.label)
                             reviews.append(review2)
                             if len(second.panels) >= len(episode_ir.panels) - 1 and review2["score"] >= review["score"]:
                                 episode_ir = second
                                 jargon = second_writer.jargon_dropped
-                    story_info = {"synopsis": synopsis.as_dict(), "editor": reviews, "jargon_dropped": jargon}
+                    story_info = {"synopsis": synopsis.as_dict(), "editor": reviews, "jargon_dropped": jargon,
+                                  "tone": tone.as_dict()}
                 else:
                     episode_ir = _plan(writer)
             except EpisodeRefused as refused:

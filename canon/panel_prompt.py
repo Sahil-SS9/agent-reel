@@ -140,6 +140,8 @@ def build_panel_request(
     )
     if treatment is not None:
         parts.append(f"ACTION: {treatment.action}.")
+        if getattr(treatment, "tone", ""):
+            parts.append(f"VISUAL TONE: {treatment.tone}.")
         parts.append("Dynamic comic-book composition, dramatic lighting, cinematic energy.")
     if caption:
         parts.append(f"The real event behind this panel (for mood only, never write it): {caption}")

@@ -283,7 +283,8 @@ class LLMDialogueWriter:
         "name, an outcome) must be in that panel's facts or evidence or the synopsis; say it in "
         "plain English by what it meant. Tone, jokes and metaphor are free; new facts are not. "
         "Never show commit hashes, exit codes, file paths, task ids or tool names unless the name "
-        "or number IS the story. If an editor note is given for a panel, fix exactly that."
+        "or number IS the story. Write in the requested TONE (it shapes delivery only, never "
+        "the facts). If an editor note is given for a panel, fix exactly that."
     )
     SCENE_SIZE = 5
 
@@ -315,6 +316,7 @@ class LLMDialogueWriter:
                 items.append(item)
             cast_here = sorted({s for item in items for s in item["speakers"]})
             payload = {
+                "tone": story.get("tone", ""),
                 "synopsis": story.get("synopsis", ""),
                 "script_so_far": so_far[-12:],
                 "voices": {name: voices.get(name, "natural") for name in cast_here} | {"narrator": voices.get("narrator", "")},

@@ -59,6 +59,10 @@ def register_render_cli(subs: Any) -> None:
     book.add_argument("--out", default="")
     book.add_argument("--assets-dir", default="")
 
+    tones = subs.add_parser("tones", help="List story tones (comical, serious, quirky...) or set the default")
+    tones.add_argument("--set", default="", dest="set_tone")
+    tones.add_argument("--assets-dir", default="")
+
     styles = subs.add_parser("styles", help="List art styles, show one's raw prompt, or set the default")
     styles.add_argument("--show", default="")
     styles.add_argument("--set", default="", dest="set_style")
@@ -158,6 +162,29 @@ def book_command(args: argparse.Namespace, default_dir: Callable[[], Path]) -> i
     print(f"book: {report['pdf']} ({report['episodes']} episodes, {report['pages']} pages)")
     for name in report["titles"]:
         print(f"  - {name}")
+    return 0
+
+
+def tones_command(args: argparse.Namespace, default_dir: Callable[[], Path]) -> int:
+    from canon.tones import DEFAULT_TONE, TONES, parse_tone
+
+    root = _data_root(getattr(args, "assets_dir", ""), default_dir)
+    if getattr(args, "set_tone", ""):
+        if args.set_tone.strip().lower() != "auto":
+            try:
+                parse_tone(args.set_tone)
+            except ValueError as exc:
+                print(exc)
+                return 2
+        save_settings(root, {"tone": args.set_tone})
+        print(f"default tone: {args.set_tone}")
+        return 0
+    current = load_settings(root).get("tone", DEFAULT_TONE)
+    print(f"Story tones (current: {current}). Blend with + (comical+serious) or weights (comical:70,serious:30), or use auto:")
+    for name, (words, pictures) in TONES.items():
+        print(f"  {name:10} words: {words}\n  {'':10} pictures: {pictures}")
+    print("  auto       picks a blend from the story (a hard-won fight, an open struggle, a calm success)")
+    print("Set the default with: hermes reel tones --set <tone>; or per run: hermes reel plan --tone <tone>")
     return 0
 
 
@@ -503,7 +530,14 @@ def render_command(args: argparse.Namespace, *, ctx: Any, default_dir: Callable[
             from adapters.hermes.plugin_llm import PluginLLMClient
 
             complete_json = PluginLLMClient(llm).complete_json
-        treatment = direct(ir, story_text=story_text, complete_json=complete_json)
+        tone_hint = ""
+        story_path = plan_dir / f"episode-{args.episode}-story.json"
+        if story_path.is_file():
+            try:
+                tone_hint = str((json.loads(story_path.read_text(encoding="utf-8")).get("tone") or {}).get("director", ""))
+            except (OSError, json.JSONDecodeError):
+                tone_hint = ""
+        treatment = direct(ir, story_text=story_text, complete_json=complete_json, tone=tone_hint)
         out.mkdir(parents=True, exist_ok=True)
         (out / "treatment.json").write_text(json.dumps(treatment.as_dict(), indent=1) + "\n", encoding="utf-8")
         sheet = _villain_sheet(treatment, style, kits, renderer, root, raw_dir, report)

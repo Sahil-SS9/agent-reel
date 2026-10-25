@@ -88,7 +88,7 @@ DIRECTOR_PROMPT = (
     "panel; the setup is an establishing extreme-long or long shot; never ask for text, "
     "signs, labels or writing in the image. shot is one of "
     + ", ".join(SHOTS) + "; angle is one of " + ", ".join(ANGLES) + "; villain_presence is "
-    "one of absent, lurking, attacking, defeated. Also add wordless FILLER panels like a "
+    "one of absent, lurking, attacking, defeated. Follow visual_tone when it is given. Also add wordless FILLER panels like a "
     "real comic book, about one for every two story panels: establishing shots of the "
     "world, reaction close-ups, the villain lurking, the calm before the fight, the impact "
     "after it, a quiet closing beat. A filler goes after a story panel (never after the "
@@ -114,6 +114,8 @@ class PanelTreatment:
     #: Filler panels only (V5): the story panel this one follows, and who is drawn.
     after: str = ""
     cast: tuple[str, ...] = ()
+    #: V16: the episode's visual tone, repeated on every panel.
+    tone: str = ""
 
     def as_dict(self) -> dict[str, Any]:
         data = {
@@ -340,10 +342,11 @@ def direct(
     *,
     story_text: str,
     complete_json: Callable[..., Mapping[str, Any]] | None = None,
+    tone: str = "",
 ) -> Treatment:
     """A visual treatment for the episode: model when available, rules otherwise."""
     if complete_json is None:
-        return _repair(_rules(ir, story_text), ir)
+        return _with_tone(_repair(_rules(ir, story_text), ir), tone)
     panels = [
         {"id": p.get("id"), "role": p.get("role"), "caption": p.get("caption", ""),
          "lines": [f"{l.get('speaker')}: {l.get('text')}" for l in p.get("lines", [])],
@@ -353,12 +356,13 @@ def direct(
     try:
         answer = complete_json(
             prompt=DIRECTOR_PROMPT,
-            payload={"title": ir.get("logline", ""), "story": story_text[:3000], "panels": panels},
+            payload={"title": ir.get("logline", ""), "story": story_text[:3000], "panels": panels,
+                     "visual_tone": tone},
             schema_hint={"villain": {"name": "str", "look": "str"}, "world": "str", "panels": ["object"], "fillers": ["object"]},
             stage="episode.director",
         )
     except Exception:  # noqa: BLE001 - a missing director never blocks a render
-        fallback = _repair(_rules(ir, story_text), ir)
+        fallback = _with_tone(_repair(_rules(ir, story_text), ir), tone)
         fallback.repairs.append("director model unavailable; rules used")
         return fallback
     raw_villain = answer.get("villain")
@@ -387,7 +391,13 @@ def direct(
         treatment.repairs.append("fillers: model count off target; rule fillers used")
     else:
         treatment.fillers = model_fillers
-    return _repair(treatment, ir)
+    return _with_tone(_repair(treatment, ir), tone)
+
+
+def _with_tone(treatment: Treatment, tone: str) -> Treatment:
+    for item in list(treatment.panels.values()) + list(treatment.fillers):
+        item.tone = tone
+    return treatment
 
 
 __all__: Sequence[str] = ("Treatment", "PanelTreatment", "direct", "pick_villain", "no_text", "SHOT_WORDS", "ANGLE_WORDS")

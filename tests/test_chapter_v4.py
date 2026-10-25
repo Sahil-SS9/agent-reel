@@ -122,3 +122,34 @@ def test_llm_writer_keys_each_insert_panel_separately():
         {"role": "insert", "key": "insert-2", "fact_sentence": "two"},
     ])
     assert out["insert-1"]["caption"] != out["insert-2"]["caption"]
+
+
+def test_chapter_insert_panels_get_facts_and_evidence():
+    """An insert spec reaching the writer carries the same sources as a role panel."""
+    from types import SimpleNamespace
+
+    from canon.arcs import build_brief_arc
+    from canon.canon import Canon
+    from canon.episode import plan_episode
+
+    turns = [SimpleNamespace(event_id=f"e{i}", actor="Sahil", text=f"Sahil fixed bug number {i} in the parser") for i in range(10)]
+    events = {f"e{i}": SimpleNamespace(ts=float(i)) for i in range(10)}
+    brief = SimpleNamespace(turns=turns, goal="g", outcome="Fixed and merged.", thread_key="t")
+    arc, beats = build_brief_arc(brief, events)
+    seen = []
+
+    class Spy:
+        name = "spy"
+
+        def write(self, panels):
+            seen.extend(panels)
+            return {}
+
+    try:
+        plan_episode(arc, beats, Canon(), format="chapter", writer=Spy(), brief=brief,
+                     evidence={t.event_id: t.text for t in turns})
+    except Exception:
+        pass
+    inserts = [p for p in seen if p["role"] == "insert"]
+    assert inserts and all(p.get("evidence") and p.get("fact_sentence") for p in inserts)
+    assert len({p["key"] for p in seen}) == len(seen)

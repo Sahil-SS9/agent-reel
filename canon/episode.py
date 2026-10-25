@@ -735,6 +735,14 @@ def plan_episode(
                     "expression": "focused",
                     "setting": "the rig",
                     "summary": beat.summary,
+                    # V4: an insert gets the same sources as a role panel. Without them
+                    # the writer had no facts and no evidence, so it (rightly) wrote nothing.
+                    "evidence": _evidence_for(beat),
+                    "fact_sentence": facts_for("insert")
+                    or " ".join(str(_evidence_for(beat)).split())[:220],
+                    "facts_only": bool(facts),
+                    "owner_texts": tuple(owner_texts),
+                    "actors": [],
                     "format": format,
                 },
             )

@@ -37,14 +37,32 @@ def register_render_cli(subs: Any) -> None:
     render = subs.add_parser("render", help="Render a planned episode into lettered comic files")
     render.add_argument("--plan-dir", required=True, help="the --data-dir of a `hermes reel plan` run")
     render.add_argument("--episode", type=int, default=1)
-    render.add_argument("--style", default="anime")
+    render.add_argument("--style", default="", help="art style (see `hermes reel styles`; default: saved choice, else anime)")
     render.add_argument("--out", default="", help="output folder (default: <plan-dir>/render-<episode>-<style>)")
     render.add_argument("--budget", type=int, default=12, help="max new images for this episode")
     render.add_argument("--retries", type=int, default=1, help="regenerations per failed panel")
     render.add_argument("--public", action="store_true", help="public mode: real people need consent")
-    render.add_argument("--allow-untested-style", action="store_true")
+    render.add_argument("--allow-untested-style", action="store_true", help=argparse.SUPPRESS)
+    render.add_argument("--strict-styles", action="store_true", help="refuse styles not yet tested on a real render")
     render.add_argument("--literal", action="store_true", help="no director: draw what literally happened")
     render.add_argument("--assets-dir", default="", help="user styles/kits/approvals (default: plugin data dir)")
+    render.add_argument("--source", default="", help="image source: host, openai, gemini, fal, comfyui (default: saved choice, else host)")
+    render.add_argument("--model", default="", help="model for the source (default: the source's default)")
+    render.add_argument("--workflow", default="", help="ComfyUI: workflow name in assets/workflows or a file path")
+    render.add_argument("--comfyui-url", default="", help="ComfyUI server (default http://127.0.0.1:8188)")
+
+    styles = subs.add_parser("styles", help="List art styles, show one's raw prompt, or set the default")
+    styles.add_argument("--show", default="")
+    styles.add_argument("--set", default="", dest="set_style")
+    styles.add_argument("--assets-dir", default="")
+
+    sources = subs.add_parser("sources", help="List image sources, check one, or set the default")
+    sources.add_argument("--check", default="", help="check a source is ready (no image is made)")
+    sources.add_argument("--set", default="", dest="set_source", help="save this source as the default")
+    sources.add_argument("--model", default="")
+    sources.add_argument("--workflow", default="")
+    sources.add_argument("--comfyui-url", default="")
+    sources.add_argument("--assets-dir", default="")
 
     kit = subs.add_parser("kit", help="List, add or approve character kits")
     kit_subs = kit.add_subparsers(dest="kit_action")
@@ -75,6 +93,83 @@ def _assets(args: argparse.Namespace, default_dir: Callable[[], Path]):
     kits = load_kits(REPO / "kits", root / "kits")
     approvals = Approvals.load(root / "approvals.json")
     return root, styles, kits, approvals
+
+
+def _settings_path(root: Path) -> Path:
+    return root / "settings.json"
+
+
+def load_settings(root: Path) -> dict[str, Any]:
+    path = _settings_path(root)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def save_settings(root: Path, updates: Mapping[str, Any]) -> dict[str, Any]:
+    data = load_settings(root)
+    data.update({k: v for k, v in updates.items() if v not in (None, "")})
+    root.mkdir(parents=True, exist_ok=True)
+    _settings_path(root).write_text(json.dumps(data, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    return data
+
+
+def styles_command(args: argparse.Namespace, default_dir: Callable[[], Path]) -> int:
+    root, styles, _kits, _approvals = _assets(args, default_dir)
+    if getattr(args, "show", ""):
+        style = styles.get(args.show)
+        if style is None:
+            print(f"no style {args.show!r}")
+            return 1
+        print(style.raw_template or f"{style.prompt_block}\n{style.staging_rules}\n{style.negative_block}")
+        return 0
+    if getattr(args, "set_style", ""):
+        if args.set_style not in styles:
+            print(f"no style {args.set_style!r}")
+            return 1
+        save_settings(root, {"style": args.set_style})
+        print(f"default style: {args.set_style}")
+        return 0
+    current = load_settings(root).get("style", "anime")
+    print("Art styles (tested = proven on a real render; experimental = ready to try):")
+    for key, style in sorted(styles.items()):
+        mark = "*" if key == current else " "
+        state = "tested" if style.tested else "experimental"
+        print(f" {mark} {key:20} {state:12} {style.title}" + (f" - {style.summary}" if style.summary else "") + (" (yours)" if style.source == "user" else ""))
+    print(f"Add your own: put a style.md (a raw prompt with the line [INSERT CHARACTERS, ACTION AND SCENE HERE]) in {root / 'styles' / '<name>'}/")
+    print("See one: hermes reel styles --show <name>; set the default: hermes reel styles --set <name>")
+    return 0
+
+
+def sources_command(args: argparse.Namespace, default_dir: Callable[[], Path]) -> int:
+    from canon.providers import SOURCES, check_source
+
+    root = _data_root(getattr(args, "assets_dir", ""), default_dir)
+    settings = load_settings(root)
+    options = {"workflow": args.workflow or settings.get("workflow", ""),
+               "base_url": args.comfyui_url or settings.get("comfyui_url", "")}
+    if args.set_source:
+        if args.set_source not in SOURCES:
+            print(f"unknown source {args.set_source!r}; choose one of {', '.join(SOURCES)}")
+            return 2
+        saved = save_settings(root, {"source": args.set_source, "model": args.model,
+                                     "workflow": args.workflow, "comfyui_url": args.comfyui_url})
+        print(f"default image source: {saved['source']}" + (f" ({saved['model']})" if saved.get("model") else ""))
+        return 0
+    if args.check:
+        report = check_source(args.check, options=options)
+        print(json.dumps(report, indent=1))
+        return 0 if report.get("ready") else 1
+    current = settings.get("source", "host")
+    print("Image sources (tested = real images made through it; mapped = request shapes implemented, not yet run for real):")
+    for spec in SOURCES.values():
+        mark = "*" if spec.key == current else " "
+        env = f"  needs {', '.join(spec.env)}" if spec.env else ""
+        print(f" {mark} {spec.key:8} {spec.status:8} {spec.label} - {spec.approx_cost}; up to {spec.max_references} reference sheets{env}")
+    print("Set the default with: hermes reel sources --set <key> [--model M]")
+    return 0
 
 
 def kit_command(args: argparse.Namespace, default_dir: Callable[[], Path]) -> int:
@@ -202,7 +297,7 @@ def render_command(args: argparse.Namespace, *, ctx: Any, default_dir: Callable[
     from canon.letterer import letter_panel
     from canon.panel_check import LETTER_QUESTION, TIGHT_QUESTION, check_question, interpret
     from canon.panel_prompt import build_episode_requests, episode_cast
-    from canon.render import PanelRenderer, RenderReport, write_render_manifest
+    from canon.render import PanelRenderer, RenderError, RenderReport, write_render_manifest
     from PIL import Image
 
     dispatch = getattr(ctx, "dispatch_tool", None)
@@ -226,6 +321,7 @@ def render_command(args: argparse.Namespace, *, ctx: Any, default_dir: Callable[
     ir = json.loads(ir_path.read_text(encoding="utf-8"))
     title = ir.get("logline") or "Scrollback Reel"
     root, styles, kits, approvals = _assets(args, default_dir)
+    args.style = args.style or load_settings(root).get("style", "anime")
     style = styles.get(args.style)
     if style is None:
         print(f"unknown style {args.style!r}; known: {', '.join(sorted(styles))}")
@@ -240,7 +336,9 @@ def render_command(args: argparse.Namespace, *, ctx: Any, default_dir: Callable[
         (cast_kits.append(kit) if kit else missing.append(name))
     problems = [f"no character kit for {name!r} (add one with `hermes reel kit add`)" for name in missing]
     problems += clear_to_render(style=style, kits=cast_kits, approvals=approvals, public=args.public,
-                                allow_untested_style=args.allow_untested_style)
+                                allow_untested_style=args.allow_untested_style or not getattr(args, "strict_styles", False))
+    if not style.tested:
+        print(f"note: style {style.key!r} has not been tested with your image source yet; check the panels before sharing")
     if problems:
         print("Not cleared to render:")
         for problem in problems:
@@ -249,7 +347,23 @@ def render_command(args: argparse.Namespace, *, ctx: Any, default_dir: Callable[
 
     out = Path(args.out).expanduser() if args.out else plan_dir / f"render-{args.episode}-{style.key}"
     raw_dir = out / "raw"
-    renderer = PanelRenderer(host_generator(dispatch), cache_dir=root / "cache" / "images", budget=args.budget)
+    settings = load_settings(root)
+    source = getattr(args, "source", "") or settings.get("source", "host")
+    model = getattr(args, "model", "") or (settings.get("model", "") if source == settings.get("source") else "")
+    from canon.providers import make_generator
+
+    try:
+        generator = make_generator(
+            source, out_dir=root / "cache" / "source-out", model=model, host=host_generator(dispatch),
+            options={"workflow": getattr(args, "workflow", "") or settings.get("workflow", ""),
+                     "base_url": getattr(args, "comfyui_url", "") or settings.get("comfyui_url", "")},
+        )
+    except RenderError as exc:
+        print(f"Image source problem: {exc}")
+        return 1
+    print(f"image source: {source}" + (f" ({model})" if model else ""))
+    # The cache key includes the source, so switching source never reuses another's images.
+    renderer = PanelRenderer(generator, cache_dir=root / "cache" / "images" / (source if source != "host" else ""), budget=args.budget)
     report = RenderReport()
 
     # V1/V3: the director decides how each panel looks (villain, world, shot, angle). The

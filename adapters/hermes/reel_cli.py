@@ -145,15 +145,21 @@ def reel_command(args: argparse.Namespace) -> int:
     action = getattr(args, "reel_action", None)
     if action == "eval-grounding":
         return eval_grounding_command(args)
-    if action in {"render", "kit"}:
+    if action in {"render", "kit", "sources", "book", "styles"}:
         _import_repo()
-        from adapters.hermes.render_cli import kit_command, render_command
+        from adapters.hermes import render_cli
 
         if action == "kit":
-            return kit_command(args, _default_data_dir)
-        return render_command(args, ctx=_CTX, default_dir=_default_data_dir)
+            return render_cli.kit_command(args, _default_data_dir)
+        if action == "sources":
+            return render_cli.sources_command(args, _default_data_dir)
+        if action == "book":
+            return render_cli.book_command(args, _default_data_dir)
+        if action == "styles":
+            return render_cli.styles_command(args, _default_data_dir)
+        return render_cli.render_command(args, ctx=_CTX, default_dir=_default_data_dir)
     if action != "plan":
-        print("Usage: hermes reel plan --dry-run | render --plan-dir DIR | kit list|add|approve | eval-grounding")
+        print("Usage: hermes reel plan --dry-run | render --plan-dir DIR | sources | styles | book | kit list|add|create|approve|contribute | eval-grounding")
         return 2
     if not getattr(args, "dry_run", False):
         print("This command only plans: pass --dry-run.")

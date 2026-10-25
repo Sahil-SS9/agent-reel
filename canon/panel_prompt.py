@@ -113,7 +113,9 @@ def build_panel_request(
             bit += ", " + ", ".join(part for part in (pose, expression) if part)
         staging_bits.append(bit)
 
-    references = tuple(kit.sheet(style.key) for _name, kit in resolved)
+    sheets = [kit.sheet_for(style.key) for _name, kit in resolved]
+    references = tuple(path for path, _exact in sheets)
+    identity_only = any(not exact for _path, exact in sheets)
     model_line = ", ".join(
         f"{name.upper()} is exactly as in the {ORDINALS[index]} reference sheet"
         for index, (name, _kit) in enumerate(resolved)
@@ -155,13 +157,37 @@ def build_panel_request(
             f"Characters: {model_line} - keep everyone on-model (face, hair, outfit, colours, "
             f"proportions).{extra}"
         )
-    parts.append(style.prompt_block)
-    if style.staging_rules:
-        parts.append(style.staging_rules)
-    parts.append(style.negative_block)
+    if identity_only:
+        parts.append(
+            "The reference sheets fix WHO each character is (face, hair, build, outfit design); "
+            "redraw them entirely in the art style described here, not in the sheets' style."
+        )
+    comic_rules = (
+        "This is ONE PANEL of a comic page. Keep the top quarter of the frame as open "
+        "background for speech balloons added later."
+    )
+    if style.raw_template:
+        from canon.assets import INSERT_MARK
+
+        scene = " ".join(part.strip() for part in parts if part.strip())
+        mood = {"setup": "calm before the storm", "hidden_problem": "uneasy, ominous",
+                "diagnosis": "tense, focused", "climax": "explosive, high stakes",
+                "aftermath": "quiet, spent", "win": "triumphant", "filler": "atmospheric"}.get(
+            str(panel.get("role", "")), "dramatic")
+        body = (style.raw_template.replace(INSERT_MARK, scene)
+                .replace("[REFERENCE]", "the character reference sheets supplied with this request")
+                .replace("[MOOD]", mood))
+        mood_line = "" if "[MOOD]" in style.raw_template else f" Mood of this panel: {mood}."
+        prompt = f"{body}\n\nCOMIC PANEL RULES: {comic_rules}{mood_line} {style.staging_rules} {style.negative_block}".strip()
+    else:
+        parts.append(style.prompt_block)
+        if style.staging_rules:
+            parts.append(style.staging_rules)
+        parts.append(style.negative_block)
+        prompt = " ".join(part.strip() for part in parts if part.strip())
     return PanelRequest(
         panel_id=str(panel.get("id", "")),
-        prompt=" ".join(part.strip() for part in parts if part.strip()),
+        prompt=prompt,
         references=references,
         cast=tuple(name for name, _kit in resolved) + ((villain[0],) if villain_shown else ()),
         positions=positions,

@@ -48,6 +48,9 @@ class StyleCard:
     licence: str
     status: str  # approved | experimental
     source: str  # builtin | user
+    #: V14: a raw prompt file (style.md) with "[INSERT CHARACTERS, ACTION AND SCENE HERE]".
+    raw_template: str = ""
+    summary: str = ""
 
     @property
     def tested(self) -> bool:
@@ -66,6 +69,21 @@ class CharacterKit:
     public_consent: bool
     licence: str
     source: str
+
+    def sheet_for(self, style: str) -> tuple[Path, bool]:
+        """The sheet for ``style``, or another style's sheet used for identity only.
+
+        V14: a user can pick any of the styles, but a character may only have sheets in a
+        few. The fallback sheet fixes who the character is; the style text decides how
+        they are drawn. Returns (path, exact).
+        """
+        if style in self.sheets and self.sheets[style].is_file():
+            return self.sheets[style], True
+        for candidate in ("anime", *self.sheets):
+            path = self.sheets.get(candidate)
+            if path is not None and path.is_file():
+                return path, False
+        return self.sheet(style), True
 
     def sheet(self, style: str) -> Path:
         path = self.sheets.get(style)
@@ -109,6 +127,53 @@ def _style(path: Path, source: str) -> StyleCard:
     )
 
 
+INSERT_MARK = "[INSERT CHARACTERS, ACTION AND SCENE HERE]"
+
+
+def _frontmatter(text: str) -> tuple[dict[str, Any], str]:
+    """A tiny ``key: value`` frontmatter reader (no YAML dependency); lists as ``[a, b]``."""
+    if not text.startswith("---"):
+        return {}, text
+    end = text.find("\n---", 3)
+    if end < 0:
+        return {}, text
+    meta: dict[str, Any] = {}
+    for line in text[3:end].strip().splitlines():
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        value = value.strip()
+        if value.startswith("[") and value.endswith("]"):
+            meta[key.strip()] = [item.strip().strip("'\"") for item in value[1:-1].split(",") if item.strip()]
+        else:
+            meta[key.strip()] = value
+    return meta, text[end + 4:].lstrip("\n")
+
+
+def _style_md(path: Path, source: str) -> StyleCard:
+    meta, body = _frontmatter(path.read_text(encoding="utf-8"))
+    if INSERT_MARK not in body:
+        raise AssetError(f"style {path.parent.name!r}: style.md needs the line {INSERT_MARK}")
+    status = str(meta.get("status") or "experimental")
+    if status not in {"approved", "experimental"}:
+        raise AssetError(f"style {path.parent.name!r} has unknown status {status!r}")
+    return StyleCard(
+        key=path.parent.name,
+        name=str(meta.get("name") or path.parent.name),
+        title=str(meta.get("title") or meta.get("name") or path.parent.name),
+        prompt_block="",
+        negative_block=str(meta.get("negative") or "No text, letters, words, numbers, speech bubbles, captions, logos or watermarks anywhere in the image."),
+        staging_rules=str(meta.get("staging") or ""),
+        refs=tuple((path.parent / str(ref)).resolve() for ref in meta.get("refs", []) or []),
+        tested_on=tuple(str(item) for item in meta.get("tested_on", []) or []),
+        licence=str(meta.get("licence") or "unknown"),
+        status=status,
+        source=source,
+        raw_template=body.strip(),
+        summary=str(meta.get("summary") or ""),
+    )
+
+
 def _kit(path: Path, source: str) -> CharacterKit:
     data = _read(path)
     missing = [name for name in KIT_FIELDS if name not in data]
@@ -145,7 +210,9 @@ def load_styles(builtin_root: Path, user_root: Path | None = None) -> dict[str, 
     roots = [(Path(builtin_root), "builtin")]
     if user_root is not None:
         roots.append((Path(user_root), "user"))
-    return _scan(roots, "style.json", _style)
+    found = _scan(roots, "style.md", _style_md)
+    found.update(_scan(roots, "style.json", _style))  # a style.json wins when both exist
+    return found
 
 
 def load_kits(builtin_root: Path, user_root: Path | None = None) -> dict[str, CharacterKit]:
@@ -202,12 +269,15 @@ def clear_to_render(
         problems.append(f"style {style.key!r} is {style.status} and untested; run a bake-off first")
     for kit in kits:
         try:
-            kit.sheet(style.key)
+            sheet, exact = kit.sheet_for(style.key)
         except AssetError as exc:
             problems.append(str(exc))
             continue
-        if not approvals.is_approved(kit, style.key):
-            problems.append(f"kit {kit.key!r} in {style.key!r} is not approved (or its sheet changed)")
+        # V14: with no sheet in this style, the approved sheet of another style is used for
+        # identity only - and that sheet must itself be approved.
+        sheet_style = style.key if exact else next(k for k, p in kit.sheets.items() if p == sheet)
+        if not approvals.is_approved(kit, sheet_style):
+            problems.append(f"kit {kit.key!r} in {sheet_style!r} is not approved (or its sheet changed)")
         if public and kit.real_person and not (kit.owner or kit.public_consent):
             problems.append(f"kit {kit.key!r} depicts a real person with no recorded consent for public use")
     return problems

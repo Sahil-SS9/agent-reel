@@ -68,6 +68,11 @@ def register_cli(subparser: argparse.ArgumentParser) -> None:
     plan.add_argument("--llm-url", default=DEFAULT_LOCAL_URL, help="local route for redaction")
     plan.add_argument("--max-deep-events", type=int, default=90)
     plan.add_argument("--json", action="store_true", help="print the metrics JSON")
+    plan.add_argument("--harness", default="hermes",
+                      help="history to read: hermes, claude-code, codex, opencode, pi, jsonl - or several, comma-separated")
+    plan.add_argument("--harness-root", action="append", default=[], metavar="NAME=PATH",
+                      help="where a harness keeps its logs, e.g. codex=~/.codex/sessions")
+    plan.add_argument("--mapping", default="", help="jsonl harness: mapping file (glob + field paths)")
     plan.add_argument("--wording", default="meaning", choices=("meaning", "strict"),
                       help="meaning (V7, default): true in meaning, plain English; strict: close to the source words")
     check = subs.add_parser(
@@ -141,6 +146,18 @@ def eval_grounding_command(args: argparse.Namespace) -> int:
     return 0 if report["ok"] else 1
 
 
+def _harness_options(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
+    options: dict[str, dict[str, Any]] = {}
+    for item in getattr(args, "harness_root", []) or []:
+        name, _sep, path = str(item).partition("=")
+        if name and path:
+            options.setdefault(name.strip(), {})["root"] = path.strip()
+    if getattr(args, "mapping", ""):
+        mapping = json.loads(Path(args.mapping).expanduser().read_text(encoding="utf-8"))
+        options.setdefault("jsonl", {})["mapping"] = mapping
+    return options
+
+
 def reel_command(args: argparse.Namespace) -> int:
     action = getattr(args, "reel_action", None)
     if action == "eval-grounding":
@@ -209,6 +226,8 @@ def reel_command(args: argparse.Namespace) -> int:
         until=until,
         format=args.format,
         wording=getattr(args, "wording", "meaning"),
+        harnesses=tuple(h.strip() for h in str(getattr(args, "harness", "hermes")).split(",") if h.strip()),
+        harness_options=_harness_options(args),
         episodes=max(1, args.episodes),
         max_deep_events=args.max_deep_events,
         use_model=True,

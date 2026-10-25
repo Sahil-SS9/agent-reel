@@ -115,6 +115,10 @@ TEXT_PRIORITY: dict[str, int] = {
 @dataclass
 class PipelineConfig:
     data_dir: Path
+    #: V12: which harnesses to read ("hermes", "claude-code", "codex", "opencode", "pi", "jsonl").
+    harnesses: tuple[str, ...] = ("hermes",)
+    #: Per-harness options: {"codex": {"root": "...", "agent": "Codex"}, "jsonl": {"mapping": {...}}}.
+    harness_options: Mapping[str, Mapping[str, Any]] | None = None
     #: V7: "meaning" judges captions and lines on meaning (plain English allowed);
     #: "strict" keeps the M1 vocabulary floor. The library default stays strict so the
     #: M1 tests and evals keep measuring the accepted gate; the plugin CLI defaults to meaning.
@@ -367,11 +371,22 @@ def run_pipeline(
             )
     prior_hashes = snapshot_store.hashes_by_file()
     if source is None:
-        source = HermesHistorySource(
-            profiles=config.profiles,
-            memory_snapshot=prior_hashes or None,
-            snapshot_root=config.snapshot_root,
-        )
+        # V12: other harnesses read alongside (or instead of) Hermes.
+        from adapters.harnesses.sessions import CompositeSource, make_source
+
+        parts: list[Any] = []
+        for harness in config.harnesses or ("hermes",):
+            if harness == "hermes":
+                parts.append(HermesHistorySource(
+                    profiles=config.profiles,
+                    memory_snapshot=prior_hashes or None,
+                    snapshot_root=config.snapshot_root,
+                ))
+            else:
+                options = dict((config.harness_options or {}).get(harness, {}))
+                parts.append(make_source(harness, root=str(options.get("root", "")),
+                                         mapping=options.get("mapping"), agent_name=str(options.get("agent", ""))))
+        source = parts[0] if len(parts) == 1 else CompositeSource(parts)
 
     try:
         # A pinned window is what makes "the same input twice" meaningful on a live

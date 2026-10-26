@@ -88,11 +88,36 @@ def test_a_second_run_is_byte_identical(hermes_env, tmp_path):
     ir_first = (data_dir / "script-ir.json").read_bytes()
     beats_first = (data_dir / "beats.json").read_bytes()
 
+    # M3: the series ledger makes a rerun in the same folder refuse to retell chapter 1,
+    # which is the point. Determinism is proved against the same ledger state.
+    series = data_dir / "series.json"
+    assert series.exists()
+    series.unlink()
+
     second = _run(tmp_path, data_dir=data_dir)
     assert second.ok
     assert (data_dir / "canon.json").read_bytes() == canon_first, "canon is not deterministic"
     assert (data_dir / "script-ir.json").read_bytes() == ir_first, "IR is not deterministic"
     assert (data_dir / "beats.json").read_bytes() == beats_first
+
+
+def test_a_rerun_does_not_retell_the_same_story(hermes_env, tmp_path):
+    """M3: continuity. Without resetting the ledger, chapter 1 is never told twice."""
+    data_dir = tmp_path / "data"
+    first = _run(tmp_path, data_dir=data_dir)
+    assert first.ok and first.title
+
+    series = json.loads((data_dir / "series.json").read_text(encoding="utf-8"))
+    assert [ch["title"] for ch in series["chapters"]] == [first.title]
+
+    second = _run(tmp_path, data_dir=data_dir)
+    chapters = json.loads((data_dir / "series.json").read_text())["chapters"]
+    # Either it found a genuinely different story, or it honestly refused to repeat one.
+    threads = [ch["thread_key"] for ch in chapters]
+    assert len(threads) == len(set(threads)), f"a thread was told twice: {threads}"
+    if len(chapters) == 1:
+        reasons = " ".join(item.get("reason", "") for item in second.skipped_stories)
+        assert "already told" in reasons or "too close" in reasons
 
 
 def test_memory_snapshot_is_private_and_evidence_gets_counts_only(hermes_env, tmp_path):

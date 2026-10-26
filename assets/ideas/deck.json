@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "note": "Story-telling deck for Hermes Scrollback Reel. The facts of every episode come from the user's own gated history; this deck only decides HOW an episode is framed and drawn, so a new chapter never looks or reads like the last one. Combinations = conflicts x worlds x genres x villains x motifs x shots.",
+  "conflicts": [
+    {"key": "impossible-deadline", "label": "a deadline that cannot be met as things stand"},
+    {"key": "hidden-fault", "label": "a fault nobody can see from the outside"},
+    {"key": "false-victory", "label": "a win that turns out not to count"},
+    {"key": "broken-instrument", "label": "the tool meant to check the work is itself wrong"},
+    {"key": "twin-rivals", "label": "two approaches racing for the same result"},
+    {"key": "vanishing-time", "label": "work that costs far more time than expected"},
+    {"key": "repeated-failure", "label": "the same failure returning again and again"},
+    {"key": "silent-regression", "label": "something quietly breaking that used to work"},
+    {"key": "unreliable-witness", "label": "records that disagree with each other"},
+    {"key": "narrow-gate", "label": "one strict check that almost nothing survives"},
+    {"key": "buried-cause", "label": "a symptom far from its real cause"},
+    {"key": "last-resort", "label": "the fallback plan becoming the only plan"}
+  ],
+  "worlds": [
+    {"key": "server-mountain", "look": "a citadel carved inside a humming mountain of servers, paper lanterns of streaming light"},
+    {"key": "drowned-archive", "look": "a flooded library of glass shelves, data drifting like kelp"},
+    {"key": "clockwork-yard", "look": "an endless workshop of brass gears, half-built machines and hanging chains"},
+    {"key": "storm-lighthouse", "look": "a lighthouse in a permanent electric storm, cables arcing into black water"},
+    {"key": "paper-city", "look": "a city folded from paper and ink, streets that rearrange when nobody looks"},
+    {"key": "greenhouse-engine", "look": "an overgrown engine hall where vines grow through turbines"},
+    {"key": "desert-relay", "look": "a desert of antennae and dead satellites under two moons"},
+    {"key": "underground-market", "look": "a lantern-lit market beneath a station, stalls of traded memories"},
+    {"key": "sky-forge", "look": "a forge suspended between floating islands, sparks falling into cloud"},
+    {"key": "frozen-switchyard", "look": "a switchyard locked in ice, rails leading into fog"},
+    {"key": "tidal-cathedral", "look": "a cathedral that floods twice a day, choirs of blinking indicators"},
+    {"key": "night-shift-office", "look": "an after-hours office at 3am, screens the only light, coffee rings on every surface"}
+  ],
+  "genres": [
+    {"key": "shonen-duel", "label": "shonen duel: two wills colliding, impact frames, shouted resolve"},
+    {"key": "noir-procedural", "label": "noir procedural: rain, shadows, a case that keeps doubling back"},
+    {"key": "cyberpunk-chase", "label": "cyberpunk chase: speed, neon, near-misses"},
+    {"key": "quiet-drama", "label": "quiet drama: small gestures, held silences, weight in the eyes"},
+    {"key": "gothic-mystery", "label": "gothic mystery: candlelight, old machinery, something breathing in the walls"},
+    {"key": "sports-tournament", "label": "tournament arc: brackets, scoreboards, a rival with a signature move"},
+    {"key": "heist-con", "label": "heist: a plan with moving parts and one detail nobody accounted for"},
+    {"key": "survival-siege", "label": "siege: holding a line while resources drain"}
+  ],
+  "villains": [
+    {"key": "the-stalled-clock", "look": "a towering clockwork figure with a stopped face and hands that reach too far"},
+    {"key": "the-even-swap", "look": "a two-faced phantom of glass shards, one face grinning, one weeping"},
+    {"key": "the-hollow-checker", "look": "a masked inspector whose stamp marks everything false, even true things"},
+    {"key": "the-returning-error", "look": "a many-armed creature made of identical broken copies of itself"},
+    {"key": "the-silent-drift", "look": "a slow fog with teeth, unnoticed until it has already moved the walls"},
+    {"key": "the-gatekeeper", "look": "a colossal stone warden that lets almost nothing pass its gate"},
+    {"key": "the-quota-king", "look": "a bloated merchant of limits, weighing requests on a rusted scale"},
+    {"key": "the-parasite-build", "look": "a creature wearing a borrowed shape, whispering that it has always been here"},
+    {"key": "the-last-commit", "look": "a ghost of a single decision, chained to the place it went wrong"},
+    {"key": "the-split-road", "look": "a rider with two horses pulling opposite ways, unable to choose"},
+    {"key": "the-cold-restart", "look": "a frost giant of rebooted machines, erasing warmth as it walks"},
+    {"key": "the-empty-chair", "look": "an absence with weight: a chair, a shadow, a voice with no body"}
+  ],
+  "motifs": [
+    {"key": "blade-and-bell", "label": "a blade drawn against a distant bell"},
+    {"key": "red-thread", "label": "a red thread tying scattered pieces together"},
+    {"key": "broken-compass", "label": "a compass that points at the thing you fear"},
+    {"key": "lantern-in-rain", "label": "a lantern carried through rain"},
+    {"key": "mirror-crack", "label": "a mirror cracking along an old line"},
+    {"key": "paper-boat", "label": "a paper boat setting out on dark water"},
+    {"key": "burning-map", "label": "a map burning from the corner inward"},
+    {"key": "two-doors", "label": "two doors, one opening onto the other"},
+    {"key": "falling-petals", "label": "petals falling through machine light"},
+    {"key": "open-hand", "label": "an open hand holding something small and important"}
+  ],
+  "shots": [
+    {"key": "extreme-wide-establish", "label": "extreme wide establishing shot"},
+    {"key": "low-angle-hero", "label": "low angle on the hero, sky behind"},
+    {"key": "over-shoulder-threat", "label": "over-the-shoulder on the threat"},
+    {"key": "tight-face", "label": "tight face, eyes lit"},
+    {"key": "hands-and-object", "label": "close on hands and the object"},
+    {"key": "dutch-tilt-impact", "label": "tilted frame at the impact"},
+    {"key": "high-angle-isolate", "label": "high angle, figure small in the frame"},
+    {"key": "silhouette-against-light", "label": "silhouette against hard light"}
+  ]
+}

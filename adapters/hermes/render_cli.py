@@ -543,7 +543,13 @@ def render_command(args: argparse.Namespace, *, ctx: Any, default_dir: Callable[
                 tone_hint = str((json.loads(story_path.read_text(encoding="utf-8")).get("tone") or {}).get("director", ""))
             except (OSError, json.JSONDecodeError):
                 tone_hint = ""
-        treatment = direct(ir, story_text=story_text, complete_json=complete_json, tone=tone_hint)
+        treatment = direct(
+            ir,
+            story_text=story_text,
+            complete_json=complete_json,
+            tone=tone_hint,
+            frame=ir.get("frame") if isinstance(ir.get("frame"), dict) else None,
+        )
         out.mkdir(parents=True, exist_ok=True)
         (out / "treatment.json").write_text(json.dumps(treatment.as_dict(), indent=1) + "\n", encoding="utf-8")
         sheet = _villain_sheet(treatment, style, kits, renderer, root, raw_dir, report)

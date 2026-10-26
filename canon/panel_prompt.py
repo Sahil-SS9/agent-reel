@@ -140,6 +140,21 @@ def build_panel_request(
     )
     if treatment is not None:
         parts.append(f"ACTION: {treatment.action}.")
+        # M3 action grammar: a comic panel is a moment of action, not a pose.
+        for label, name in (
+            ("MOTION", "motion"),
+            ("IMPACT", "impact"),
+            ("REACTION", "reaction"),
+            ("CAMERA", "camera"),
+        ):
+            value = str(getattr(treatment, name, "") or "").strip()
+            if value:
+                parts.append(f"{label}: {value}.")
+        if str(getattr(treatment, "role", "")) == "climax":
+            parts.append(
+                "Full-bleed impact frame: speed lines, flying debris, the strike at the centre "
+                "of the composition."
+            )
         if getattr(treatment, "tone", ""):
             parts.append(f"VISUAL TONE: {treatment.tone}.")
         parts.append("Dynamic comic-book composition, dramatic lighting, cinematic energy.")

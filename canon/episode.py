@@ -126,6 +126,9 @@ class EpisodeIR:
     #: every citation replays deterministically.
     citation_pool: Mapping[str, str] = field(default_factory=dict)
     caption_pool_ids: tuple[str, ...] = ()
+    #: M3: the idea-deck frame this chapter was drawn from (world, villain, genre, motif,
+    #: shot). Kept so the director can honour it and a reader can see why it looks different.
+    frame: Mapping[str, Any] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
         scene = {
@@ -145,6 +148,7 @@ class EpisodeIR:
             "writer": self.writer,
             "grounding": dict(self.grounding),
             "cliffhanger": self.cliffhanger,
+            "frame": dict(self.frame),
             "panels": [panel.as_dict() for panel in self.panels],
             "scenes": [scene],
         }
@@ -929,6 +933,7 @@ def plan_episode(
     thread_evidence: str = "",
     owner_texts: Sequence[str] = (),
     outcome_caption: str = "",
+    frame: Mapping[str, Any] | None = None,
     facts: Sequence[Any] = (),
     facts_evidence: str = "",
     actors_by_event: Mapping[str, str] | None = None,
@@ -1384,6 +1389,7 @@ def plan_episode(
         cliffhanger=cliffhanger,
         citation_pool=dict(line_pool),
         caption_pool_ids=tuple(episode_pool),
+        frame=dict(frame or {}),
     )
 
 

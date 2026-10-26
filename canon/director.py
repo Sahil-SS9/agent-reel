@@ -71,6 +71,26 @@ _PATTERNS = (
     ("failure", re.compile(r"\b(fail|broke|crash|error|exception)\w*\b", re.I)),
 )
 
+#: Role -> (motion, impact, reaction, camera) for the rule-based treatment (M3).
+ROLE_ACTION = {
+    "setup": ("still air, dust drifting across frame", "", "the pair scan the horizon", "slow crane down into the scene"),
+    "hidden_problem": ("something moves at the edge of frame", "a thin crack spreads", "the heroes' shoulders tense", "slow push in"),
+    "diagnosis": ("a hand snaps out to point", "the surface splits open", "eyes widen", "rapid zoom to the detail"),
+    "climax": ("bodies and debris hurtling left to right", "the blow lands and the ground buckles", "the villain recoils, shattered", "whip pan into the strike"),
+    "aftermath": ("dust settling, fragments falling", "the last shard drops", "exhausted breathing, a slow nod", "slow pull back"),
+    "win": ("the pair straighten, cloaks settling", "the horizon clears", "a shared look of relief", "crane up and away"),
+}
+
+
+def _frame_brief(frame: Mapping[str, Any] | None) -> str:
+    """A one-line deck brief for the director (empty when there is no deck)."""
+    if not frame:
+        return ""
+    from canon.ideas import frame_prompt
+
+    return frame_prompt(frame)
+
+
 WORLD_DEFAULT = (
     "a neon-lit command deck high above a rain-soaked cyber city, its walls lined with "
     "glowing server towers"
@@ -86,7 +106,14 @@ DIRECTOR_PROMPT = (
     "episode, a creature or force, never a real person; the climax is the most dynamic "
     "panel (low or Dutch angle, full or long shot, impact); vary shot size and angle every "
     "panel; the setup is an establishing extreme-long or long shot; never ask for text, "
-    "signs, labels or writing in the image. shot is one of "
+    "signs, labels or writing in the image. "
+    "EVERY panel is a frozen moment of ACTION, not a pose: give action as what a body is "
+    "doing right now (a verb, in motion: 'hurls the blade through the gate'), motion as the "
+    "direction and energy ('left to right, cables whipping'), impact as what takes the hit "
+    "or breaks, reaction as how the other side answers in the same frame, and camera as the "
+    "movement the shot implies ('push in', 'whip pan', 'crane down'). Two neighbouring "
+    "panels never share location, shot and angle together. The climax is a full-bleed "
+    "impact frame with speed lines and debris. shot is one of "
     + ", ".join(SHOTS) + "; angle is one of " + ", ".join(ANGLES) + "; villain_presence is "
     "one of absent, lurking, attacking, defeated. Follow visual_tone when it is given. Also add wordless FILLER panels like a "
     "real comic book, about one for every two story panels: establishing shots of the "
@@ -111,6 +138,13 @@ class PanelTreatment:
     villain_presence: str
     shot: str
     angle: str
+    #: M3 action grammar. A panel is a moment of action, not a pose: what moves, what it
+    #: hits, how the other side reacts, and how the camera behaves. Empty means the panel
+    #: keeps the older static treatment.
+    motion: str = ""
+    impact: str = ""
+    reaction: str = ""
+    camera: str = ""
     #: Filler panels only (V5): the story panel this one follows, and who is drawn.
     after: str = ""
     cast: tuple[str, ...] = ()
@@ -127,6 +161,10 @@ class PanelTreatment:
             "shot": self.shot,
             "angle": self.angle,
         }
+        for name in ("motion", "impact", "reaction", "camera"):
+            value = getattr(self, name)
+            if value:
+                data[name] = value
         if self.role == "filler":
             data.update(after=self.after, cast=list(self.cast))
         return data
@@ -265,9 +303,19 @@ def no_text(value: str) -> str:
     return " ".join(cleaned.split()).strip(" ,;:")
 
 
-def _rules(ir: Mapping[str, Any], story_text: str) -> Treatment:
+def _rules(
+    ir: Mapping[str, Any], story_text: str, *, frame: Mapping[str, Any] | None = None
+) -> Treatment:
     name, look = pick_villain(story_text)
-    treatment = Treatment(villain_name=name, villain_look=look, world=WORLD_DEFAULT)
+    world = WORLD_DEFAULT
+    if frame:
+        villain = frame.get("villain") or {}
+        if villain.get("look"):
+            name, look = str(villain.get("label") or name), str(villain["look"])
+        world_spec = frame.get("world") or {}
+        if world_spec.get("label"):
+            world = str(world_spec["label"])
+    treatment = Treatment(villain_name=name, villain_look=look, world=world)
     for panel in ir.get("panels", []) or []:
         role = str(panel.get("role", "aftermath"))
         shot, angle, presence = ROLE_DEFAULTS.get(role, ("medium", "eye", "absent"))
@@ -279,9 +327,17 @@ def _rules(ir: Mapping[str, Any], story_text: str) -> Treatment:
             "aftermath": f"the dust settles; scattered remains of {name} fade away",
             "win": "the heroes stand victorious, the world calm again",
         }.get(role, "the heroes press on")
+        motion, impact, reaction, camera = ROLE_ACTION.get(
+            role, ("the scene moves with the heroes", "", "the other side answers", "steady push in")
+        )
+        if frame and role == "setup":
+            shot_spec = frame.get("shot") or {}
+            if shot_spec.get("label"):
+                action = f"{action}; opening on {shot_spec['label']}"
         treatment.panels[str(panel.get("id"))] = PanelTreatment(
-            panel_id=str(panel.get("id")), role=role, location=WORLD_DEFAULT,
+            panel_id=str(panel.get("id")), role=role, location=world,
             action=action, villain_presence=presence, shot=shot, angle=angle,
+            motion=motion, impact=impact, reaction=reaction, camera=camera,
         )
     treatment.fillers = _rule_fillers(treatment, ir)
     return treatment
@@ -315,6 +371,9 @@ def _repair(treatment: Treatment, ir: Mapping[str, Any]) -> Treatment:
             item.angle = next(a for a in ANGLES if a != item.angle and a != "overhead")
         item.location = no_text(item.location) or treatment.world
         item.action = no_text(item.action) or "the heroes press on"
+        for field_name in ("motion", "impact", "reaction", "camera"):
+            value = no_text(getattr(item, field_name) or "").strip()
+            setattr(item, field_name, value[:160])
         previous = (item.shot, item.angle)
     treatment.villain_look = no_text(treatment.villain_look)
     treatment.world = no_text(treatment.world) or WORLD_DEFAULT
@@ -325,6 +384,9 @@ def _repair(treatment: Treatment, ir: Mapping[str, Any]) -> Treatment:
             filler.villain_presence = "absent"
         filler.location = no_text(filler.location) or treatment.world
         filler.action = no_text(filler.action) or "a quiet beat"
+        for field_name in ("motion", "impact", "reaction", "camera"):
+            value = no_text(getattr(filler, field_name) or "").strip()
+            setattr(filler, field_name, value[:160])
     # No two consecutive panels - story or filler - share both shot and angle.
     previous = None
     for pid, item in treatment.sequence(ir):
@@ -343,10 +405,17 @@ def direct(
     story_text: str,
     complete_json: Callable[..., Mapping[str, Any]] | None = None,
     tone: str = "",
+    frame: Mapping[str, Any] | None = None,
 ) -> Treatment:
-    """A visual treatment for the episode: model when available, rules otherwise."""
+    """A visual treatment for the episode: model when available, rules otherwise.
+
+    ``frame`` is the idea-deck draw for this chapter (world, villain archetype, genre,
+    motif, opening shot). It fixes the look a chapter cannot repeat, while the facts of
+    the episode still decide what happens.
+    """
+    frame_brief = _frame_brief(frame)
     if complete_json is None:
-        return _with_tone(_repair(_rules(ir, story_text), ir), tone)
+        return _with_tone(_repair(_rules(ir, story_text, frame=frame), ir), tone)
     panels = [
         {"id": p.get("id"), "role": p.get("role"), "caption": p.get("caption", ""),
          "lines": [f"{l.get('speaker')}: {l.get('text')}" for l in p.get("lines", [])],
@@ -357,8 +426,13 @@ def direct(
         answer = complete_json(
             prompt=DIRECTOR_PROMPT,
             payload={"title": ir.get("logline", ""), "story": story_text[:3000], "panels": panels,
-                     "visual_tone": tone},
-            schema_hint={"villain": {"name": "str", "look": "str"}, "world": "str", "panels": ["object"], "fillers": ["object"]},
+                     "visual_tone": tone, "frame": frame_brief},
+            schema_hint={
+                "villain": {"name": "str", "look": "str"},
+                "world": "str",
+                "panels": ["object"],
+                "fillers": ["object"],
+            },
             stage="episode.director",
         )
     except Exception:  # noqa: BLE001 - a missing director never blocks a render

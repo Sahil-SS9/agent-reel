@@ -687,6 +687,20 @@ def run_pipeline(
         skipped: list[dict[str, str]] = []
         used_anchors: set[str] = set()
         used_arcs: set[str] = set()
+        # M3: the series ledger. Continuity first, no story told twice, a frame per chapter.
+        from canon.series import (
+            SERIES_FILE,
+            load as load_series,
+            order_for_series,
+            save as save_series,
+        )
+
+        from canon.ideas import draw as draw_frame
+
+        series_path = config.data_dir / SERIES_FILE
+        series = load_series(series_path)
+        selected, series_skipped = order_for_series(selected, series)
+        skipped.extend(series_skipped)
         for candidate in selected:
             if len(episodes) >= max(1, config.episodes):
                 break
@@ -789,6 +803,10 @@ def run_pipeline(
                 skipped.append({"key": candidate.key, "reason": "thread already told"})
                 continue
             index = len(episodes) + 1
+            # M3: one frame per chapter - a different world/villain/genre/motif/shot, drawn
+            # deterministically from the hero and the chapter number, avoiding recent looks.
+            chapter_number = series.next_number + index - 1
+            frame = draw_frame(config.hero, chapter_number, avoid=series.avoid())
 
             def _plan(episode_writer: Any) -> EpisodeIR:
                 return plan_episode(
@@ -812,6 +830,7 @@ def run_pipeline(
                     facts=thread_facts,
                     facts_evidence=thread_facts_text,
                     title=title,
+                    frame=frame,
                 )
 
             # V6-V8: story mode - a plain-English synopsis first, the script written from
@@ -902,6 +921,8 @@ def run_pipeline(
                     "header_title": episode_ir.logline,
                     "header_title_words": len(episode_ir.logline.split()),
                     "title_source": title_source,
+                    "chapter": chapter_number,
+                    "frame": frame,
                     "panels": len(episode_ir.panels),
                     "cliffhanger": episode_ir.cliffhanger,
                     "grounding": dict(episode_ir.grounding),
@@ -919,6 +940,15 @@ def run_pipeline(
             )
             used_anchors |= anchor_events
             used_arcs.add(arc.id)
+            # M3: remember the chapter so the next run follows on and never retells it.
+            series.record(
+                number=chapter_number,
+                title=title,
+                thread_key=str(getattr(candidate, "key", "")),
+                arc_id=arc.id,
+                frame=frame,
+                cliffhanger=bool(episode_ir.cliffhanger),
+            )
             if index == 1:
                 ir = episode_ir
                 result.title = title
@@ -933,6 +963,7 @@ def run_pipeline(
             result.skipped_stories = skipped
             result.timings["episode_s"] = round(time.time() - started, 2)
             result.timings["writer"] = "none"
+        save_series(series_path, series)
         result.episodes = [
             {key: value for key, value in row.items() if key not in {"ir", "planned_ir", "arc", "story_beats", "story", "fact_sources"}}
             for row in episodes

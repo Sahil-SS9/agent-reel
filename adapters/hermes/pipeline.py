@@ -127,6 +127,10 @@ class PipelineConfig:
     #: "strict" keeps the M1 vocabulary floor. The library default stays strict so the
     #: M1 tests and evals keep measuring the accepted gate; the plugin CLI defaults to meaning.
     wording: str = "strict"
+    #: Story mode judges narrator captions on the "story" layer (they may interpret: stakes,
+    #: feeling, motive; names, numbers and events stay strict). True keeps the literal
+    #: caption layer instead (`hermes reel plan --strict-captions`).
+    strict_captions: bool = False
     days: float = 7.0
     since: float | None = None
     until: float | None = None
@@ -808,7 +812,7 @@ def run_pipeline(
             chapter_number = series.next_number + index - 1
             frame = draw_frame(config.hero, chapter_number, avoid=series.avoid())
 
-            def _plan(episode_writer: Any) -> EpisodeIR:
+            def _plan(episode_writer: Any, layer: str = "caption") -> EpisodeIR:
                 return plan_episode(
                     arc,
                     story_beats or thread_beats,
@@ -831,6 +835,7 @@ def run_pipeline(
                     facts_evidence=thread_facts_text,
                     title=title,
                     frame=frame,
+                    caption_layer=layer,
                 )
 
             # V6-V8: story mode - a plain-English synopsis first, the script written from
@@ -859,7 +864,10 @@ def run_pipeline(
                                  "synopsis": synopsis.text(),
                                  "jobs": PANEL_JOBS, "notes": {}}
                     first_writer = LLMDialogueWriter(writer_cached, cast, story=story_ctx)
-                    episode_ir = _plan(first_writer)
+                    # Story captions may interpret (stakes, feeling) but add no event, name
+                    # or number; `--strict-captions` keeps them literal.
+                    narration = "caption" if config.strict_captions else "story"
+                    episode_ir = _plan(first_writer, narration)
                     review = edit_script(writer_cached.complete_json,
                                          [p.as_dict() for p in episode_ir.panels], synopsis=synopsis.text(), tone=tone.label)
                     reviews = [review]
@@ -868,7 +876,7 @@ def run_pipeline(
                         notes = {str(item["panel"]).rsplit("-", 1)[-1]: item["issue"] for item in review["problems"]}
                         second_writer = LLMDialogueWriter(writer_cached, cast, story=dict(story_ctx, notes=notes))
                         try:
-                            second = _plan(second_writer)
+                            second = _plan(second_writer, narration)
                         except EpisodeRefused:
                             second = None
                         if second is not None:

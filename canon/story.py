@@ -57,10 +57,17 @@ AUDIENCE_RULE = (
     "story (a score, a count, a product name)."
 )
 
+#: Grounding layer the story is checked on (canon.grounding.STORY_LAYER): it may interpret,
+#: it may not add an event.
+NARRATION_LAYER = "story"
+
 SYNOPSIS_PROMPT = (
     "You are the writer of a short comic that retells real work with an AI agent. Before any "
-    "panel is written, tell the whole story in plain English. Use ONLY what the facts say: no "
-    "new event, cause, outcome, number or name. "
+    "panel is written, tell the whole story in plain English, the way a good storyteller "
+    "would: what the hero wanted and why it mattered to them, what stood in the way, the turn, "
+    "how it ended and what it meant. You may interpret: what was at stake, what a moment felt "
+    "like, why it mattered. You may NOT add anything that happened: no new event, cause, "
+    "outcome, number, name, time or place; every event must be in the facts. "
     + AUDIENCE_RULE
     + " Answer JSON only: {\"title\": \"a punchy comic title, at most 6 words\", \"logline\": \"one sentence\", \"want\": \"...\", \"stakes\": \"...\", "
     "\"obstacle\": \"...\", \"turn\": \"...\", \"ending\": \"...\", \"meaning\": \"...\"}. "
@@ -125,8 +132,13 @@ def write_synopsis(
     facts_text: str,
     brief_text: str,
     gate: Any = None,
+    layer: str = NARRATION_LAYER,
 ) -> Synopsis:
-    """A plain-English telling of the episode; every sentence checked against the facts."""
+    """A plain-English telling of the episode; every sentence checked against the facts.
+
+    ``layer`` is the grounding layer: ``"story"`` lets the telling interpret (stakes,
+    feeling, motive) while still refusing any new event, name or number; ``"caption"``
+    keeps the old literal rule."""
     synopsis = Synopsis()
     if complete_json is None:
         return synopsis
@@ -141,7 +153,7 @@ def write_synopsis(
     except Exception:  # noqa: BLE001 - no synopsis means the old per-panel path
         return synopsis
     synopsis.source = "model"
-    _accept(synopsis, answer, SYNOPSIS_FIELDS, evidence, gate)
+    _accept(synopsis, answer, SYNOPSIS_FIELDS, evidence, gate, layer)
     if synopsis.refused:
         # One repair pass: the writer sees why each refused sentence failed.
         retry = dict(synopsis.refused)
@@ -159,14 +171,17 @@ def write_synopsis(
             return synopsis
         for name in retry:
             synopsis.refused.pop(name, None)
-        _accept(synopsis, answer, tuple(retry), evidence, gate)
+        _accept(synopsis, answer, tuple(retry), evidence, gate, layer)
     if "title" in synopsis.fields and len(synopsis.fields["title"].split()) > 6:
         synopsis.refused["title"] = "over 6 words"
         synopsis.fields.pop("title")
     return synopsis
 
 
-def _accept(synopsis: Synopsis, answer: Mapping[str, Any], names: Sequence[str], evidence: str, gate: Any) -> None:
+def _accept(
+    synopsis: Synopsis, answer: Mapping[str, Any], names: Sequence[str], evidence: str, gate: Any,
+    layer: str = NARRATION_LAYER,
+) -> None:
     for name in names:
         sentence = " ".join(str(answer.get(name) or "").split())
         if not sentence:
@@ -175,7 +190,7 @@ def _accept(synopsis: Synopsis, answer: Mapping[str, Any], names: Sequence[str],
             synopsis.refused[name] = jargon_problem(sentence)
             continue
         if gate is not None:
-            verdict = gate.check(sentence, evidence, layer="caption")
+            verdict = gate.check(sentence, evidence, layer=layer)
             if not verdict.supported:
                 synopsis.refused[name] = verdict.reason
                 continue
@@ -226,6 +241,6 @@ def behind_the_panels(panels: Sequence[Mapping[str, Any]], facts_by_panel: Mappi
 
 
 __all__ = (
-    "AUDIENCE_RULE", "DEFAULT_VOICES", "PANEL_JOBS", "Synopsis", "behind_the_panels",
+    "AUDIENCE_RULE", "DEFAULT_VOICES", "NARRATION_LAYER", "PANEL_JOBS", "Synopsis", "behind_the_panels",
     "edit_script", "jargon_problem", "write_synopsis",
 )

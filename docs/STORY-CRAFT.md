@@ -71,3 +71,14 @@ Pictures may exaggerate how it *felt*; words may only say what *happened*.
 - A caption or line never claims a fight, a weapon or a place that is not in the evidence.
 
 The approved r2 strip followed exactly this split.
+
+## Two layers: facts and story (story layer)
+
+A caption that must be entailed word for word by the log can only restate the log, which is why chapters read like a playback. Narration now runs on its own grounding layer (`ClaimGate.check(..., layer="story")`):
+
+- **What it may do:** interpret. What was at stake, what a moment felt like, why it mattered, a character's motive or mood, humour, a rhetorical question.
+- **What it may not do:** add anything that happened. Names and numbers are checked deterministically against the cited evidence, a named character must be in that evidence, an outcome or cause must bind to its actor, and a model judge refuses any new action, result, cause, time or place (`ClaimGate.STORY_PROMPT`).
+- **No model, no story voice.** With no model to tell a feeling from a new event, the story layer is exactly as strict as a caption.
+- **Facts keep the strict layer.** The "behind the panels" notes and the trace still cite source events, and `--strict-captions` keeps narrator captions literal.
+
+Dialogue is unchanged: it already allowed tone and was claim-checked. The synopsis and the story-mode scene captions use the story layer by default.

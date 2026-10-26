@@ -78,6 +78,9 @@ def register_cli(subparser: argparse.ArgumentParser) -> None:
                            "(comical+serious) or weights (comical:70,serious:30); or auto (default: saved choice, else witty)")
     plan.add_argument("--wording", default="meaning", choices=("meaning", "strict"),
                       help="meaning (V7, default): true in meaning, plain English; strict: close to the source words")
+    plan.add_argument("--strict-captions", action="store_true",
+                      help="keep narrator captions literal (facts only); default lets them carry stakes and feeling "
+                           "without adding any event, name or number")
     check = subs.add_parser(
         "eval-grounding",
         help="Run the caption/line grounding eval against the host model (reads no history)",
@@ -260,6 +263,7 @@ def reel_command(args: argparse.Namespace) -> int:
         until=until,
         format=args.format,
         wording=getattr(args, "wording", "meaning"),
+        strict_captions=bool(getattr(args, "strict_captions", False)),
         harnesses=tuple(h.strip() for h in str(getattr(args, "harness", "hermes")).split(",") if h.strip()),
         harness_options=_harness_options(args),
         voices=_kit_voices(),

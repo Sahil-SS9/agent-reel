@@ -289,7 +289,9 @@ class LLMDialogueWriter:
         "Rules: dialogue carries the scene - at most 2 lines per panel, each under 90 characters, "
         "in the speaker's voice, only from that panel's speakers; give EVERY main character a "
         "voice across the stretch (Kensei is the AI agent and should speak, not only be described). "
-        "A caption is optional (time, stakes, or a fact nobody would say aloud), at most 15 words. "
+        "A caption is optional narration, at most 15 words: the stakes, the tension, what a moment "
+        "meant, or a fact nobody would say aloud. It may interpret and it may feel, but it may not "
+        "add an event, a result, a cause, a number, a name or a time that the facts do not give. "
         "Translate engineering words for a general reader: say 'the database' not SQLite or "
         "PostgreSQL, 'the second job' not 'Handoff 2', 'the new version' not 'v2'. "
         "Never repeat a fact the script already stated. Each panel must move the story forward "
@@ -980,11 +982,17 @@ def plan_episode(
     actors_by_event: Mapping[str, str] | None = None,
     cast_map: Mapping[str, str] | None = None,
     title: str | None = None,
+    caption_layer: str = "caption",
 ) -> EpisodeIR:
     """Plan an episode from one arc.
 
     ``format`` is ``strip`` (6 panels, one per arc role) or ``chapter`` (8-12
     panels: the six roles plus detail panels from the arc's own beats).
+
+    ``caption_layer`` is the grounding layer narrator captions are judged on: ``"caption"``
+    (default) restates facts and keeps the vocabulary floor; ``"story"`` lets a caption
+    interpret (stakes, feeling) while names, numbers and events stay strict. Dialogue is
+    unaffected: it already allows tone.
     """
     if format not in {"strip", "chapter"}:
         raise ValueError(f"unknown format: {format!r}")
@@ -1239,7 +1247,7 @@ def plan_episode(
             if caption_problem(text, owner_texts=owner_texts, max_owner_quote=limit):
                 return False
             if grounder is not None:
-                verdict = grounder.check(text, judge_text, layer="caption")
+                verdict = grounder.check(text, judge_text, layer=caption_layer)
                 if not verdict.supported:
                     return False
             return True
@@ -1258,7 +1266,7 @@ def plan_episode(
                 if not why and grounder is not None:
                     # Round 10: name the real reason. r9's generic wording hid that the
                     # deterministic term rule, not the model, refused these captions.
-                    why = grounder.check(trimmed, judge_text, layer="caption").reason
+                    why = grounder.check(trimmed, judge_text, layer=caption_layer).reason
                 why = why or "not supported by the panel evidence"
                 report.reasons.append(f"{role} caption refused: {why}")
         if caption and (len(caption.split()) < 3 or looks_like_provenance(caption)):
@@ -1269,7 +1277,7 @@ def plan_episode(
             # must be re-checked against the same text. Re-checking a fact sentence against
             # the long raw evidence failed it, which is what "repaired" the strip with the
             # composer's "Kensei worked on ..." sentence on real runs.
-            verdict = grounder.check(caption, judge_text, layer="caption")
+            verdict = grounder.check(caption, judge_text, layer=caption_layer)
             if verdict.supported:
                 report.captions_supported += 1
             else:

@@ -206,3 +206,27 @@ def test_a_short_line_is_left_alone():
     from canon.episode import split_for_balloons
 
     assert split_for_balloons("Eight contenders. Lovely.") == ["Eight contenders. Lovely."]
+
+
+def test_an_api_key_is_read_through_the_host_secret_route_first(monkeypatch):
+    """Catalogue rule 11: credentials come through Hermes, not a bare os.environ read."""
+    from canon import providers
+
+    calls: list[str] = []
+    monkeypatch.setattr(providers, "secret_from_host", lambda name: calls.append(name) or "host-key")
+    assert providers._key({}, "OPENAI_API_KEY") == "host-key"
+    assert calls == ["OPENAI_API_KEY"]
+    # An injected env (tests, CI) still wins, and nothing else is consulted.
+    assert providers._key({"OPENAI_API_KEY": "env-key"}, "OPENAI_API_KEY") == "env-key"
+    assert calls == ["OPENAI_API_KEY"]
+
+
+def test_a_missing_key_names_both_routes(monkeypatch):
+    import pytest
+
+    from canon import providers
+    from canon.render import RenderError
+
+    monkeypatch.setattr(providers, "secret_from_host", lambda name: "")
+    with pytest.raises(RenderError, match="hermes auth"):
+        providers._key({}, "FAL_KEY")

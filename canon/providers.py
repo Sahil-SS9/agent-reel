@@ -146,10 +146,32 @@ def _data_uri(path: Path) -> str:
     return f"data:{mime};base64,{base64.b64encode(Path(path).read_bytes()).decode()}"
 
 
-def _key(env: Mapping[str, str], name: str) -> str:
-    value = env.get(name, "")
+def secret_from_host(name: str) -> str:
+    """A key through Hermes' own route, so the active profile decides which key is used.
+
+    Catalogue rule 11: a plugin gets secrets only through Hermes's routes. A bare
+    ``os.environ`` read can pick up another profile's key under multiplexing, so the host
+    route is tried first; the environment is only the fallback for a plain CLI run (and for
+    tests, which inject their own mapping).
+    """
+    try:
+        from agent.secret_scope import get_secret  # host surface
+
+        value = get_secret(name)
+        if value:
+            return str(value)
+    except Exception:  # noqa: BLE001 - no host route (CLI, tests) is not an error
+        pass
+    return ""
+
+
+def _key(env: Mapping[str, Any], name: str) -> str:
+    value = env.get(name) or secret_from_host(name)
     if not value:
-        raise RenderError(f"{name} is not set; add it to your environment to use this image source")
+        raise RenderError(
+            f"{name} is not set; add it in Hermes (`hermes auth`) or your environment to "
+            f"use this image source"
+        )
     return value
 
 

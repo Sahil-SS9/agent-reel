@@ -15,6 +15,12 @@ tags:
 requires_plugins: []
 python_dependencies:
   - "pillow>=10.0,<14"
+requires_hermes: ">=0.21.5"
 provides_hooks: []
 provides_tools: []
-requires_env: []
+#: Read through agent.secret_scope.get_secret (catalogue rule 11); the environment is only
+#: the fallback for a plain CLI run. None are needed for the `host` or `comfyui` routes.
+requires_env:
+  - OPENAI_API_KEY
+  - GEMINI_API_KEY
+  - FAL_KEY

@@ -132,6 +132,21 @@ containing the line `**[INSERT CHARACTERS, ACTION AND SCENE HERE]**`. See `docs/
 - Every line keeps its source ids, so any claim can be audited back to the message.
 - No auto-posting. The tool writes files; you decide what to publish.
 
+## What this reads and sends
+
+Disclosure, for anyone deciding whether to install it:
+
+- **Reads** your own Hermes history read-only: sessions, messages, tool calls, kanban cards.
+  Redaction runs before any model sees text.
+- **Sends** text to your Hermes model (`ctx.llm`) for the writing, the editor pass and the
+  meaning checks, and panel images to the image route you choose. With `host`, that is your
+  harness's own image provider; with `comfyui`, a local server on your machine; with
+  `openai`/`gemini`/`fal`, that vendor's API using a key Hermes holds.
+- **Stores** its plans, renders, series ledger and character kits under the plugin's data
+  directory. Nothing is posted anywhere, and there is no telemetry.
+- **Credentials** are read through Hermes (`agent.secret_scope`), never from files, and no
+  key is required at all for the `host` or `comfyui` routes.
+
 ## Licence
 
 MIT for code and prompt text. Bundled fonts are SIL OFL 1.1 — see `assets/fonts/FONTS.md`.

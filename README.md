@@ -1,4 +1,4 @@
-# Hermes Scrollback Reel
+# Agent Reel
 
 Turn your AI agent's real history into a comic. Not a summary, not a dashboard: a weekly
 chapter with continuing characters, a villain, and dialogue — where every line traces back
@@ -33,8 +33,8 @@ hermes reel render --plan-dir <data-dir> --episode 1 --style anime
 ## Install
 
 ```bash
-hermes plugins install Sahil-SS9/hermes-scrollback-reel
-hermes plugins enable scrollback-reel
+hermes plugins install Sahil-SS9/hermes-agent-reel
+hermes plugins enable agent-reel
 hermes reel plan --dry-run --days 7 --episodes 1 --format chapter
 ```
 

@@ -42,12 +42,12 @@ def _default_data_dir() -> Path:
         from plugins.plugin_storage import plugin_data_dir  # host surface
     except ImportError:
         try:
-            from hermes_plugins.scrollback_reel.plugins.plugin_storage import (  # type: ignore
+            from hermes_plugins.agent_reel.plugins.plugin_storage import (  # type: ignore
                 plugin_data_dir,
             )
         except ImportError:
-            return Path.home() / ".local" / "share" / "scrollback-reel"
-    return Path(plugin_data_dir("scrollback-reel"))
+            return Path.home() / ".local" / "share" / "agent-reel"
+    return Path(plugin_data_dir("agent-reel"))
 
 
 def register_cli(subparser: argparse.ArgumentParser) -> None:

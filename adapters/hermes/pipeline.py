@@ -1228,7 +1228,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=None,
         help=(
             "private state dir for the memory snapshot (mode 600, outside evidence); "
-            "defaults to $REEL_STATE_DIR or ~/.local/state/scrollback-reel"
+            "defaults to $REEL_STATE_DIR or ~/.local/state/agent-reel"
         ),
     )
     parser.add_argument(

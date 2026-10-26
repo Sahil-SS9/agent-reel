@@ -14,7 +14,7 @@ Kanban card: t_ec1754fc.
 | D5 | Likeness: the default is a ready-made character. Users can opt in to a character from their own photo: consent step, photo stays local unless the user's provider needs it (warn when it does), only the user's own likeness. |
 | D6 | Sharing: image files plus ready-to-post versions (X, LinkedIn, Discord, vertical strip) with a caption draft. **Never posts automatically.** No hosted gallery. |
 | D7 | Episodes: a **weekly 4-6 panel strip** (automatic only after the user enables it) plus an **on-demand 8-12 panel chapter**. |
-| D8 | Name: **Hermes Scrollback Reel**. Plugin id `scrollback-reel`, command `/reel`. Do not use "chronicle" (taken in the catalog) or "journey" (Hermes Labyrinth). |
+| D8 | Name: **Agent Reel**. Plugin id `agent-reel`, command `/reel`. Do not use "chronicle" (taken in the catalog) or "journey" (Hermes Labyrinth). |
 | D9 | Ready-made cast has two paths: (a) self-created/generated through the user's image source; (b) Hermes Multiverse characters. Multiverse rights are `unknown-not-cleared`, so **private renders only** until cleared. |
 | D10 | Bake-off passed for GPT Image (openai-codex gpt-image-2) in anime-colour and ink-manga styles. The round-2 method is mandatory: one arc per episode, staged prompts, vision-placed balloons, vision letterer check. |
 
@@ -32,7 +32,7 @@ Kanban card: t_ec1754fc.
 
 ## KENSEI defaults (Proposed: the builder may proceed on these but must flag them in reports)
 
-- P1: Storage via `plugin_data_dir("scrollback-reel")` / `plugin_db()`.
+- P1: Storage via `plugin_data_dir("agent-reel")` / `plugin_db()`.
 - P2: Built-in styles for V1: `anime-colour`, `ink-manga`, plus one more chosen by the builder from Sahil's style skills (Saga Noir, Ink & Ember, Baoyu Comic). Name it in the M2 report.
 - P3: The default original cast (non-Multiverse, licence-clean) is generated via the user's image source at `/reel setup`.
 - P4: Privacy default `private`. Public export requires every named entity to be approved, plus a clean redaction scan.

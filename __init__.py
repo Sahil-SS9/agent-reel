@@ -1,4 +1,4 @@
-"""Hermes Scrollback Reel plugin entry point (round 5, Step 0).
+"""Agent Reel plugin entry point (round 5, Step 0).
 
 Registers ONE surface: the CLI command ``hermes reel plan --dry-run``. No hooks, no slash
 commands, no tools, no schedule. The command runs the reel pipeline with the writer, title
@@ -77,7 +77,7 @@ def _register_blueprints(ctx) -> None:
         category="daily",
         slots=[time_slot, format_slot, tone_slot, style_slot],
         deliver_default="origin",
-        tags=("comic", "scrollback-reel"),
+        tags=("comic", "agent-reel"),
     )
     register(
         "weekly-strip",
@@ -89,7 +89,7 @@ def _register_blueprints(ctx) -> None:
         slots=[time_slot, {"name": "day", "type": "enum", "label": "Which day?", "default": "friday",
                                     "options": ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")}, format_slot, tone_slot, style_slot],
         deliver_default="origin",
-        tags=("comic", "scrollback-reel"),
+        tags=("comic", "agent-reel"),
     )
     register(
         "monthly-book",
@@ -105,5 +105,5 @@ def _register_blueprints(ctx) -> None:
         category="monthly",
         slots=[time_slot],
         deliver_default="origin",
-        tags=("comic", "scrollback-reel"),
+        tags=("comic", "agent-reel"),
     )

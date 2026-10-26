@@ -353,7 +353,7 @@ def comfyui_generator(*, out_dir: Path, workflow: str = "qwen-image-edit-2511",
         graph = fill_workflow(template, prompt=prompt, width=w, height=h, images=uploaded,
                               seed=int.from_bytes(os.urandom(4), "big"))
         st, raw = transport("POST", f"{base}/prompt", {"Content-Type": "application/json"},
-                            json.dumps({"prompt": graph, "client_id": "scrollback-reel"}).encode())
+                            json.dumps({"prompt": graph, "client_id": "agent-reel"}).encode())
         submitted = _json(st, raw, "ComfyUI prompt")
         if submitted.get("node_errors"):
             raise RenderError(f"ComfyUI rejected the workflow: {str(submitted['node_errors'])[:300]}")

@@ -39,7 +39,7 @@ The art style and letterer method are already proven (bake-off round 2, approved
 ## 2. Architecture you must keep
 
 ```
-hermes-scrollback-reel/
+agent-reel/
   canon/            # pure Python core. NO Hermes imports (decision D2). Ingest, redact, beats, arcs, canon, script IR
   render/           # comic renderer core: kits, staging prompts, layout, letterer, checks, exports. NO Hermes imports
   adapters/hermes/  # the ONLY place that imports Hermes: state.db/kanban/skills/memory/cron readers,

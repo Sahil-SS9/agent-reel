@@ -168,7 +168,7 @@ def book_command(args: argparse.Namespace, default_dir: Callable[[], Path]) -> i
         print(f"no rendered episodes for {month} under: {', '.join(str(r) for r in roots)}")
         return 1
     label = "Collected episodes" if args.all else _time.strftime("%B %Y", _time.strptime(month, "%Y-%m"))
-    out = Path(args.out).expanduser() if args.out else root / "books" / f"scrollback-reel-{month}.pdf"
+    out = Path(args.out).expanduser() if args.out else root / "books" / f"agent-reel-{month}.pdf"
     report = build_book(episodes, out, title=args.title or "Scrollback Reel", subtitle=label)
     print(f"book: {report['pdf']} ({report['episodes']} episodes, {report['pages']} pages)")
     for name in report["titles"]:

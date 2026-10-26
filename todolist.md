@@ -49,9 +49,9 @@ Last updated 26/10/2026. `main` and `m2-kensei` are the same commit (f222ac1); t
 ## Resume
 
 ```
-cd ~/repos/hermes-scrollback-reel
+cd ~/repos/hermes-agent-reel
 .venv/bin/pytest -p no:cacheprovider -o addopts="" -q     # expect 549 passed
-hermes plugins validate ~/.hermes/plugins/scrollback-reel
+hermes plugins validate ~/.hermes/plugins/agent-reel
 ```
 
 To view a rendered page over SSH:

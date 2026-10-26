@@ -207,7 +207,7 @@ user's directory. So the journal mode is read from the SQLite header (100 bytes,
 | WAL, sidecars missing, larger than the copy limit (256 MB default, `REEL_SNAPSHOT_DIR` / `StoreReader(copy_limit=...)`) | open in place and record why | no silent behaviour: the summary prints the decision |
 
 `--summary` prints the plan, e.g. `read plan: 68 stores: 67 in place, 1 snapshot`.
-Snapshot copies live under `~/.cache/scrollback-reel` (never inside `~/.hermes`)
+Snapshot copies live under `~/.cache/agent-reel` (never inside `~/.hermes`)
 and are deleted when the run closes the reader.
 
 `scripts/readonly_proof.sh` proves all of it from outside the process in three

@@ -5,8 +5,8 @@ not need their text: a fact is identified by a hash, and only the current run's 
 carry gated text (so a change can be described without quoting the file).
 
 Location: the plugin's own state directory, mode 600 - never an evidence folder.
-In the live plugin this is ``plugin_data_dir("scrollback-reel")`` (P1); for CLI runs it
-defaults to ``$REEL_STATE_DIR`` or ``~/.local/state/scrollback-reel``.
+In the live plugin this is ``plugin_data_dir("agent-reel")`` (P1); for CLI runs it
+defaults to ``$REEL_STATE_DIR`` or ``~/.local/state/agent-reel``.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from typing import Any, Iterable, Mapping
 from adapters.hermes.evidence import write_private_json
 
 SNAPSHOT_VERSION = 2
-DEFAULT_STATE_DIR = Path.home() / ".local" / "state" / "scrollback-reel"
+DEFAULT_STATE_DIR = Path.home() / ".local" / "state" / "agent-reel"
 
 
 def state_dir(explicit: Path | str | None = None) -> Path:

@@ -1,12 +1,12 @@
 manifest_version: 2
-name: scrollback-reel
+name: agent-reel
 version: 0.1.0
 api_version: 1
 description: "Turn this machine's Hermes history into a comic: grounded stories, 55 art styles, pages drawn by your own image model."
 author: Sahil Saghir
 kind: standalone
 license: MIT
-homepage: https://github.com/Sahil-SS9/hermes-scrollback-reel
+homepage: https://github.com/Sahil-SS9/agent-reel
 tags:
   - comics
   - story

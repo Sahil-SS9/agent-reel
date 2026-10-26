@@ -86,7 +86,7 @@ def sidecars(path: Path) -> tuple[Path, Path]:
 
 def _default_snapshot_root() -> Path:
     base = os.environ.get("REEL_SNAPSHOT_DIR")
-    root = Path(base).expanduser() if base else Path.home() / ".cache" / "scrollback-reel"
+    root = Path(base).expanduser() if base else Path.home() / ".cache" / "agent-reel"
     root.mkdir(parents=True, exist_ok=True)
     return root
 

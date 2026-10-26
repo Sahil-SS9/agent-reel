@@ -193,7 +193,7 @@ class FallbackLLM:
 class HermesCtxLLMClient:
     """Wrap Hermes' ``ctx.llm`` (plugin path, wired in M2)."""
 
-    def __init__(self, ctx: Any, *, purpose: str = "scrollback-reel") -> None:
+    def __init__(self, ctx: Any, *, purpose: str = "agent-reel") -> None:
         self.ctx = ctx
         self.purpose = purpose
         self.name = "hermes-ctx"  # pragma: no cover - host dependent

@@ -15,6 +15,7 @@ Last updated 25/10/2026. Branch `m2-kensei` holds M2; `main` holds the accepted 
    - In meaning mode, refuse a line when its cited events share none of its content words.
    - Add a regression test for the plan-v2 p1.1 shape.
    - A fresh plan re-trace shows zero misses, then Quan samples 5 lines plus 1 caption.
+   *Done 26/10/26 (b40e6e9, 496515f), installed. Waiting on Quan's re-sample.*
 2. **Render one dense chapter page** and confirm the bigger lettering is readable at full-page size (QAR-M2-07). This needs an image run.
 3. **Merge `m2-kensei` into `main`** once 1 and 2 pass. Owner decision.
 4. **M2 acceptance (plan P8):** Sahil reviews 24 real panels and posts at least one himself. No auto-posting.

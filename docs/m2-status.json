@@ -6,25 +6,70 @@
   "safety_eval_meaning_mode": {
     "code_note": "Run on the installed plugin at d7bc116. canon/grounding.py and eval/ are byte-identical at the release candidate (later commits change canon/episode.py, tests and docs only).",
     "runs": [
-      {"file": "eval-1.json", "cases": 52, "invented_lines_refused": 52, "failures": 0, "grounded_lines_passed": 49, "paraphrases_accepted": 11, "paraphrase_cases": 12, "meaning_accepted": 6, "meaning_cases": 8, "meaning_mode": true},
-      {"file": "eval-2.json", "cases": 52, "invented_lines_refused": 52, "failures": 0, "grounded_lines_passed": 50, "paraphrases_accepted": 11, "paraphrase_cases": 12, "meaning_accepted": 7, "meaning_cases": 8, "meaning_mode": true}
+      {
+        "file": "eval-1.json",
+        "cases": 52,
+        "invented_lines_refused": 52,
+        "failures": 0,
+        "grounded_lines_passed": 49,
+        "paraphrases_accepted": 11,
+        "paraphrase_cases": 12,
+        "meaning_accepted": 6,
+        "meaning_cases": 8,
+        "meaning_mode": true
+      },
+      {
+        "file": "eval-2.json",
+        "cases": 52,
+        "invented_lines_refused": 52,
+        "failures": 0,
+        "grounded_lines_passed": 50,
+        "paraphrases_accepted": 11,
+        "paraphrase_cases": 12,
+        "meaning_accepted": 7,
+        "meaning_cases": 8,
+        "meaning_mode": true
+      }
     ],
-    "before_fixes_quan": {"meaning_accepted": [7, 7], "meaning_cases": 8, "first_reported_wrongly_as": "8/8"}
+    "before_fixes_quan": {
+      "meaning_accepted": [
+        7,
+        7
+      ],
+      "meaning_cases": 8,
+      "first_reported_wrongly_as": "8/8"
+    }
   },
   "story_evidence": {
-    "plan": "plan-v2",
+    "plan": "plan-v3 (b40e6e9) and plan-v4 (496515f)",
     "format": "chapter",
     "tone": "auto",
     "episodes": 1,
-    "panels": 14,
-    "takeover_spot_check": {
-      "lines_traced": 17,
-      "captions_traced": 4,
-      "clear_citation_misses": 1,
-      "miss": "p2 Kensei 'A ghost from a halfway version. The final runs replaced it' cites three events that do not state it; the stating event (Handoff 2 intermediate commit, superseded) was not cited. The model judge accepted it in meaning mode.",
-      "previous_plan": "qa-fix/plan (d7bc116): 4 of 5 sampled statement lines carried no claim token and cited the panel's ids; one contradicted its cited event."
+    "citation_fix_t_6950a3d0": {
+      "statement_lines": "cite, and are judged against, only the events that state them; the stating event ranks first (3 tests, 2 RED-proven on b0ed224)",
+      "meaning_mode_floor": "a statement whose cited events share no content word is refused before the judge (test RED on b0ed224)",
+      "captions": "a caption cites the event carrying its own figure or word-number first; plan-v4 p5 now cites the 23:16 / twelve-arms event it previously missed",
+      "residual": "tone and metaphor lines (e.g. 'The blade fell mid-swing') still cite the panel's ids as context by design; they are reactions, not statements, and the meaning judge decides them."
     }
   },
-  "multiverse_import": {"imported": 31, "preview_sheets": 280, "skipped": {"emozilla": "documentation only", "ggb": "documentation only", "sudo-nightwing": "creator approval pending"}},
-  "image_sources": {"tested": ["host image_generate", "comfyui"], "mapped_billing_blocked": ["openai", "gemini", "fal"]}
+  "multiverse_import": {
+    "imported": 31,
+    "preview_sheets": 280,
+    "skipped": {
+      "emozilla": "documentation only",
+      "ggb": "documentation only",
+      "sudo-nightwing": "creator approval pending"
+    }
+  },
+  "image_sources": {
+    "tested": [
+      "host image_generate",
+      "comfyui"
+    ],
+    "mapped_billing_blocked": [
+      "openai",
+      "gemini",
+      "fal"
+    ]
+  }
 }

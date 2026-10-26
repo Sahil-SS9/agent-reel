@@ -26,7 +26,7 @@ import os
 import signal
 import sys
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Iterable, Sequence
@@ -133,6 +133,9 @@ class PipelineConfig:
     #: Smallest strip/chapter that may export (D7: a strip is 4-6 panels). Tests on the
     #: tiny synthetic home lower it; production keeps the spec.
     min_strip_panels: int = 4
+    #: A strip can be capped to fewer story panels than the arc's six roles (a 4-panel strip
+    #: is the social/README shape); 0 keeps every role.
+    strip_panels: int = 0
     profiles: tuple[str, ...] | None = None
     format: str = "strip"
     season: int = 1
@@ -402,6 +405,29 @@ def _thread_for_candidate(candidate: Any, by_event: Mapping[str, Any]) -> Any:
         return None
     best = max(sorted(counts), key=lambda thread_id: counts[thread_id])
     return holders[best]
+
+
+#: The roles a short strip keeps, in story order, when it is capped below six panels.
+STRIP_ORDER = ("setup", "hidden_problem", "climax", "win", "diagnosis", "aftermath")
+
+
+def _trim_arc(arc: Any, panels: int) -> Any:
+    """Keep the story's spine when a strip is capped below the arc's six roles.
+
+    Panels are dropped from the least structural end of the story, never from the middle: a
+    4-panel strip keeps setup, the hidden problem, the climax and the win, so it still has a
+    beginning, a fight and a result.
+    """
+    if int(panels) <= 0:
+        return arc
+    keep = [role for role in STRIP_ORDER[: max(1, int(panels))] if role in arc.roles]
+    if not keep or len(keep) >= len(arc.roles):
+        return arc
+    trimmed = dict(arc.roles)
+    for role in list(trimmed):
+        if role not in keep:
+            trimmed.pop(role)
+    return replace(arc, roles=trimmed)
 
 
 def run_pipeline(
@@ -803,6 +829,8 @@ def run_pipeline(
                 skipped.append({"key": candidate.key, "reason": "thread already told"})
                 continue
             index = len(episodes) + 1
+            if config.format == "strip" and config.strip_panels:
+                arc = _trim_arc(arc, config.strip_panels)
             # M3: one frame per chapter - a different world/villain/genre/motif/shot, drawn
             # deterministically from the hero and the chapter number, avoiding recent looks.
             chapter_number = series.next_number + index - 1

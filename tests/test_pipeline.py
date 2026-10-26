@@ -223,3 +223,21 @@ def test_production_default_refuses_a_three_panel_strip(hermes_env, tmp_path):
     assert not result.episodes
     reasons = [row["reason"] for row in metrics["skipped_stories"]]
     assert any(reason.startswith("fewer than 4 panels (3 kept") for reason in reasons)
+
+
+def test_a_four_panel_strip_keeps_the_story_spine():
+    """--panels 4 for the social/README shape: setup, hidden problem, climax, win."""
+    from adapters.hermes.pipeline import _trim_arc
+    from canon.arcs import Arc
+
+    arc = Arc(
+        id="a", title="t", type="struggle-to-resolution", status="resolved",
+        roles={"setup": "b1", "hidden_problem": "b2", "diagnosis": "b3",
+               "climax": "b4", "aftermath": "b5", "win": "b6"},
+        beat_ids=("b1", "b2", "b3", "b4", "b5", "b6"), stakes="s",
+        opened=0.0, resolved=1.0,
+    )
+    trimmed = _trim_arc(arc, 4)
+    assert sorted(trimmed.roles) == ["climax", "hidden_problem", "setup", "win"]
+    assert arc.roles and len(arc.roles) == 6, "the source arc must not be mutated"
+    assert _trim_arc(arc, 0) is arc and _trim_arc(arc, 6) is arc

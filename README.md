@@ -1,12 +1,17 @@
 # Agent Reel
 
-Turn your AI agent's real history into a comic. Not a summary, not a dashboard: a weekly
-chapter with continuing characters, a villain, and dialogue — where every line traces back
-to a real message on your machine.
+Turn your AI agent's real history into an illustrated story. Not a summary, not a dashboard:
+pick **any session, day, week or month**, pick a **format** — a four-panel comic strip, a
+manga chapter, a picture storybook — and it draws what actually happened, where every line
+traces back to a real message on your machine.
 
 ```
-hermes reel plan   --days 7 --episodes 1 --format chapter
-hermes reel render --plan-dir <data-dir> --episode 1 --style anime
+# one session, one strip
+hermes reel plan   --since 2026-10-24 --until 2026-10-25 --episodes 1 --panels 4
+hermes reel render --plan-dir <data-dir> --episode 1 --style ink-pen-sketch
+
+# a month, as a manga chapter per story
+hermes reel plan   --days 30 --episodes 3 --format chapter
 ```
 
 ## See it
@@ -54,6 +59,19 @@ hermes reel plan --dry-run --days 7 --episodes 1 --format chapter
 
 Nothing runs on a schedule unless you create one. The plugin registers no hooks and no
 tools: one CLI command, nothing touching your live sessions.
+
+## Formats
+
+| Format | What you get | Shape |
+|---|---|---|
+| `--panels 4` | a four-panel strip, the social shape | one image, beginning → fight → result |
+| strip (default) | six-panel strip | one image |
+| `--format chapter` | multi-page chapter, 13-24 panels with wordless filler panels | pages + PDF |
+| `book --month` | a monthly book from existing chapters | cover, contents, every episode |
+
+Format and art style are independent: the same story works as a woodblock folktale, a
+black-and-white manga page, a painted storybook or a cyberpunk strip. 55 styles ship, from
+sumi-e and ukiyo-e to risograph, stained glass and blueprint.
 
 ## Commands
 

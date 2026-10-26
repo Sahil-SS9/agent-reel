@@ -64,6 +64,12 @@ def register_cli(subparser: argparse.ArgumentParser) -> None:
     plan.add_argument("--until", default="", help="window end, YYYY-MM-DD (default now)")
     plan.add_argument("--episodes", type=int, default=3, help="how many stories to plan")
     plan.add_argument("--format", default="strip", choices=("strip", "chapter"))
+    plan.add_argument(
+        "--panels",
+        type=int,
+        default=0,
+        help="cap a strip to this many story panels (4 gives the social/README shape); 0 keeps all six",
+    )
     plan.add_argument("--data-dir", default="", help="where to write artefacts")
     plan.add_argument("--llm-url", default=DEFAULT_LOCAL_URL, help="local route for redaction")
     plan.add_argument("--max-deep-events", type=int, default=90)
@@ -259,6 +265,7 @@ def reel_command(args: argparse.Namespace) -> int:
         since=since,
         until=until,
         format=args.format,
+        strip_panels=max(0, int(getattr(args, "panels", 0) or 0)),
         wording=getattr(args, "wording", "meaning"),
         harnesses=tuple(h.strip() for h in str(getattr(args, "harness", "hermes")).split(",") if h.strip()),
         harness_options=_harness_options(args),

@@ -176,14 +176,21 @@ def _style_md(path: Path, source: str) -> StyleCard:
     )
 
 
+class DraftKit(Exception):
+    """A kit folder that exists but has no sheet yet (for example a dry run)."""
+
+
 def _kit(path: Path, source: str) -> CharacterKit:
     data = _read(path)
     missing = [name for name in KIT_FIELDS if name not in data]
     if missing:
         raise AssetError(f"kit {path.parent.name!r} is missing {', '.join(missing)}")
-    sheets = data["sheets"]
-    if not isinstance(sheets, dict) or not sheets:
-        raise AssetError(f"kit {path.parent.name!r} needs at least one sheet")
+    sheets = data["sheets"] if isinstance(data.get("sheets"), dict) else {}
+    if not sheets:
+        # 26/10/26 release check: `kit create --dry-run` writes the prompt and a draft
+        # kit.json, and the loader then refused every later command. A draft is skipped,
+        # not fatal - a half-made character must never break the tool.
+        raise DraftKit(path.parent.name)
     return CharacterKit(
         key=path.parent.name,
         name=str(data["name"]),
@@ -205,7 +212,10 @@ def _scan(roots: Iterable[tuple[Path, str]], filename: str, build) -> dict[str, 
         if not root.is_dir():
             continue
         for card in sorted(root.glob(f"*/{filename}")):
-            found[card.parent.name] = build(card, source)  # later roots override
+            try:
+                found[card.parent.name] = build(card, source)  # later roots override
+            except DraftKit:
+                continue  # a character still being made; nothing to load
     return found
 
 

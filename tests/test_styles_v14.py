@@ -71,3 +71,24 @@ def test_the_style_catalogue_matches_the_idea_deck_scale():
     # The untested ones are refused unless the caller opts in - that is the safety net.
     untested = [k for k, s in styles.items() if not s.tested]
     assert len(untested) >= 40, "expected most styles to be honestly marked untested"
+
+
+def test_a_dry_run_kit_does_not_break_the_tool(tmp_path):
+    """26/10/26 release check: a kit created with --dry-run has no sheet yet; it must be
+    skipped by the loader instead of raising for every later command."""
+    import json
+
+    from canon.assets import load_kits
+
+    builtin = tmp_path / "builtin"
+    user = tmp_path / "user"
+    builtin.mkdir()
+    draft = user / "kits" / "test-runner"
+    draft.mkdir(parents=True)
+    (draft / "kit.json").write_text(json.dumps({
+        "name": "Test Runner", "role": "cast", "description": "draft",
+        "sheets": {}, "licence": "MIT",
+    }), encoding="utf-8")
+
+    kits = load_kits(builtin / "kits", user / "kits")
+    assert "test-runner" not in kits

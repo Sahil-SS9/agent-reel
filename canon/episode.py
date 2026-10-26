@@ -84,6 +84,9 @@ class Panel:
     #: r10b / QAR10-03: the events the caption was judged against (the panel's own
     #: cited events; the thread's fact list is recorded per episode in the trace file).
     caption_source_event_ids: tuple[str, ...] = ()
+    #: t_abdaa3a9: the panel's own anchoring events (its beat's ids). Citations are ranked
+    #: against these, so the trace records them for a third-party replay.
+    event_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.shot not in SHOTS:
@@ -118,6 +121,11 @@ class EpisodeIR:
     writer: str
     grounding: Mapping[str, Any] = field(default_factory=dict)
     cliffhanger: bool = False
+    #: t_abdaa3a9: the exact runtime pool lines were cited from (story order) and the ids
+    #: captions were cited from. Not part of the script IR; the trace archives them so
+    #: every citation replays deterministically.
+    citation_pool: Mapping[str, str] = field(default_factory=dict)
+    caption_pool_ids: tuple[str, ...] = ()
 
     def as_dict(self) -> dict[str, Any]:
         scene = {
@@ -495,6 +503,32 @@ def _is_generic(line: str, evidence_text: str, caption: str) -> bool:
 _QUESTION_RE = re.compile(r"[^.!?]*\?")
 
 
+def story_evidence_pool(beats: Sequence[Beat], evidence: Mapping[str, str] | None) -> dict[str, str]:
+    """The exact evidence every line and caption of an episode is cited from (t_abdaa3a9).
+
+    One entry per story event that carries text, in story order (first occurrence). The
+    planner ranks citations from this pool and the trace archives it unchanged, so a third
+    party can replay every citation from the evidence folder alone.
+    """
+    evidence_map = evidence or {}
+    pool: dict[str, str] = {}
+    for beat in beats:
+        for event_id in beat.event_ids:
+            text = str(evidence_map.get(event_id, ""))
+            if text.strip() and event_id not in pool:
+                pool[event_id] = text
+    return pool
+
+
+def pool_digest(pool: Mapping[str, str]) -> str:
+    """sha256 of an evidence pool, order included (the ranking's tie-break uses it)."""
+    import hashlib
+    import json
+
+    payload = json.dumps([[str(k), str(v)] for k, v in pool.items()], ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 def support_events(
     text: str,
     own_ids: Sequence[str],
@@ -683,6 +717,35 @@ def _verbatim_support(caption: str, pool: Mapping[str, str]) -> tuple[str, ...]:
             if needle in (text or "").lower() and event_id not in out:
                 out.append(event_id)
     return tuple(out)
+
+
+def caption_citation(
+    caption: str, own_ids: Sequence[str], pool: Mapping[str, str], facts: Sequence[Any]
+) -> tuple[str, ...]:
+    """A caption's cited events, in citing order (shared by the planner and the replay)."""
+    return tuple(
+        dict.fromkeys(
+            _verbatim_support(caption, pool)
+            + tuple(own_ids)
+            + _supporting_fact_ids(caption, facts)
+            + _supporting_event_ids(caption, pool)
+        )
+    )
+
+
+def line_kind(text: str) -> str:
+    """``claim`` (an extractable claim token), ``statement`` or ``reaction``.
+
+    Claims and statements cite only the events that state them; a reaction keeps the
+    panel's own ids as context (shared by the planner and the replay).
+    """
+    from canon.grounding import extract_claims
+
+    if extract_claims(text):
+        return "claim"
+    if _states_something(text):
+        return "statement"
+    return "reaction"
 
 
 def _policy_caption(
@@ -929,10 +992,10 @@ def plan_episode(
     thread_actors = {actor_lookup[e] for e in story_event_ids if actor_lookup.get(e)}
     if thread_actors:
         thread_actors.add(hero)
-    line_pool = {e: str(evidence_map.get(e, "")) for e in story_event_ids if str(evidence_map.get(e, "")).strip()}
+    line_pool = story_evidence_pool(beats, evidence_map)
 
     def line_support(text: str, own_ids: Sequence[str]) -> tuple[list[str], str]:
-        return support_events(text, own_ids, line_pool, story_event_ids)
+        return support_events(text, own_ids, line_pool, list(line_pool))
 
     inserts = 0
     for spec in panel_specs:
@@ -1088,10 +1151,9 @@ def plan_episode(
             line_ids: tuple[str, ...] = event_ids
             if grounder is not None:
                 report.lines += 1
-                from canon.grounding import extract_claims
-
                 support_ids, support_text = line_support(candidate, event_ids)
-                if extract_claims(candidate):
+                kind = line_kind(candidate)
+                if kind == "claim":
                     if not support_ids:
                         report.lines_dropped += 1
                         report.reasons.append(f"{role} line: no event states this")
@@ -1105,7 +1167,7 @@ def plan_episode(
                         continue
                     verdict = grounder.check(candidate, support_text, layer="dialogue")
                     line_ids = tuple(support_ids)
-                elif _states_something(candidate):
+                elif kind == "statement":
                     # QAR-M2-01 (takeover fix): most story statements ("Every test passes on
                     # both databases") carry no extractable claim token, so they used to be
                     # judged against the whole panel and cite the panel's ids. A statement
@@ -1158,17 +1220,9 @@ def plan_episode(
                 caption=caption,
                 label=_label(role, beat),
                 lines=tuple(lines),
+                event_ids=event_ids,
                 caption_source_event_ids=(
-                    tuple(
-                        dict.fromkeys(
-                            _verbatim_support(caption, episode_pool)
-                            + event_ids
-                            + _supporting_fact_ids(caption, facts)
-                            + _supporting_event_ids(caption, episode_pool)
-                        )
-                    )
-                    if caption
-                    else ()
+                    caption_citation(caption, event_ids, episode_pool, facts) if caption else ()
                 ),
             )
         )
@@ -1208,6 +1262,8 @@ def plan_episode(
         writer=getattr(active_writer, "name", "unknown"),
         grounding=report.as_dict(),
         cliffhanger=cliffhanger,
+        citation_pool=dict(line_pool),
+        caption_pool_ids=tuple(episode_pool),
     )
 
 

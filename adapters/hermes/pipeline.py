@@ -300,6 +300,9 @@ def episode_trace(
     facts: Sequence[Mapping[str, Any]],
     evidence_map: Mapping[str, str],
     regate: Any = None,
+    clean: Any = None,
+    fact_sources: Sequence[str] = (),
+    planned_ir: Any = None,
 ) -> dict[str, Any]:
     """Everything needed to follow a caption or line back to its gated source (QAR10-03).
 
@@ -313,10 +316,65 @@ def episode_trace(
         for line in panel.lines:
             cited.extend(line.source_event_ids)
     cited = list(dict.fromkeys(cited))
+    # t_abdaa3a9 (Quan): the 1,200-char evidence below is for reading, not replay - a cut
+    # changes the word overlap the citations were ranked by, so 4-6 lines did not replay.
+    # The pool is archived whole, in the order the ranking used, with its digest. Text the
+    # gate would still flag is re-gated and listed, so a replay knows which ids are inexact.
+    from canon.episode import pool_digest
+
+    from adapters.hermes.evidence import Gated
+
+    pool = dict(getattr(ir, "citation_pool", {}) or {})
+    regated: list[str] = []
+
+    def exact(key: str, text: str) -> Any:
+        if clean is None or clean(text):
+            return Gated(text)
+        regated.append(key)
+        return (regate or (lambda value: value))(text)
+
+    archived = {event_id: exact(event_id, text) for event_id, text in pool.items()}
+    # A caption can also cite a thread fact's event that is not a story event; its whole
+    # text is kept too, so every cited id can be read in full.
+    outside = {
+        event_id: exact(event_id, str(evidence_map.get(event_id, "")))
+        for event_id in cited
+        if event_id not in pool and str(evidence_map.get(event_id, "")).strip()
+    }
+    sources = [exact(f"fact[{index}]", str(text)) for index, text in enumerate(fact_sources or ())]
     return {
         "episode_id": ir.episode_id,
         "arc": arc.as_dict(),
         "beats": [beat.as_dict() for beat in story_beats],
+        "panels": [
+            {
+                "id": panel.id,
+                "role": panel.role,
+                "own_event_ids": list(panel.event_ids),
+                # Pre-alias text: the exact string each citation was ranked on.
+                "caption": exact(f"{panel.id}.caption", panel.caption) if panel.caption else "",
+                "caption_source_event_ids": list(panel.caption_source_event_ids),
+                "lines": [
+                    {
+                        "speaker": line.speaker,
+                        "text": exact(f"{panel.id}.line[{n}]", line.text),
+                        "source_event_ids": list(line.source_event_ids),
+                    }
+                    for n, line in enumerate(panel.lines)
+                ],
+            }
+            for panel in (planned_ir or ir).panels
+        ],
+        "evidence_pool": {
+            "sha256": pool_digest(pool),
+            "order": list(pool),
+            "events": archived,
+            "cited_outside_pool": outside,
+            "regated_ids": regated,
+            "caption_pool_ids": list(getattr(ir, "caption_pool_ids", ()) or ()),
+            "fact_source_texts": sources,
+            "how_to_replay": "python -m eval.trace_replay <trace.json>",
+        },
         "facts": list(facts),
         "evidence": {
             # A cut can leave a fragment the evidence writer reads as a secret, so the
@@ -825,6 +883,7 @@ def run_pipeline(
                     }
                 )
                 continue
+            planned_ir = episode_ir  # pre-alias: the text the citations were ranked on
             episode_ir = apply_to_ir(episode_ir, alias_book)
             stray = masks_in(markdown_of(episode_ir))
             if stray:
@@ -848,9 +907,13 @@ def run_pipeline(
                     "grounding": dict(episode_ir.grounding),
                     "brief": brief.as_dict(),
                     "facts": [fact.as_dict() for fact in thread_facts],
+                    # t_abdaa3a9: captions also cite facts by their source text.
+                    "fact_sources": [str(getattr(fact, "source_text", "") or "") for fact in thread_facts],
                     "ir": episode_ir,
+                    "planned_ir": planned_ir,
                     "arc": arc,
-                    "story_beats": tuple(story_beats or ()),
+                    # The beats the episode was actually planned from (t_abdaa3a9).
+                    "story_beats": tuple(story_beats or thread_beats or ()),
                     "story": story_info,
                 }
             )
@@ -871,7 +934,7 @@ def run_pipeline(
             result.timings["episode_s"] = round(time.time() - started, 2)
             result.timings["writer"] = "none"
         result.episodes = [
-            {key: value for key, value in row.items() if key not in {"ir", "arc", "story_beats", "story"}}
+            {key: value for key, value in row.items() if key not in {"ir", "planned_ir", "arc", "story_beats", "story", "fact_sources"}}
             for row in episodes
         ]
         if ir is not None:
@@ -991,6 +1054,9 @@ def run_pipeline(
                         row["facts"],
                         evidence_map,
                         regate=lambda text: gate.redact_text(text)[0],
+                        clean=lambda text: not gate.scan(text),
+                        fact_sources=row.get("fact_sources") or (),
+                        planned_ir=row.get("planned_ir"),
                     ),
                     gate,
                 )

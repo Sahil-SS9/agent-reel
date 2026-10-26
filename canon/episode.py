@@ -545,32 +545,152 @@ def support_events(
     out the cross-panel event that actually stated the line; the judge then saw the wrong
     evidence and a true line was cited against it. Ranking comes first now, and an own id
     joins only if it clears the same support bar and there is room.
+    t_abdaa3a9 (Quan re-sample at 0689404): three more ways the citation missed the event
+    that states the line, each fixed here and pinned by a test:
+
+    - *Long events won on incidental words.* A 2,000-character status summary shares a
+      word with almost every line. The first citation now goes to the event with the best
+      single *passage* (a sentence or clause) matching the line - an event that states the
+      line says it in one place - and the final order is the selection order, not a resort
+      by whole-event overlap (p7: the port-status summary outranked "context v2 passes,
+      name links fail on the target category and on speed").
+    - *A clause no cited event states.* Later citations are chosen by the line's words
+      they add that no earlier citation covers, so each clause gets its own source (p12:
+      "a written blocker report" was stated only by the uncited VERIFY-BLOCKER event).
+    - *Figures were invisible to the ranking,* so an event with another run's figures won
+      on shared words (p2: 1,439/1,500 cited for "1,379 ... 1,440"). A line's figures and
+      number words now count, the event carrying them leads, an event reporting a rival
+      figure of the same kind and none of the line's is never cited, and a padded own id
+      must carry one of the line's figures. A further citation must add two uncovered
+      words, so a single shared word ("checks") cannot pull another event in.
+    Record fields ("role: assistant", "content_digest: ...") are not ranked on.
     """
-    from canon.grounding import content_terms
+    from canon.grounding import figures_in
 
-    terms = {t[:6] for t in content_terms(text, allow=())}
+    terms = _support_terms(text)
+    line_figures = set(figures_in(text))
+    line_shapes = {_figure_shape(f) for f in line_figures} - {""}
 
-    def overlap(event_id: str) -> int:
-        return len(terms & {t[:6] for t in content_terms(line_pool.get(event_id, ""), allow=())})
+    def figure_ok(event_id: str) -> bool:
+        return not line_figures or bool(line_figures & set(figures_in(line_pool.get(event_id, ""))))
 
-    ranked = sorted(line_pool, key=lambda e: (-overlap(e), order.index(e)))
-    best = overlap(ranked[0]) if ranked else 0
+    def competes(event_id: str) -> bool:
+        """The event reports a rival figure of the line's own kind and none of the line's
+        ("1,439" checks against "1,379"): it is another run's measurement, not a source."""
+        if not line_shapes:
+            return False
+        figures = set(figures_in(line_pool.get(event_id, "")))
+        return not (figures & line_figures) and bool({_figure_shape(f) for f in figures} & line_shapes)
+
+    whole = {e: len(terms & _support_terms(line_pool.get(e, ""))) for e in line_pool}
+    passage = {
+        e: max((len(terms & _support_terms(p)) for p in _passages(line_pool.get(e, ""))), default=0)
+        for e in line_pool
+    }
+    # Figures and number words are the most distinctive things a line says ("1,379",
+    # "twelve", "11:01"); the event that carries them is first in line to state it.
+    marked = {t for t in terms if t.startswith("#")}
+    distinct = {e: len(marked & _support_terms(line_pool.get(e, ""))) for e in line_pool}
+    position = {e: index for index, e in enumerate(order)}
+    best = max(whole.values(), default=0)
     # An event sharing only a stray word does not state the line: keep events whose
     # overlap is at least half the best one (takeover tightening).
     floor = max(1, (best + 1) // 2)
+    eligible = [e for e in line_pool if whole[e] >= floor and not competes(e)]
+    own = set(own_ids)
     chosen: list[str] = []
-    for e in ranked:
-        if len(chosen) >= 3 or overlap(e) < floor:
+    covered: set[str] = set()
+    if eligible:
+        first = min(
+            eligible,
+            key=lambda e: (-distinct[e], -passage[e], -whole[e], position.get(e, len(position))),
+        )
+        chosen.append(first)
+        covered |= terms & _support_terms(line_pool[first])
+    while len(chosen) < 3:
+        rest = [e for e in eligible if e not in chosen]
+        gains = {e: len((terms - covered) & _support_terms(line_pool[e])) for e in rest}
+        # A further citation must back a clause, not a stray word: at least two of the
+        # line's words no earlier citation covers (one shared "checks" let another run's
+        # figures in).
+        rest = [e for e in rest if gains[e] >= 2]
+        if not rest:
             break
-        chosen.append(e)
+        pick = min(
+            rest,
+            key=lambda e: (-gains[e], -passage[e], -whole[e], e not in own, position.get(e, len(position))),
+        )
+        chosen.append(pick)
+        covered |= terms & _support_terms(line_pool[pick])
     for e in own_ids:
+        # The panel's own event joins as context only if it clears the same bar and, for a
+        # line with figures, carries one of them.
         if len(chosen) >= 3:
             break
-        if e in line_pool and overlap(e) >= floor and e not in chosen:
+        if e in line_pool and e not in chosen and e in eligible and figure_ok(e):
             chosen.append(e)
-    chosen.sort(key=lambda e: -overlap(e))
     blocks = "\n\n".join(" ".join(line_pool[e].split()) for e in chosen)
     return chosen, blocks
+
+
+_PASSAGE_SPLIT = re.compile(r"(?<=[.!?;:])\s+|\n+|\s[\u2014\u2013]\s|\s-\s")
+_SUFFIXES = ("ing", "ed", "es", "s")
+
+
+def _figure_shape(figure: str) -> str:
+    """The kind of a canonical figure, for spotting a rival measurement of the same kind.
+
+    Times, versions, ordinals and signed numbers are each one kind; plain numbers are
+    compared by size (digits) and only from three digits up, so "exit 0" or "two files"
+    never makes an event a rival of a line's "1,379".
+    """
+    f = str(figure)
+    if ":" in f:
+        return "time"
+    if f[:1] in {"v", "V"}:
+        return "version"
+    if re.search(r"(st|nd|rd|th)$", f):
+        return "ordinal"
+    digits = re.sub(r"\D", "", f.split(".")[0])
+    if len(digits) < 3:
+        return ""
+    return f"{'-' if f.startswith('-') else ''}{'dec' if '.' in f else 'int'}{len(digits)}"
+
+
+def _support_stem(word: str) -> str:
+    """A crude stem for citation ranking only: "links"/"linking" and "passes"/"passed" meet."""
+    word = word.lower().strip("'-.`")
+    for suffix in _SUFFIXES:
+        if word.endswith(suffix) and len(word) - len(suffix) >= 3:
+            word = word[: -len(suffix)]
+            break
+    return word[:6]
+
+
+#: Record fields evidence_by_event appends ("role: assistant", "content_digest: sha256:..")
+#: are provenance, not something a line can state; "contenders" matched "content_digest".
+_FIELD_LINE = re.compile(r"(?m)^[a-z][a-z0-9_]*: .*$")
+
+
+def _support_terms(text: str) -> set[str]:
+    """Content stems plus canonical figures and number words (marked with ``#``)."""
+    from canon.grounding import _NUMBER_WORD_RE, content_terms, figures_in
+
+    text = _FIELD_LINE.sub("", str(text or ""))
+    stems: set[str] = set()
+    for term in content_terms(text, allow=()):
+        # Paths and file names ("VERIFY-BLOCKER.md") count by their parts as well.
+        for part in re.split(r"[-_./`]+", term):
+            if len(part) >= 4:
+                stems.add(_support_stem(part))
+        stems.add(_support_stem(term))
+    marked = {f"#{figure}" for figure in figures_in(text)}
+    marked |= {f"#{m.group(0).lower()}" for m in _NUMBER_WORD_RE.finditer(text)}
+    return stems | marked
+
+
+def _passages(text: str) -> list[str]:
+    return [p for p in _PASSAGE_SPLIT.split(str(text or "")) if p.strip()]
 
 
 def _states_something(line: str) -> bool:

@@ -71,6 +71,11 @@ HARNESSES: dict[str, HarnessSpec] = {
 
 #: A mapping for ``jsonl``: where the files are and where each field lives (dotted paths).
 GENERIC_MAPPING_EXAMPLE = {
+    #: A log file is a session; ``thread`` names the field that groups sessions into the
+    #: work a story is about (a project path, a repo, a channel). Without it every file is
+    #: its own thread, and a harness that starts a session per invocation never gathers
+    #: enough beats for an arc.
+    "thread": "cwd",
     "glob": "~/.commandcode/sessions/**/*.jsonl",
     "role": "message.role",
     "text": "message.content",
@@ -132,6 +137,11 @@ class Message:
     role: str  # user | assistant
     locator: str  # "<line>" for files, "<message id>" for SQLite
     text: str
+    #: The story thread this message belongs to. Other harnesses rarely have Hermes'
+    #: session shape: Claude Code starts a new session per invocation (10,475 files on this
+    #: machine, ~2 messages each), so one-session-per-thread yielded 10,472 threads and no
+    #: arc could ever gather the three beats it needs. A thread is the work, not the process.
+    thread: str = ""
 
 
 class _Base:
@@ -172,13 +182,14 @@ class _Base:
             if not window.contains(message.ts):
                 continue
             store = self._store_key(message.session)
-            if SOURCE_SESSION in wanted and message.session not in seen_sessions:
-                seen_sessions.add(message.session)
+            group = message.thread or message.session
+            if SOURCE_SESSION in wanted and group not in seen_sessions:
+                seen_sessions.add(group)
                 yield build_event(
                     source=SOURCE_SESSION, kind=KIND_SESSION_STARTED, ts=message.ts, profile=self.agent,
                     actor=self.agent, subject=self.harness,
-                    payload={"session_id": f"{self.harness}:{message.session}", "harness": self.harness},
-                    store=store, table="sessions", pk=message.session, content_column=None,
+                    payload={"session_id": f"{self.harness}:{group}", "harness": self.harness},
+                    store=store, table="sessions", pk=group, content_column=None,
                 )
             if SOURCE_MESSAGE not in wanted or not message.text:
                 continue
@@ -186,7 +197,7 @@ class _Base:
             yield build_event(
                 source=SOURCE_MESSAGE, kind=kind, ts=message.ts, profile=self.agent,
                 actor="owner" if message.role == "user" else self.agent, subject=message.role,
-                payload={"role": message.role, "session_id": f"{self.harness}:{message.session}",
+                payload={"role": message.role, "session_id": f"{self.harness}:{group}",
                          "chars": len(message.text), "content_digest": text_digest(message.text),
                          "harness": self.harness, "tool_names": [], "tool_call_count": 0},
                 store=store, table="messages", pk=message.locator, content_column="content",
@@ -224,6 +235,10 @@ class _JsonlBase(_Base):
         """(role, text, ts, session override) or None to skip."""
         raise NotImplementedError
 
+    def thread_for(self, path: Path) -> str:
+        """The story thread a log file belongs to (blank: one thread per file)."""
+        return ""
+
     def _messages(self, window: Window) -> Iterator[Message]:
         for path in self.files():
             try:
@@ -232,6 +247,7 @@ class _JsonlBase(_Base):
             except OSError:
                 continue
             session = path.stem
+            thread = self.thread_for(path)
             store = self._store_key(session)
             self._stores[store] = path
             with path.open("r", encoding="utf-8", errors="replace") as handle:
@@ -245,10 +261,13 @@ class _JsonlBase(_Base):
                     parsed = self.parse(record)
                     if parsed is None:
                         continue
-                    role, text, ts, _override = parsed
+                    role, text, ts, override = parsed
                     if ts is None or not text:
                         continue
-                    yield Message(session=session, ts=ts, role=role, locator=str(number), text=text)
+                    yield Message(
+                        session=session, ts=ts, role=role, locator=str(number), text=text,
+                        thread=str(override or thread),
+                    )
 
     def _read(self, path: Path, locator: str) -> str | None:
         try:
@@ -269,6 +288,10 @@ class _JsonlBase(_Base):
 class ClaudeCodeSource(_JsonlBase):
     harness = "claude-code"
     pattern = "*/*.jsonl"
+
+    def thread_for(self, path: Path) -> str:
+        # projects/<project>/<session>.jsonl - the project is the work the story is about.
+        return path.parent.name if path.parent.name not in {"", ".", "projects"} else ""
 
     def parse(self, record: Mapping[str, Any]):
         if record.get("type") not in {"user", "assistant"} or record.get("isSidechain") or record.get("isMeta"):
@@ -338,7 +361,10 @@ class GenericJsonlSource(_JsonlBase):
         else:
             return None
         text = prose_of(_dig(record, self.mapping.get("text", "content")))
-        return role, text, _epoch(_dig(record, self.mapping.get("timestamp", "timestamp"))), None
+        thread = _dig(record, self.mapping["thread"]) if self.mapping.get("thread") else None
+        return role, text, _epoch(_dig(record, self.mapping.get("timestamp", "timestamp"))), (
+            str(thread) if thread else None
+        )
 
 
 class OpenCodeSource(_Base):

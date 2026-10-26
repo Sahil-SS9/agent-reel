@@ -29,7 +29,7 @@ Branch: `main`
 ## Commands to reproduce
 
 ```bash
-cd /home/kensei/repos/hermes-scrollback-reel
+cd <repo>
 export TMPDIR="${TMPDIR:-$HOME/.hermes/cache/scratch}"   # rig convention: scratch, not the system temp dir
 
 # venv (Python 3.12; pillow, pytest, jsonschema, pyyaml)

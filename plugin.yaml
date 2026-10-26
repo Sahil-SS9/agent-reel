@@ -1,9 +1,20 @@
+manifest_version: 2
 name: scrollback-reel
 version: 0.1.0
 api_version: 1
-description: "Turn this machine's Hermes history into a weekly comic: one CLI command (hermes reel plan --dry-run), no hooks, no tools."
+description: "Turn this machine's Hermes history into a comic: grounded stories, 55 art styles, pages drawn by your own image model."
 author: Sahil Saghir
 kind: standalone
+license: MIT
+homepage: https://github.com/Sahil-SS9/hermes-scrollback-reel
+tags:
+  - comics
+  - story
+  - history
+  - images
+requires_plugins: []
+python_dependencies:
+  - "pillow>=10.0"
 provides_hooks: []
 provides_tools: []
 requires_env: []

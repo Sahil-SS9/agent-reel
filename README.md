@@ -1,63 +1,114 @@
 # Hermes Scrollback Reel
 
-Turns your AI agent's real history into a weekly comic strip with continuing characters and storylines.
-
-Status: M1 complete (redaction gate, beats, arcs, canon, episode plan, Script IR). M2 not started; nothing is installed in Hermes.
-
-## Document map (read in this order)
-
-1. `docs/HANDOFF.md`: build instructions, ground rules, stages, gates, report format. **Build agents start here.**
-2. `docs/decisions.md`: binding owner decisions and the proven method.
-3. `docs/SPEC.md`: full spec (engine, renderer, sources, quality bar, bake-off results).
-4. `docs/hermes-surfaces.md`: verified Hermes integration points (upstream a4072ce7e6).
-5. `reference/bakeoff-r2/`: the round-2 bake-off letterer, episode layout and prompts (proof of method, not production code).
-6. `canon/HERMES_SCHEMA.md`: how each Hermes table/field becomes an `Event` (M0 deliverable).
-7. `docs/reports/`: stage reports written by the build agent.
-
-## Code map
+Turn your AI agent's real history into a comic. Not a summary, not a dashboard: a weekly
+chapter with continuing characters, a villain, and dialogue — where every line traces back
+to a real message on your machine.
 
 ```
-canon/                  pure core, no Hermes imports
-  events.py             the Event model (privacy, payload / payload_redacted)
-  gate.py               GatedEvent: the only thing later stages may see
-  redact.py             the redaction gate (deterministic + model passes)
-  beats.py arcs.py      beats and the arc template
-  canon.py              entities, facts with event ids, retcon log
-  episode.py            strip + chapter planners and the Script IR
-  cache.py llm.py       (stage, model, prompt, input) cache and the LLM seam
-  HERMES_SCHEMA.md      table/field -> Event map and the read-only guarantee
-adapters/hermes/        the only Hermes-aware code: history.py (ingest + CLI), pipeline.py
-                        (M1 orchestration), ro.py + stores.py (read-only access),
-                        redact_source.py (Hermes' patterns), llm.py, leakscan.py
-eval/redaction/         232 labelled synthetic items + the benchmark runner
-fixtures/               synthetic Hermes home generator (4 profiles, 4 weeks)
-tests/                  155 tests, pytest, no network and no real history
-scripts/                readonly_proof.sh (strace proof: no file is created, renamed,
-                        truncated or deleted under ~/.hermes; existing -shm wal-index
-                        pages are updated by normal SQLite read locking)
-                        extract_hermes_redact.py
+hermes reel plan   --days 7 --episodes 1 --format chapter
+hermes reel render --plan-dir <data-dir> --episode 1 --style anime
 ```
 
-Run it:
+## What it does
+
+- **Reads your own history.** Hermes sessions, tool calls and kanban cards become events.
+  Nothing reaches a model until it has passed the redaction gate.
+- **Finds a story, not a log.** It looks for work with a problem, a struggle and a result,
+  then writes a synopsis, a scene-by-scene script, an editor pass and one rewrite — in
+  plain English, with names and numbers kept exact.
+- **Cites everything.** Every line and caption carries the ids of the messages that state
+  it. A line that cites nothing it says is refused, not printed.
+- **Never tells the same story twice.** A series ledger remembers what each chapter told,
+  carries one open thread into the next chapter, and refuses repeats.
+- **Draws it with your model.** 55 art styles, character sheets, comic page layout, speech
+  balloons with tails to the speaker, and export sizes for X, LinkedIn and Discord — using
+  the image model you already have.
+
+## Requirements
+
+- Hermes Agent with the plugin CLI (this plugin registers one command: `hermes reel`).
+- Python package `pillow` (declared in the manifest; the host installs it).
+- An image model. Four routes — see **Image sources** below.
+
+## Install
 
 ```bash
-uv venv .venv --python 3.12 && uv pip install --python .venv/bin/python pillow pytest jsonschema pyyaml
-.venv/bin/python -m adapters.hermes.history --days 7 --summary
-.venv/bin/python -m pytest
-bash scripts/readonly_proof.sh
-
-# M1: ingest -> gate -> beats -> arcs -> canon -> episode script
-.venv/bin/python -m adapters.hermes.pipeline --data-dir "$TMPDIR/reel" --days 7
-# ...with the model pass on the rig's local route (no keys)
-REEL_LLM_BASE_URL=http://127.0.0.1:8091/v1 .venv/bin/python -m adapters.hermes.pipeline \
-  --data-dir "$TMPDIR/reel" --days 7 --llm local
-
-# the redaction gate
-.venv/bin/python eval/redaction/run.py --llm local --llm-url http://127.0.0.1:8091/v1
+hermes plugins install Sahil-SS9/hermes-scrollback-reel
+hermes plugins enable scrollback-reel
+hermes reel plan --dry-run --days 7 --episodes 1 --format chapter
 ```
 
-Evidence for real-data runs lives outside the repo, in
-`/home/kensei/handoffs/agent-story-replay/build-evidence/<stage>/`.
+Nothing runs on a schedule unless you create one. The plugin registers no hooks and no
+tools: one CLI command, nothing touching your live sessions.
 
-Bake-off images: `/home/kensei/handoffs/agent-story-replay/bakeoff-gpt-image/` (r1 in `out/`, r2 in `r2/out/`).
-Kanban: t_ec1754fc.
+## Commands
+
+| Command | What it does |
+|---|---|
+| `hermes reel plan` | Pick the story, write the script, keep the trace. |
+| `hermes reel render` | Draw one episode into pages, panels, share sizes and a PDF. |
+| `hermes reel book` | Build a monthly book from existing renders. |
+| `hermes reel styles` | List the 55 styles; `--set` a default; add your own. |
+| `hermes reel sources` | List image sources; `--check` one without spending; `--set` a default. |
+| `hermes reel kit` | Create a character sheet, or import the Hermes Multiverse set. |
+| `hermes reel tones` | Tone: witty, comical, serious, quirky, epic, wholesome, noir — or a blend. |
+
+## Image sources
+
+| Source | What it is | Requires |
+|---|---|---|
+| `host` | Your harness's own image tool — whatever provider your Hermes already uses | nothing extra |
+| `comfyui` | A local ComfyUI server: free, your GPU | ComfyUI on `127.0.0.1:8188` with an API-format workflow |
+| `openai` | GPT Image via the OpenAI Images API | `OPENAI_API_KEY` |
+| `gemini` | Nano Banana via the Gemini API | `GEMINI_API_KEY` |
+| `fal` | FLUX or Nano Banana via fal.ai | `FAL_KEY` |
+
+```bash
+hermes reel sources --set comfyui
+hermes reel sources --check comfyui      # one real request, no batch
+```
+
+**On other harnesses.** This plugin speaks to Hermes. Porting the approach elsewhere comes
+down to one function: given a prompt, reference images and an aspect ratio, return a PNG
+path. `canon/providers.py` holds the four implementations — copy the shape, point it at
+whatever image model your harness exposes, and register it as a source. Details in
+`docs/IMAGE-SOURCES.md`.
+
+## Styles
+
+55 built-in styles in `styles/`, from clear-line and sumi-e to risograph, ukiyo-e, stained
+glass and blueprint. Two are marked **tested** (anime, ink-pen-sketch); the other 53 are
+**experimental** and the render refuses them unless you opt in — nothing claims to be
+proven before it is.
+
+Add your own: `<data-dir>/styles/my-style/style.md` with YAML front matter and a prompt
+containing the line `**[INSERT CHARACTERS, ACTION AND SCENE HERE]**`. See `docs/STYLES.md`.
+
+## Characters and consent
+
+- Characters come from kits; `kits/kensei` and `kits/the-orphans` ship with the repo.
+- `hermes reel kit import-multiverse` pulls the community Hermes Multiverse set,
+  checksum-verified, and skips anything documentation-only or awaiting its creator's
+  approval.
+- Public mode refuses any real person without a consent record. Photo likeness is allowed
+  only for yourself.
+
+## Privacy
+
+- History is read-only: no file is created, renamed, truncated or deleted under `~/.hermes`
+  while the tool reads it (only normal SQLite read-locking touches an existing WAL index).
+  `scripts/readonly_proof.sh` proves this with strace.
+- Redaction runs before any model sees text: a deterministic pass plus a model pass that
+  masks secrets, credentials, paths and personal data.
+- Every line keeps its source ids, so any claim can be audited back to the message.
+- No auto-posting. The tool writes files; you decide what to publish.
+
+## Licence
+
+MIT for code and prompt text. Bundled fonts are SIL OFL 1.1 — see `assets/fonts/FONTS.md`.
+
+## Contributing
+
+Issues and pull requests welcome. `pytest` runs the suite. For build-side documentation —
+architecture, decisions, stage reports — start at `docs/HANDOFF.md`; the original build
+README is kept at `docs/BUILD-README-original.md`.

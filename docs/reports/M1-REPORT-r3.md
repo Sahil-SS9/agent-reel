@@ -84,7 +84,7 @@ solved: the mechanism is right, the writing is not there yet.
 ## Reproduce
 
 ```bash
-cd /home/kensei/repos/hermes-scrollback-reel
+cd <repo>
 export TMPDIR="${TMPDIR:-$HOME/.hermes/cache/scratch}"
 .venv/bin/python -m pytest                              # 228 passed
 .venv/bin/python eval/threads/run.py                     # 30 threads, GATE PASSED

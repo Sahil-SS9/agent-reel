@@ -1,7 +1,7 @@
 """Scrollback Reel bake-off letterer (r2). Places balloons using vision-detected head boxes."""
 import json, math, os, sys, textwrap
 from PIL import Image, ImageDraw, ImageFont
-BASE="/home/kensei/handoffs/agent-story-replay/bakeoff-gpt-image/"
+BASE="~/handoffs/agent-story-replay/bakeoff-gpt-image/"
 FONT=BASE+"fonts/ComicNeue-Bold.ttf"; BANG=BASE+"fonts/Bangers-Regular.ttf"
 F2=ImageFont.truetype(FONT,38); FCAP=ImageFont.truetype(FONT,30); FC=ImageFont.truetype(FONT,32)
 FT=ImageFont.truetype(BANG,120); FS=ImageFont.truetype(BANG,48)

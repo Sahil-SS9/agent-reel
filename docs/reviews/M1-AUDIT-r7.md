@@ -6,7 +6,7 @@ Candidate inspected: bcabf69, clean worktree. Installed plugin: fa95c8d9452ba9e5
 
 Fresh execution: `.venv/bin/python -m pytest -p no:cacheprovider tests/test_r7_bypasses.py` -> 4 passed, exit 0. `git diff --check` -> exit 0. The full suite and privacy/model evaluations were NOT re-executed; their reported results remain builder evidence, not fresh independent measurements.
 
-Read all three numbered scripts and corresponding IR files under /home/kensei/handoffs/agent-story-replay/build-evidence/M1-r7/run/; inspected the r6-to-r7 diff, canon/facts.py, canon/selection.py, and the four regression tests.
+Read all three numbered scripts and corresponding IR files under ~/handoffs/agent-story-replay/build-evidence/M1-r7/run/; inspected the r6-to-r7 diff, canon/facts.py, canon/selection.py, and the four regression tests.
 
 ## Accepted correction
 

@@ -132,7 +132,7 @@ separately, and the gate fails if more than 5% of a run is quarantined.
 ## Commands to reproduce
 
 ```bash
-cd /home/kensei/repos/hermes-scrollback-reel
+cd <repo>
 export TMPDIR="${TMPDIR:-$HOME/.hermes/cache/scratch}"
 
 .venv/bin/python -m pytest                                             # 202 passed

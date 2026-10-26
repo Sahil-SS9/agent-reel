@@ -3,7 +3,7 @@
 Verified 23/10/26 against upstream `NousResearch/hermes-agent` main **a4072ce7e67313eda344de4e4d691b6a5ba50164** (22/10/26).
 The read-only clone is at `~/repos/hermes-agent-vanilla` (ref `upstream/main`; local `main` is stale, so use `git show upstream/main:<path>`).
 
-The live install is the KenseiAgent fork: `hermes --version` → v0.22.2+…, install dir `/home/kensei/repos/KenseiAgent`.
+The live install is the KenseiAgent fork: `hermes --version` → v0.22.2+…, install dir `~/repos/KenseiAgent`.
 Target the upstream API. If the live fork differs on anything you depend on, record it in your report; do not patch either repo.
 
 | Need | Surface | Where it is defined |

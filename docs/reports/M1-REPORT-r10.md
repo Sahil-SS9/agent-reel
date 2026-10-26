@@ -27,7 +27,7 @@ r9 claimed the model judge rejected its own true captions. The r9 run cache cont
 3. Selection varies between runs on the same window (episode 3 changed across run-2/3/final).
 4. Self-graded evals: the paraphrase cases were written by the producer. An independent held-out caption set is needed.
 
-Evidence: /home/kensei/handoffs/agent-story-replay/build-evidence/M1-r10/
+Evidence: ~/handoffs/agent-story-replay/build-evidence/M1-r10/
 
 
 ## Round 10b — fixes for Quan's review (t_0ea810b2), head 6a74259 (installed)

@@ -78,7 +78,7 @@ counted, not hidden.
 ## Reproduce
 
 ```bash
-cd /home/kensei/repos/hermes-scrollback-reel
+cd <repo>
 .venv/bin/python -m pytest                                    # 272 passed
 .venv/bin/python eval/threads/run.py                          # 30 threads, GATE PASSED
 .venv/bin/python eval/grounding/run.py                        # 32 cases, GATE PASSED

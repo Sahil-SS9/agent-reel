@@ -84,7 +84,7 @@ deep GATE PASSED (secrets 100%, names ≥95%).
 ## Reproduce
 
 ```bash
-cd /home/kensei/repos/hermes-scrollback-reel
+cd <repo>
 hermes reel plan --dry-run --days 7 --episodes 3 --data-dir <dir outside ~/.hermes> --json
 .venv/bin/python eval/threads/run.py && .venv/bin/python eval/grounding/run.py
 .venv/bin/python -m pytest -p no:cacheprovider

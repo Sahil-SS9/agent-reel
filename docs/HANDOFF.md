@@ -14,7 +14,7 @@ The art style and letterer method are already proven (bake-off round 2, approved
 
 ## 1. Ground rules (hard; breaking one fails the stage)
 
-1. **Run as the `kensei` user.** Work only in `/home/kensei/repos/hermes-scrollback-reel`. Commit locally on `main` or a feature branch.
+1. **Run as the `kensei` user.** Work only in `<repo>`. Commit locally on `main` or a feature branch.
    - **No push, no remote, no publishing, no catalog submission, no PRs.**
 2. **Hermes state is read-only.** Open every SQLite DB with `sqlite3.connect("file:<path>?mode=ro", uri=True)`.
    - Never write to `~/.hermes` (config.yaml, .env, auth, plugins, skills, memories, cron, kanban, state.db).
@@ -24,7 +24,7 @@ The art style and letterer method are already proven (bake-off round 2, approved
 4. **No secrets in code, logs, fixtures or commits.** Never copy credentials or auth files anywhere.
 5. **Real history never enters the repo.**
    - Fixtures are synthetic.
-   - Outputs from real-data runs go to `/home/kensei/handoffs/agent-story-replay/build-evidence/<stage>/` and must pass the redaction gate first.
+   - Outputs from real-data runs go to `~/handoffs/agent-story-replay/build-evidence/<stage>/` and must pass the redaction gate first.
 6. **Image budget.** Generate images only through your own Hermes `image_generate` tool, which uses the owner's configured provider (openai-codex gpt-image-2).
    - Max **40 images per stage**. Log each call (prompt hash, refs, output path, time) to the stage evidence folder.
    - No other paid APIs.
@@ -64,13 +64,13 @@ hermes-scrollback-reel/
 ## 3. State verification (run first; paste the outputs in the M0 report)
 
 ```bash
-cd /home/kensei/repos/hermes-scrollback-reel && git log --oneline -1   # expect the pack commit KENSEI gave you
+cd <repo> && git log --oneline -1   # expect the pack commit KENSEI gave you
 git -C ~/repos/hermes-agent-vanilla merge-base --is-ancestor a4072ce7e67313eda344de4e4d691b6a5ba50164 upstream/main; echo $?   # expect 0 (surfaces were verified at a4072ce7e6; upstream/main moves, so check ancestry, not equality)
 hermes --version                                                        # expect v0.22.2+... KenseiAgent fork
 hermes plugins --help | grep -E 'validate|doctor'                       # expect both listed
 ls ~/.hermes/profiles/*/state.db | wc -l                                # expect ~65
 sqlite3 "file:$HOME/.hermes/state.db?mode=ro" "select count(*) from sessions"   # expect a positive number
-ls "/home/sahil/Pictures/Hermes Multiverse/sahil/styles/anime/"         # expect sahil__sheet__anime__v01.png
+ls "~/Pictures/Hermes Multiverse/sahil/styles/anime/"         # expect sahil__sheet__anime__v01.png
 ```
 
 If any expectation fails, stop and report. Don't work around it.

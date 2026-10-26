@@ -87,7 +87,7 @@ it (`redaction-benchmark-deterministic.txt`).
 ## Commands to reproduce
 
 ```bash
-cd /home/kensei/repos/hermes-scrollback-reel
+cd <repo>
 export TMPDIR="${TMPDIR:-$HOME/.hermes/cache/scratch}"   # rig convention: scratch, not the system temp dir
 
 # tests: expect "156 passed"

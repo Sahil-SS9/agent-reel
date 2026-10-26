@@ -129,3 +129,12 @@ frontmatter:
 | `lettering` / `lettering_*` | balloon shape (`ellipse`, `rounded`, `rect`), balloon, comms and caption fills, ink colour, outline weight, font (`comic`, `display`), caption shape |
 
 A style that sets none of these adds nothing, and the lettering is drawn exactly as before.
+
+## Three styles that look different
+
+`ligne-claire` (flat colour, one even line, calm wide settings), `halftone-noir` (hard
+shadow, dots, tilted angles, square balloons in a heavy display face) and `risograph-print`
+(two inks, off-register, rounded balloons in deep blue ink on cream) each own a world,
+composition, impact frame and lettering. `tests/test_three_styles.py` fails if any two of
+them share one of those, so a future edit cannot quietly pull them back to a common look.
+The same story drawn in each should read as three different books.

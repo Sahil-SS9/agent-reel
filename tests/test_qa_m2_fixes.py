@@ -127,6 +127,59 @@ def test_a_question_or_reaction_is_not_treated_as_a_statement():
     assert _states_something("Every test passes on both databases. Not one failure.")
 
 
+# t_6950a3d0 ------------------------------------------------------------------------
+def test_a_cross_panel_event_that_states_the_line_beats_the_panels_own_ids():
+    # Quan's p1.1 shape at b0ed224: three own ids that merely overlapped filled the citing,
+    # so the event that actually states the line was never cited and the judge accepted the
+    # line against the wrong evidence. The stating event must come first.
+    from canon.episode import support_events
+
+    line = "A ghost from a halfway version. The final runs replaced it, and were checked."
+    pool = {
+        "own1": "Kensei: the version was checked before we moved on.",
+        "own2": "Kensei: a ghost of an earlier draft.",
+        "own3": "Kensei: the halfway point of the work.",
+        "stating": (
+            "Kensei: the bd1a001 pair is Handoff 2's intermediate commit, superseded by "
+            "the final runs, which replaced it."
+        ),
+    }
+    ids, blocks = support_events(line, ["own1", "own2", "own3"], pool, list(pool))
+    assert ids[0] == "stating"
+    assert "bd1a001" in blocks
+
+
+def test_an_own_id_that_says_nothing_about_the_line_is_not_cited():
+    from canon.episode import support_events
+
+    line = "The nine-run set finished cleanly."
+    pool = {
+        "own1": "Quan will re-check the results tomorrow.",
+        "stating": "Kensei: the nine-run set finished cleanly at 11:01.",
+    }
+    ids, _ = support_events(line, ["own1"], pool, list(pool))
+    assert ids == ["stating"]
+
+
+def test_a_line_whose_cited_evidence_shares_nothing_is_refused_before_the_judge():
+    judge = Accepting()
+    gate = ClaimGate(judge, cast=("Kensei", "Sahil"), meaning=True)
+    verdict = gate.check(
+        "The rocket garden sailed over the moonlit harbour.",
+        "Kensei: nothing pushed, nothing running. Quan will re-check tomorrow.",
+        layer="dialogue",
+    )
+    assert not verdict.supported
+    assert judge.calls == 0  # fail closed without paying for the model
+    # A line the evidence does speak to still reaches the judge.
+    assert gate.check(
+        "The checker is broken, so the code was fine.",
+        "Kensei: the checker is broken for this repo; the code itself is fine.",
+        layer="dialogue",
+    ).supported
+    assert judge.calls == 1
+
+
 
 # QAR-M2-07 ------------------------------------------------------------------------
 def test_page_layout_keeps_lettering_readable():

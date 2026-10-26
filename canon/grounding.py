@@ -133,6 +133,19 @@ def _normalise(text: str) -> str:
     return " ".join(text.lower().split())
 
 
+_QUESTION_RE = re.compile(r"[^.!?]*\?")
+
+
+def statement_content_terms(line: str, *, allow: Iterable[str] = ()) -> list[str]:
+    """Content words of what a line *asserts* (its questions removed).
+
+    A question or a lone reaction asserts nothing and needs no source. Two or more
+    content words outside a question mean the line states something a cited event must
+    back (t_6950a3d0).
+    """
+    return content_terms(_QUESTION_RE.sub(" ", line or ""), allow=allow)
+
+
 def content_terms(line: str, *, allow: Iterable[str] = ()) -> list[str]:
     """Content words in a line that must be backed by evidence."""
     allowed = {item.lower() for item in allow} | STOPWORDS | REGISTER
@@ -603,6 +616,18 @@ class ClaimGate:
         if report.unbacked:
             detail = ", ".join(f"{claim.kind}:{claim.text}" for claim in report.unbacked[:4])
             return ClaimVerdict(False, f"unbacked {detail}", report)
+        if layer == "dialogue" and self.meaning:
+            # t_6950a3d0 (Quan): meaning mode drops the vocabulary floor, so a statement
+            # whose cited evidence says nothing it says reached a lenient judge and was
+            # accepted. A statement now needs at least one shared content word with its
+            # cited events before the model is asked; questions and reactions do not.
+            mine = statement_content_terms(line, allow=self.allow)
+            if len(mine) >= 2:
+                shared = set(mine) & set(content_terms(evidence_text or "", allow=self.allow))
+                if not shared:
+                    return ClaimVerdict(
+                        False, "no cited evidence states this (no shared content word)", report
+                    )
 
         terms = None
         if layer == "caption":

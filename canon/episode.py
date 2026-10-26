@@ -495,16 +495,59 @@ def _is_generic(line: str, evidence_text: str, caption: str) -> bool:
 _QUESTION_RE = re.compile(r"[^.!?]*\?")
 
 
+def support_events(
+    text: str,
+    own_ids: Sequence[str],
+    line_pool: Mapping[str, str],
+    order: Sequence[str],
+) -> tuple[list[str], str]:
+    """The events that state what a line says, and their evidence blocks.
+
+    The line is judged against exactly these events and cites exactly these ids, so a true
+    fact from a different event cannot hide behind the panel's own ids.
+
+    t_6950a3d0 (Quan): the events that *state* the line win over the panel's own ids. The
+    earlier version pre-filled up to three own ids that merely overlapped, which crowded
+    out the cross-panel event that actually stated the line; the judge then saw the wrong
+    evidence and a true line was cited against it. Ranking comes first now, and an own id
+    joins only if it clears the same support bar and there is room.
+    """
+    from canon.grounding import content_terms
+
+    terms = {t[:6] for t in content_terms(text, allow=())}
+
+    def overlap(event_id: str) -> int:
+        return len(terms & {t[:6] for t in content_terms(line_pool.get(event_id, ""), allow=())})
+
+    ranked = sorted(line_pool, key=lambda e: (-overlap(e), order.index(e)))
+    best = overlap(ranked[0]) if ranked else 0
+    # An event sharing only a stray word does not state the line: keep events whose
+    # overlap is at least half the best one (takeover tightening).
+    floor = max(1, (best + 1) // 2)
+    chosen: list[str] = []
+    for e in ranked:
+        if len(chosen) >= 3 or overlap(e) < floor:
+            break
+        chosen.append(e)
+    for e in own_ids:
+        if len(chosen) >= 3:
+            break
+        if e in line_pool and overlap(e) >= floor and e not in chosen:
+            chosen.append(e)
+    chosen.sort(key=lambda e: -overlap(e))
+    blocks = "\n\n".join(" ".join(line_pool[e].split()) for e in chosen)
+    return chosen, blocks
+
+
 def _states_something(line: str) -> bool:
     """True when the line asserts something a source must back (QAR-M2-01).
 
     Questions are removed first; a lone reaction word ("Understood.", "Okay.") is not a
     statement. Two or more content words outside a question are.
     """
-    from canon.grounding import content_terms
+    from canon.grounding import statement_content_terms
 
-    statement = _QUESTION_RE.sub(" ", line or "")
-    return len(content_terms(statement, allow=())) >= 2
+    return len(statement_content_terms(line, allow=())) >= 2
 
 
 class EpisodeRefused(Exception):
@@ -869,29 +912,7 @@ def plan_episode(
     line_pool = {e: str(evidence_map.get(e, "")) for e in story_event_ids if str(evidence_map.get(e, "")).strip()}
 
     def line_support(text: str, own_ids: Sequence[str]) -> tuple[list[str], str]:
-        """The events that state what a line says, and their evidence blocks.
-
-        The line is judged against exactly these events and cites exactly these ids, so a
-        true fact from a different event can no longer hide behind the panel's own ids.
-        """
-        from canon.grounding import content_terms
-
-        terms = {t[:6] for t in content_terms(text, allow=())}
-        def overlap(event_id: str) -> int:
-            return len(terms & {t[:6] for t in content_terms(line_pool.get(event_id, ""), allow=())})
-        ranked = sorted(line_pool, key=lambda e: (-overlap(e), story_event_ids.index(e)))
-        best = overlap(ranked[0]) if ranked else 0
-        # An event that shares only a stray word with the line does not state it: keep
-        # events whose overlap is at least half the best one (takeover tightening).
-        floor = max(1, (best + 1) // 2)
-        chosen = [e for e in own_ids if e in line_pool and overlap(e) >= floor]
-        for e in ranked:
-            if len(chosen) >= 3 or overlap(e) < floor:
-                break
-            if e not in chosen:
-                chosen.append(e)
-        blocks = "\n\n".join(" ".join(line_pool[e].split()) for e in chosen)
-        return chosen, blocks
+        return support_events(text, own_ids, line_pool, story_event_ids)
 
     inserts = 0
     for spec in panel_specs:

@@ -74,6 +74,35 @@ path. `canon/providers.py` holds the four implementations — copy the shape, po
 whatever image model your harness exposes, and register it as a source. Details in
 `docs/IMAGE-SOURCES.md`.
 
+## Other agents
+
+`hermes reel plan --harness claude-code,codex,opencode,pi,jsonl` reads other agents' local
+logs read-only, alone or alongside Hermes.
+
+- `claude-code`, `codex`, `opencode` have built-in readers.
+- `jsonl` covers anything that writes JSON lines, described by a small mapping:
+
+```json
+{
+  "name": "my-agent",
+  "glob": "~/.my-agent/sessions/*/*.jsonl",
+  "role": "message.role",
+  "text": "message.content",
+  "timestamp": "timestamp",
+  "session": "sessionId",
+  "thread": "cwd"
+}
+```
+
+`thread` matters: a log file is a session, but a story needs a *thread* — the work the
+chapter is about. Without it, a harness that starts a session per invocation produces
+thousands of three-message threads and no story can form. Claude Code groups by project
+folder automatically.
+
+Tested on real logs: Claude Code (a real 6-panel episode), and `jsonl` with the mapping
+above. Codex and Pi are read-only tested but this machine's corpora are too thin to form a
+story — stated here rather than claimed as working.
+
 ## Styles
 
 55 built-in styles in `styles/`, from clear-line and sumi-e to risograph, ukiyo-e, stained

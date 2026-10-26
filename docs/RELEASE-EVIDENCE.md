@@ -34,8 +34,8 @@ this file is inferred: every line points at a command that was run or a file tha
 
 | Area | State |
 |---|---|
-| `jsonl` / other-harness stories | Parses **21,393 real messages** from a Claude Code log with a mapping, but `plan` returns `no arc could be built` and writes no metrics. Filed as a release blocker (t_73a9043f). |
-| `codex` harness | Reads real logs (1 session in 30 days on this machine) and honestly reports no arc. Not proven on a rich corpus. |
+| `jsonl` / other-harness stories | **Fixed 26/10/26.** Claude Code starts a session per invocation (10,475 files, ~2 messages each), so one-session-per-thread gave 10,472 threads and no arc. A thread is now the work, not the process: Claude groups by project folder and a jsonl mapping can name a thread field (`"thread": "cwd"`). Real-log probe: 10,472 threads → 30, arcs 0 → 2. A real `hermes reel plan --harness jsonl` now returns **1 episode, 6 panels, exit 0**. |
+| `codex` harness | Reads **633 real log files (2,552 messages)** read-only, but this machine's Codex corpus is prompt-only and yields no arc. Honest limitation, not a support claim. |
 | `pi` harness | No Pi logs exist on this machine; fixture-only. Documented as untested. |
 | Paid image sources | `openai`, `gemini`, `fal`: request shapes implemented, live calls reached billing and stopped (no credit). **Mapped, not tested.** |
 | 53 of 55 styles | Never rendered. Marked experimental; the render refuses them unless opted in. |

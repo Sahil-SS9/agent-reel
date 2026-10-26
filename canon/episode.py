@@ -665,6 +665,26 @@ def _supporting_event_ids(caption: str, pool: Mapping[str, str]) -> tuple[str, .
     return tuple(event_id for event_id, score in scores.items() if score == best)
 
 
+def _verbatim_support(caption: str, pool: Mapping[str, str]) -> tuple[str, ...]:
+    """Events whose text carries the caption's own figures or word-numbers (t_6950a3d0).
+
+    ``_supporting_event_ids`` scores whole-word overlap, so a caption's most distinctive
+    tokens ("23:16", "twelve") are lost among generic words like "test" and "run": the
+    caption then cites events that merely mention tests. A figure or word-number that
+    appears verbatim in an event is that event's claim, so it is cited first.
+    """
+    from canon.grounding import _NUMBER_WORD_RE, figures_in
+
+    tokens = list(dict.fromkeys(figures_in(caption) + [m.group(0) for m in _NUMBER_WORD_RE.finditer(caption)]))
+    out: list[str] = []
+    for token in tokens:
+        needle = token.lower()
+        for event_id, text in pool.items():
+            if needle in (text or "").lower() and event_id not in out:
+                out.append(event_id)
+    return tuple(out)
+
+
 def _policy_caption(
     spec: Mapping[str, Any],
     *,
@@ -1141,7 +1161,8 @@ def plan_episode(
                 caption_source_event_ids=(
                     tuple(
                         dict.fromkeys(
-                            event_ids
+                            _verbatim_support(caption, episode_pool)
+                            + event_ids
                             + _supporting_fact_ids(caption, facts)
                             + _supporting_event_ids(caption, episode_pool)
                         )

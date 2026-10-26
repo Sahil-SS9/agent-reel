@@ -161,6 +161,19 @@ def test_an_own_id_that_says_nothing_about_the_line_is_not_cited():
     assert ids == ["stating"]
 
 
+def test_a_caption_cites_the_event_carrying_its_own_figure_or_number_word():
+    # Quan's p1.1 plan, p5: "23:16. All twelve test runs complete." cited five events that
+    # only mention tests; the event with 23:16 and twelve was never cited.
+    from canon.episode import _verbatim_support
+
+    pool = {
+        "generic1": "Kensei: the test runs are complete and reviewed.",
+        "generic2": "Kensei: twelve arms are cheap to run.",
+        "stating": "Kensei: all twelve arms done at 23:16 and four evidence files written.",
+    }
+    assert _verbatim_support("23:16. All twelve test runs complete.", pool)[0] == "stating"
+
+
 def test_a_line_whose_cited_evidence_shares_nothing_is_refused_before_the_judge():
     judge = Accepting()
     gate = ClaimGate(judge, cast=("Kensei", "Sahil"), meaning=True)

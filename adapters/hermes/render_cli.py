@@ -21,8 +21,11 @@ from typing import Any, Callable, Mapping
 
 REPO = Path(__file__).resolve().parents[2]
 #: QAR-M2-07: chapter pages show two panels per row (each ~half the page), so balloon text
-#: is drawn 1.4x larger than on a single full-width panel.
-PAGE_FONT_SCALE = 1.4
+#: is drawn larger than on a single full-width panel. 1.4x still failed the real-page check
+#: on 26/10/26 (dialogue ~5-7.5pt on a 2400x3472 page: legible only after zooming), so the
+#: factor is set from the measured on-page size instead of the panel size: 2.0x puts the
+#: smallest line near 12pt on an A4 page.
+PAGE_FONT_SCALE = 2.0
 
 
 def _data_root(explicit: str, default_dir: Callable[[], Path]) -> Path:

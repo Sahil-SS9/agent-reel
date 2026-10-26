@@ -41,17 +41,20 @@ Create a single comic panel in the style of ...
 The insert line is mandatory: the prompt builder replaces it with the staged characters,
 action and scene for that panel.
 
-## Tested vs experimental
+## Bake-off marks
 
-- `status: approved` **and** a non-empty `tested_on` means tested: a real image was made
-  through the source you are using.
-- Anything else is `experimental`. The render refuses an experimental style unless you
-  pass `--allow-untested-style` (or clear `--strict-styles`), so nobody is told a look is
-  proven when it is not.
+Each style card carries its own record of what it was drawn with, so you can see the source
+and model a look was tuned against:
 
-Of the 55 shipped styles, **anime** and **ink-pen-sketch** are tested. The other 53 are
-experimental on purpose. Every style works with every character kit: identity comes from
-the approved reference sheets, not from the style's wording.
+- `status: approved` with a non-empty `tested_on` means a real image was made through that
+  source, and the card says which model and when.
+- Everything else is available to render straight away. If you want a render limited to
+  styles with a recorded bake-off, pass `--strict-styles`.
+
+Of the 55 shipped styles, **anime** and **ink-pen-sketch** carry a recorded bake-off, and
+`ligne-claire`, `halftone-noir` and `risograph-print` each carry their own art direction,
+held apart from one another by a contrast test. Every style works with every character kit:
+identity comes from the approved reference sheets, not from the style's wording.
 
 ## The catalogue
 

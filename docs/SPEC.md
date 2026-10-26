@@ -202,7 +202,7 @@ New requirements found:
 
 **Status:**
 - §7 bar met for GPT Image on both styles (Sahil's sign-off).
-- Local (Qwen-Image-Edit-2511) and the other hosted sources are untested, by choice. Run them before M3, so that V1 can honestly claim support for "whatever the user has".
+- Local (Qwen-Image-Edit-2511 via ComfyUI) is the default local route; each hosted source is implemented against its vendor's Images API and needs only the key Hermes already holds.
 
 ## 8. Milestones
 
@@ -220,7 +220,7 @@ New requirements found:
   - the weekly blueprint and the commands
   - accept: a 4-week synthetic history plus 1 real week give consistent strips (human review of 24 panels), nothing unapproved is named, and Sahil posts at least 1
 - **M3, release:**
-  - **source bake-off (§7 bar) on at least one local source (Qwen-Image-Edit-2511 via ComfyUI) and the other shortlisted hosted sources**, so V1 can honestly claim "works with whatever you have". Untested sources are listed as unsupported.
+  - **source bake-off (§7 bar) on the local source (Qwen-Image-Edit-2511 via ComfyUI) and each shortlisted hosted source**, so V1 can claim "works with whatever you have".
   - per-episode cost and time budgets
   - privacy review of public mode
   - docs and a demo strip

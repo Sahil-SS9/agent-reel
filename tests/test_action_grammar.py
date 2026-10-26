@@ -185,3 +185,24 @@ def test_kit_create_loads_host_tools_before_asking_for_an_image(tmp_path, monkey
     except SystemExit:
         pass
     assert calls == ["prepared"]
+
+
+def test_a_long_line_is_split_into_balloons_that_fit():
+    """t_385b3e3e: two owner lines (75 and 84 chars) had no pocket on the dense page."""
+    from canon.episode import MAX_BALLOON_CHARS, split_for_balloons
+
+    for text in (
+        "So the reviewer checks the fixes, and the speed verdict waits on you. Thrilling.",
+        "Noted, forgiven. Now simpler still, and write me the reply for the reviewer.",
+    ):
+        pieces = split_for_balloons(text)
+        assert len(pieces) >= 2
+        assert all(len(piece) <= MAX_BALLOON_CHARS + 12 for piece in pieces)
+        # nothing invented or lost: the words survive in order
+        assert " ".join(pieces).split() == " ".join(text.split()).split()
+
+
+def test_a_short_line_is_left_alone():
+    from canon.episode import split_for_balloons
+
+    assert split_for_balloons("Eight contenders. Lovely.") == ["Eight contenders. Lovely."]

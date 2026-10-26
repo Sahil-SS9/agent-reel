@@ -286,6 +286,8 @@ class GroundingReport:
     lines: int = 0
     lines_supported: int = 0
     lines_converted: int = 0
+    #: 26/10/26: a line too long for a balloon at page size is split, not dropped.
+    lines_split: int = 0
     lines_dropped: int = 0
     reasons: list[str] = field(default_factory=list)
 
@@ -304,6 +306,7 @@ class GroundingReport:
             "lines": self.lines,
             "lines_supported": self.lines_supported,
             "lines_converted": self.lines_converted,
+            "lines_split": self.lines_split,
             "lines_dropped": self.lines_dropped,
             "grounded_rate": round(self.rate, 4),
             "reasons": self.reasons[:20],

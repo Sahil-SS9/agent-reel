@@ -708,6 +708,47 @@ def _states_something(line: str) -> bool:
     return len(statement_content_terms(line, allow=())) >= 2
 
 
+#: Characters that fit one balloon at the page font before it has no pocket on a dense
+#: panel (measured on the 20-panel page: 70-char lines placed, 75-84 char lines did not).
+MAX_BALLOON_CHARS = 70
+
+#: Where a long line may be cut, best first: sentence end, then clause, then conjunction.
+_BALLOON_BREAKS = (". ", "? ", "! ", "; ", ", ", " and ", " but ", " so ")
+
+
+def split_for_balloons(text: str, budget: int = MAX_BALLOON_CHARS) -> list[str]:
+    """Split one spoken line into balloons that fit, keeping the words intact.
+
+    Nothing is invented, reordered or dropped: the pieces concatenate back to the original
+    text (spacing aside). Only a line with no usable break is left long, and the letterer
+    then refuses it visibly rather than misplacing it.
+    """
+    line = " ".join(str(text or "").split())
+    if len(line) <= budget:
+        return [line]
+    pieces: list[str] = []
+    rest = line
+    while len(rest) > budget:
+        window = rest[: budget + 1]
+        cut = -1
+        for mark in _BALLOON_BREAKS:
+            at = window.rfind(mark)
+            if at > 0:
+                cut = at + (len(mark) if mark[0] in ".?!" else len(mark) - 1)
+                break
+        if cut <= 0:
+            space = window.rfind(" ")
+            cut = space if space > 0 else budget
+        piece = rest[:cut].strip()
+        if not piece:
+            break
+        pieces.append(piece)
+        rest = rest[cut:].strip()
+    if rest:
+        pieces.append(rest)
+    return pieces
+
+
 class EpisodeRefused(Exception):
     """The story cannot be told honestly; the pipeline records the reason and moves on."""
 
@@ -1322,8 +1363,18 @@ def plan_episode(
                 duplicates.append(line)
                 report.lines_dropped += 1
                 continue
-            seen_text.add(key)
-            lines.append(line)
+            # 26/10/26: a balloon that fits the page font holds about this much. A longer
+            # line has no pocket and is dropped by the letterer, which reads as missing
+            # dialogue. Split it into balloons the same speaker says in sequence instead.
+            pieces = split_for_balloons(candidate, MAX_BALLOON_CHARS)
+            if len(pieces) > 1:
+                report.lines_split += 1
+            for piece in pieces:
+                piece_key = piece.lower().strip()
+                if not piece_key or piece_key in seen_text:
+                    continue
+                seen_text.add(piece_key)
+                lines.append(Line(speaker=speaker, text=piece, source_event_ids=line_ids))
         if not lines and duplicates:
             lines.append(duplicates[0])
         if not caption and not lines:

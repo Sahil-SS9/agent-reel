@@ -16,17 +16,22 @@ hermes reel plan   --days 30 --episodes 3 --format chapter
 
 ## See it
 
-Three real panels, drawn from the author's own week, in three of the 55 styles. The words
-are what actually happened; the pictures are the licence the tool takes with them.
+Three real pages, drawn from the author's own history, in three of the 55 styles. Four story
+panels each, plus wordless filler panels the way a printed comic has them. The words are what
+actually happened; the pictures are the licence the tool takes with them.
 
-| Noir webtoon | Ukiyo-e folktale | Cyberpunk HUD |
+| Ink and crosshatch | Painted storybook | Cyberpunk HUD |
 |---|---|---|
-| ![Noir webtoon panel](docs/examples/01-noir-webtoon.jpg) | ![Ukiyo-e folktale panel](docs/examples/02-ukiyo-e-folktale.jpg) | ![Cyberpunk HUD panel](docs/examples/03-cyberpunk-hud.jpg) |
+| ![Ink page](docs/examples/example-1-ink.jpg) | ![Storybook page](docs/examples/example-2-storybook.jpg) | ![Cyberpunk page](docs/examples/example-3-cyberpunk.jpg) |
+| "The Run Stopped On Purpose" | "Eight Fixes, Nothing Pushed" | "Calling Bullshit on LCM-X Benchmarks" |
 
-The stories behind these three: a background run that looked dead but had been stopped on
-purpose ("False Alarms, One Judgement Call"), the speech-bubble placement fight ("Pointing
-the Bubbles Right"), and a rival's benchmark numbers ("Calling Bullshit on LCM-X
-Benchmarks"). Each line in the script carries the id of the message that states it.
+Each of those came from a different session, with a different cast: a background run that
+looked dead because it had been killed deliberately; eight rounds of review fixes that were
+ready and not pushed; a rival's benchmark numbers. Every line in the script carries the id of
+the message that states it, and the villain, world and art style are drawn per chapter.
+
+These are unretouched renderer output, not retouched marketing art: a panel can come back
+with a flaw, and the run reports it rather than hiding it.
 
 ## What it does
 

@@ -82,6 +82,27 @@ ROLE_ACTION = {
 }
 
 
+def frame_villain(frame: Mapping[str, Any] | None) -> tuple[str, str] | None:
+    """The chapter's villain, named from the deck archetype.
+
+    t_ae4a9485: the director used to invent a new villain name every render
+    ("the even swap", "the swapping", "the twin-handed thief", "The Ledger Hydra"), so the
+    reference sheet, the prompts and the art changed every time and the lettering had to
+    chase a moving target. The name now comes from the deck, so the same chapter draws the
+    same villain and the existing sheet is reused instead of paid for again.
+    """
+    if not frame:
+        return None
+    villain = frame.get("villain")
+    if not isinstance(villain, Mapping):
+        return None
+    key = str(villain.get("key") or "").strip()
+    look = str(villain.get("look") or villain.get("label") or "").strip()
+    if not key or not look:
+        return None
+    return key.replace("-", " ").title(), look
+
+
 def _frame_brief(frame: Mapping[str, Any] | None) -> str:
     """A one-line deck brief for the director (empty when there is no deck)."""
     if not frame:
@@ -459,6 +480,12 @@ def direct(
             villain_presence=str(item.get("villain_presence") or "absent"),
             shot=str(item.get("shot") or ""), angle=str(item.get("angle") or ""),
         )
+    fixed_villain = frame_villain(frame)
+    if fixed_villain is not None:
+        name, look = fixed_villain
+        if (name, look) != (treatment.villain_name, treatment.villain_look):
+            treatment.repairs.append("villain name taken from the chapter frame (deterministic)")
+        treatment.villain_name, treatment.villain_look = name, look
     model_fillers = _model_fillers(answer.get("fillers"), treatment, ir)
     if model_fillers is None:
         treatment.fillers = _rule_fillers(treatment, ir)

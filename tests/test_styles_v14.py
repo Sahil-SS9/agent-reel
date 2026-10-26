@@ -52,3 +52,22 @@ def test_fallback_sheet_must_be_approved(tmp_path):
     assert any("'anime' is not approved" in p for p in problems)
     approvals.approve(kits["sahil"], "anime")
     assert clear_to_render(style=styles["saga-noir"], kits=[kits["sahil"]], approvals=approvals, public=False, allow_untested_style=True) == []
+
+
+def test_the_style_catalogue_matches_the_idea_deck_scale():
+    """Sahil, 26/10/26: the style library should be as broad as the idea deck (50+)."""
+    from pathlib import Path
+
+    from canon.assets import load_styles
+
+    styles = load_styles(Path("styles"))
+    assert len(styles) >= 50, f"only {len(styles)} styles"
+    # Every raw-template style must carry the insert mark, or the loader rejects it.
+    for key, style in styles.items():
+        if style.raw_template:
+            assert "[INSERT CHARACTERS, ACTION AND SCENE HERE]" in style.raw_template, key
+        else:
+            assert style.prompt_block.strip(), key
+    # The untested ones are refused unless the caller opts in - that is the safety net.
+    untested = [k for k, s in styles.items() if not s.tested]
+    assert len(untested) >= 40, "expected most styles to be honestly marked untested"

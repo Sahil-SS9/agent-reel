@@ -115,28 +115,44 @@ def letter_panel(
             head = [width * 0.02, height * 0.02, width * 0.08, height * 0.12]
         hx, hy = (head[0] + head[2]) / 2, head[1]
         best = None
-        for size in (38, 34, 30):
-            font = _font(BODY_FONT, size * scale)
-            for wrap in (14, 18, 22, 28, 34):
-                wrapped = textwrap.fill(text, wrap)
-                tb = draw.multiline_textbbox((0, 0), wrapped, font=font, spacing=4, align="center")
-                tw, th = tb[2] - tb[0], tb[3] - tb[1]
-                bw, bh = int(tw * 1.32 + 50 * scale), int(th * 1.45 + 40 * scale)
-                stride = max(4, int(step * scale))
-                for x in range(10, max(11, width - bw - 10), stride):
-                    for y in range(10, max(11, height - bh - 10), stride):
-                        if prev_top is not None and not (
-                            y >= prev_top + 30 * scale or (abs(y - prev_top) <= 60 * scale and x >= prev_right - 20 * scale)
-                        ):
-                            continue
-                        box = [x, y, x + bw, y + bh]
-                        if any(_inter(box, b) > 0 for b in blocked + placed):
-                            continue
-                        in_free = sum(_inter(box, f) for f in free_px) / (bw * bh)
-                        dist = math.hypot(x + bw / 2 - hx, (y + bh - hy) * 1.3)
-                        score = 1.6 * dist + 900 * (1 - min(in_free, 1)) + (400 if y + bh > hy + 40 * scale else 0) + 8 * (38 - size)
-                        if best is None or score < best[0]:
-                            best = (score, box, wrapped, font, bw, bh)
+        # M2 lettering fix (26/10/26): 7 of 10 balloons were dropped on a real chapter page
+        # because the strict pass refuses any overlap with a keep-out box, and the vision
+        # check returns enough keep-outs to blanket a dense panel. Placement now relaxes in
+        # tiers instead of losing the line: faces are never covered; art first, then other
+        # balloons, then a smaller size only as the last resort.
+        head_blocked = [_pad(box, 18 * scale) for box in head_px.values()]
+        attempts = (
+            (blocked, (38, 34, 30)),
+            (head_blocked + [_pad(_px(box, width, height), 10 * scale) for box in keep_out], (38, 34, 30)),
+            (head_blocked, (38, 34, 30, 26)),
+        )
+        for blockers, sizes in attempts:
+            if best is not None:
+                break
+            for size in sizes:
+                font = _font(BODY_FONT, size * scale)
+                for wrap in (14, 18, 22, 28, 34):
+                    wrapped = textwrap.fill(text, wrap)
+                    tb = draw.multiline_textbbox((0, 0), wrapped, font=font, spacing=4, align="center")
+                    tw, th = tb[2] - tb[0], tb[3] - tb[1]
+                    bw, bh = int(tw * 1.32 + 50 * scale), int(th * 1.45 + 40 * scale)
+                    if bw >= width - 20 or bh >= height - 20:
+                        continue
+                    stride = max(4, int(step * scale))
+                    for x in range(10, max(11, width - bw - 10), stride):
+                        for y in range(10, max(11, height - bh - 10), stride):
+                            if prev_top is not None and not (
+                                y >= prev_top + 30 * scale or (abs(y - prev_top) <= 60 * scale and x >= prev_right - 20 * scale)
+                            ):
+                                continue
+                            box = [x, y, x + bw, y + bh]
+                            if any(_inter(box, b) > 0 for b in blockers + placed):
+                                continue
+                            in_free = sum(_inter(box, f) for f in free_px) / (bw * bh)
+                            dist = math.hypot(x + bw / 2 - hx, (y + bh - hy) * 1.3)
+                            score = 1.6 * dist + 900 * (1 - min(in_free, 1)) + (400 if y + bh > hy + 40 * scale else 0) + 8 * (38 - size)
+                            if best is None or score < best[0]:
+                                best = (score, box, wrapped, font, bw, bh)
         if best is None:
             report.unplaced.append(f"{speaker}: {text}")
             continue

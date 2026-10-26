@@ -51,6 +51,13 @@ class StyleCard:
     #: V14: a raw prompt file (style.md) with "[INSERT CHARACTERS, ACTION AND SCENE HERE]".
     raw_template: str = ""
     summary: str = ""
+    #: What this style owns (empty = nothing is added, never a shared default look):
+    #: the world its stories happen in, how its panels are composed, what its impact frame
+    #: looks like, and how its lettering is drawn (see canon.letterer.LetterStyle).
+    world: str = ""
+    composition: str = ""
+    impact: str = ""
+    lettering: Mapping[str, str] = field(default_factory=dict)
 
     @property
     def tested(self) -> bool:
@@ -126,7 +133,21 @@ def _style(path: Path, source: str) -> StyleCard:
         licence=str(data["licence"]),
         status=str(data["status"]),
         source=source,
+        world=str(data.get("world", "")).strip(),
+        composition=str(data.get("composition", "")).strip(),
+        impact=str(data.get("impact", "")).strip(),
+        lettering=_lettering(data.get("lettering")),
     )
+
+
+#: The lettering keys a style may set. Anything else is ignored.
+LETTERING_KEYS = ("balloon", "balloon_fill", "comms_fill", "caption_fill", "ink", "outline", "font", "caption_shape")
+
+
+def _lettering(raw: Any) -> dict[str, str]:
+    if not isinstance(raw, dict):
+        return {}
+    return {key: str(raw[key]).strip() for key in LETTERING_KEYS if str(raw.get(key, "")).strip()}
 
 
 INSERT_MARK = "[INSERT CHARACTERS, ACTION AND SCENE HERE]"
@@ -173,6 +194,10 @@ def _style_md(path: Path, source: str) -> StyleCard:
         source=source,
         raw_template=body.strip(),
         summary=str(meta.get("summary") or ""),
+        world=str(meta.get("world") or "").strip(),
+        composition=str(meta.get("composition") or "").strip(),
+        impact=str(meta.get("impact") or "").strip(),
+        lettering=_lettering({key: meta.get(f"lettering_{key}") for key in LETTERING_KEYS}),
     )
 
 

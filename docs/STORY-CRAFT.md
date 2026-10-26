@@ -112,3 +112,20 @@ happened (`canon.arcs.classify_arc_type`) and changes both the writing and the p
   training-montage draw no creature at all, even if the model or the idea deck offers one.
 - The default shape is byte-for-byte what it was, so existing chapters do not change.
 - The classifier is deliberately conservative: one stray word never changes the shape.
+
+## A style owns its look
+
+Under every style there used to be one shared look: a cyber-city default world, a "dynamic
+comic-book, cinematic energy" line on every prompt, speed lines on every climax, and the same
+white ellipse balloons and yellow caption box. Different styles therefore came out alike.
+The shared layer is gone. A style card may now set, in `style.json` or the `style.md`
+frontmatter:
+
+| Key | What it owns |
+| --- | --- |
+| `world` | where its stories happen (used when the idea deck names no world) |
+| `composition` | how its panels are framed, appended to every panel prompt |
+| `impact` | its climax frame (the neutral default asks for no genre effects) |
+| `lettering` / `lettering_*` | balloon shape (`ellipse`, `rounded`, `rect`), balloon, comms and caption fills, ink colour, outline weight, font (`comic`, `display`), caption shape |
+
+A style that sets none of these adds nothing, and the lettering is drawn exactly as before.

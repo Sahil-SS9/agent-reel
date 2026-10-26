@@ -233,10 +233,9 @@ def _frame_brief(frame: Mapping[str, Any] | None, *, villainless: bool = False) 
     return brief
 
 
-WORLD_DEFAULT = (
-    "a neon-lit command deck high above a rain-soaked cyber city, its walls lined with "
-    "glowing server towers"
-)
+#: Used only when neither the style nor the deck names a world. Deliberately plain: a style
+#: owns its world (StyleCard.world), the director does not impose a sci-fi one.
+WORLD_DEFAULT = "the place where the work happens, a desk and a screen in an ordinary lit room"
 
 _TEXT_REQUEST = re.compile(r"(\"[^\"]*\"|'[^']*'|\b(sign|banner|label|screen|text|words?|caption)s? (that )?(says?|reads?|showing)\b[^,.;]*)", re.I)
 
@@ -460,10 +459,11 @@ def no_text(value: str) -> str:
 
 
 def _rules(
-    ir: Mapping[str, Any], story_text: str, *, frame: Mapping[str, Any] | None = None, arc_type: str = ""
+    ir: Mapping[str, Any], story_text: str, *, frame: Mapping[str, Any] | None = None, arc_type: str = "",
+    world: str = "",
 ) -> Treatment:
     name, look = pick_villain(story_text)
-    world = WORLD_DEFAULT
+    world = world or WORLD_DEFAULT
     villainless = arc_type in NO_VILLAIN_TYPES
     if frame:
         villain = frame.get("villain") or {}
@@ -544,7 +544,7 @@ def _repair(treatment: Treatment, ir: Mapping[str, Any]) -> Treatment:
             setattr(item, field_name, value[:160])
         previous = (item.shot, item.angle)
     treatment.villain_look = no_text(treatment.villain_look)
-    treatment.world = no_text(treatment.world) or WORLD_DEFAULT
+    treatment.world = no_text(treatment.world) or WORLD_DEFAULT  # callers pass a style world through `direct`
     for filler in treatment.fillers:
         filler.shot = filler.shot if filler.shot in SHOTS else "extreme-long"
         filler.angle = filler.angle if filler.angle in ANGLES else "high"
@@ -575,8 +575,12 @@ def direct(
     tone: str = "",
     frame: Mapping[str, Any] | None = None,
     arc_type: str = "",
+    world: str = "",
 ) -> Treatment:
     """A visual treatment for the episode: model when available, rules otherwise.
+
+    ``world`` is the style's own setting (StyleCard.world); it replaces the plain default
+    when the idea deck does not name one.
 
     ``arc_type`` is the shape of the story. The default shape (or "") keeps the original
     villain treatment; pivot and training-montage have no villain at all.
@@ -589,7 +593,7 @@ def direct(
     villainless = arc_type in NO_VILLAIN_TYPES
     frame_brief = _frame_brief(frame, villainless=villainless)
     if complete_json is None:
-        return _with_tone(_repair(_rules(ir, story_text, frame=frame, arc_type=arc_type), ir), tone)
+        return _with_tone(_repair(_rules(ir, story_text, frame=frame, arc_type=arc_type, world=world), ir), tone)
     panels = [
         {"id": p.get("id"), "role": p.get("role"), "caption": p.get("caption", ""),
          "lines": [f"{l.get('speaker')}: {l.get('text')}" for l in p.get("lines", [])],
@@ -598,7 +602,9 @@ def direct(
     ]
     try:
         answer = complete_json(
-            prompt=DIRECTOR_PROMPT + ARC_DIRECTION.get(arc_type, ""),
+            prompt=DIRECTOR_PROMPT + ARC_DIRECTION.get(arc_type, "") + (
+                f" The art style's own world is: {world}. Stay inside it." if world else ""
+            ),
             payload={"title": ir.get("logline", ""), "story": story_text[:3000], "panels": panels,
                      "visual_tone": tone, "frame": frame_brief,
                      **({"story_shape": arc_type} if arc_type else {})},
@@ -611,7 +617,7 @@ def direct(
             stage="episode.director",
         )
     except Exception:  # noqa: BLE001 - a missing director never blocks a render
-        fallback = _with_tone(_repair(_rules(ir, story_text, arc_type=arc_type), ir), tone)
+        fallback = _with_tone(_repair(_rules(ir, story_text, arc_type=arc_type, world=world), ir), tone)
         fallback.repairs.append("director model unavailable; rules used")
         return fallback
     raw_villain = answer.get("villain")
@@ -620,7 +626,7 @@ def direct(
     treatment = Treatment(
         villain_name="" if villainless else str(villain.get("name") or default_name)[:40],
         villain_look="" if villainless else str(villain.get("look") or default_look)[:300],
-        world=str(answer.get("world") or WORLD_DEFAULT)[:300],
+        world=str(answer.get("world") or world or WORLD_DEFAULT)[:300],
         source="model",
         arc_type=arc_type,
     )

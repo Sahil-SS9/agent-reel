@@ -6,6 +6,14 @@ status: experimental
 tested_on: []
 source: written by the owner (Sahil), 25/10/26
 licence: Prompt text written for the owner's style skills; MIT in this repo.
+world: a mountain village of paper lanterns, wooden bridges and mist, with a tea house at the water's edge
+composition: Flat planes of colour, a high horizon, bold outlines and cloud bands between the layers of the scene.
+impact: Full-bleed impact frame: a great wave or gust of wind sweeping the whole scene, drawn as a woodblock print.
+lettering_balloon: rounded
+lettering_balloon_fill: #f6ecd2
+lettering_caption_fill: #e9d9ae
+lettering_ink: #2b1d14
+lettering_caption_shape: rounded
 ---
 
 Create an extraordinary, intricately detailed fantasy illustration depicting **[INSERT CHARACTERS, ACTION AND SCENE HERE]**.

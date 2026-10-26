@@ -6,7 +6,12 @@ Last updated 25/10/2026. Branch `m2-kensei` holds M2; `main` holds the accepted 
 
 - **M1 (story engine):** accepted by Quan (t_13eb5c20). Merged to `main`.
 - **M2 (comic V1 + the widened scope):** Quan's re-review at `b0ed224` says it may close on conditions (t_d7d78e52, `QA-REVIEW-M2-v2`). Every gate passed at that exact version. That covers 520 tests, the frozen 24-case safety set, two meaning runs, the bundle and import checks, and plugin validate and doctor.
-- **Installed:** `~/.hermes/plugins/scrollback-reel` is at `b0ed224`, with a clean tree.
+- **Lettering:** Quan conditional pass at 6368f0c (min line 18.9pt against his 15.8pt bar); his two conditions are fixed in 1d79784 (a dead middle tier, and the missing font-floor test).
+- **M3 (variety and continuity), 26/10/26:** built and proven. Two chapters planned back to back in the same folder:
+  - chapter 1 "No Candidate Passes the Rule" - desert relay world, parasite villain, quiet drama, silent regression;
+  - chapter 2 "Make It Fail Before It Airs" - drowned archive world, last-commit villain, survival siege, hidden fault.
+  Same week, same history, different story and different look. Before this, four consecutive runs all told the same "Four Lost" story.
+- **Installed:** `~/.hermes/plugins/scrollback-reel` at the latest commit, with a clean tree.
 
 ## Next, in order
 

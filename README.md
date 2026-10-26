@@ -9,6 +9,20 @@ hermes reel plan   --days 7 --episodes 1 --format chapter
 hermes reel render --plan-dir <data-dir> --episode 1 --style anime
 ```
 
+## See it
+
+Three real panels, drawn from the author's own week, in three of the 55 styles. The words
+are what actually happened; the pictures are the licence the tool takes with them.
+
+| Noir webtoon | Ukiyo-e folktale | Cyberpunk HUD |
+|---|---|---|
+| ![Noir webtoon panel](docs/examples/01-noir-webtoon.jpg) | ![Ukiyo-e folktale panel](docs/examples/02-ukiyo-e-folktale.jpg) | ![Cyberpunk HUD panel](docs/examples/03-cyberpunk-hud.jpg) |
+
+The stories behind these three: a background run that looked dead but had been stopped on
+purpose ("False Alarms, One Judgement Call"), the speech-bubble placement fight ("Pointing
+the Bubbles Right"), and a rival's benchmark numbers ("Calling Bullshit on LCM-X
+Benchmarks"). Each line in the script carries the id of the message that states it.
+
 ## What it does
 
 - **Reads your own history.** Hermes sessions, tool calls and kanban cards become events.

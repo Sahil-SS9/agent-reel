@@ -169,7 +169,7 @@ def book_command(args: argparse.Namespace, default_dir: Callable[[], Path]) -> i
         return 1
     label = "Collected episodes" if args.all else _time.strftime("%B %Y", _time.strptime(month, "%Y-%m"))
     out = Path(args.out).expanduser() if args.out else root / "books" / f"agent-reel-{month}.pdf"
-    report = build_book(episodes, out, title=args.title or "Scrollback Reel", subtitle=label)
+    report = build_book(episodes, out, title=args.title or "Agent Reel", subtitle=label)
     print(f"book: {report['pdf']} ({report['episodes']} episodes, {report['pages']} pages)")
     for name in report["titles"]:
         print(f"  - {name}")
@@ -484,7 +484,7 @@ def render_command(args: argparse.Namespace, *, ctx: Any, default_dir: Callable[
         print(f"no planned episode at {ir_path}; run `hermes reel plan --dry-run` first")
         return 2
     ir = json.loads(ir_path.read_text(encoding="utf-8"))
-    title = ir.get("logline") or "Scrollback Reel"
+    title = ir.get("logline") or "Agent Reel"
     trace_path = plan_dir / f"episode-{args.episode}-trace.json"
     if trace_path.is_file():
         try:

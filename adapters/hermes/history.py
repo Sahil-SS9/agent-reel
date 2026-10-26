@@ -1533,7 +1533,7 @@ def _summary_lines(
     info = source.info()
     counters = source.counters()
     lines: list[str] = []
-    lines.append("Hermes Scrollback Reel \u2014 history summary")
+    lines.append("Agent Reel \u2014 history summary")
     lines.append(f"harness:        {info.harness}")
     lines.append(f"hermes home:    {_display_path(info.root)}")
     lines.append(
@@ -1645,7 +1645,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     _install_signal_cleanup()
     parser = argparse.ArgumentParser(
         prog="python -m adapters.hermes.history",
-        description="Read-only Hermes history adapter for the Scrollback Reel.",
+        description="Read-only Hermes history adapter for Agent Reel.",
     )
     parser.add_argument("--days", type=float, default=7.0, help="window size in days (default 7)")
     parser.add_argument("--since", default=None, help="explicit window start (epoch or ISO-8601)")

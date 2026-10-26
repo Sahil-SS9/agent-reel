@@ -7,7 +7,7 @@ from adapters.hermes.leakscan import scan_lines, scan_text
 
 def test_clean_text_has_no_hits():
     lines = [
-        "Hermes Scrollback Reel \u2014 history summary",
+        "Agent Reel \u2014 history summary",
         "window: 2026-10-16T00:00:00+00:00 .. 2026-10-23T00:00:00+00:00 (7.00 days)",
         "message       131,204",
         "2026-10-23T09:54  default  cli  Execute the M0 handoff",

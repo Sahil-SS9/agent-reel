@@ -38,7 +38,7 @@ def register(ctx) -> None:
 #: D7 (amended): an optional daily or weekly strip. A blueprint is only a template in the
 #: user's catalog; nothing runs until the user creates an automation from it.
 _BLUEPRINT_PROMPT = (
-    "Make this {cadence} Scrollback Reel strip for the owner to review. Run, in a terminal: "
+    "Make this {cadence} Agent Reel strip for the owner to review. Run, in a terminal: "
     "`hermes reel plan --dry-run --days {days} --episodes 1 --format {{format}} --tone {{tone}} --data-dir PLAN_DIR` and then "
     "`hermes reel render --plan-dir PLAN_DIR --episode 1 --style {{style}}`, with "
     "PLAN_DIR a new folder under the plugin's data directory named by today's date. "
@@ -70,7 +70,7 @@ def _register_blueprints(ctx) -> None:
     time_slot = {"name": "time", "type": "time", "label": "Time", "default": "18:00"}
     register(
         "daily-strip",
-        title="Scrollback Reel: daily strip",
+        title="Agent Reel: daily strip",
         description="A short comic of today's real work, for you to review. Nothing is posted.",
         schedule_template="{minute} {hour} * * *",
         prompt_template=_BLUEPRINT_PROMPT.format(cadence="daily", days=1, unit="day"),
@@ -81,7 +81,7 @@ def _register_blueprints(ctx) -> None:
     )
     register(
         "weekly-strip",
-        title="Scrollback Reel: weekly strip",
+        title="Agent Reel: weekly strip",
         description="A comic of the week's real work (a one-page strip or a 3-4 page chapter), for you to review. Nothing is posted.",
         schedule_template="{minute} {hour} * * {dow}",
         prompt_template=_BLUEPRINT_PROMPT.format(cadence="weekly", days=7, unit="week"),
@@ -93,11 +93,11 @@ def _register_blueprints(ctx) -> None:
     )
     register(
         "monthly-book",
-        title="Scrollback Reel: monthly comic book",
+        title="Agent Reel: monthly comic book",
         description="On the 1st, collect last month's rendered episodes into one PDF comic book. Nothing is posted.",
         schedule_template="{minute} {hour} 1 * *",
         prompt_template=(
-            "Make last month's Scrollback Reel comic book for the owner. Run, in a terminal: "
+            "Make last month's Agent Reel comic book for the owner. Run, in a terminal: "
             "`hermes reel book --month YYYY-MM` with YYYY-MM the previous calendar month. If it "
             "says there are no rendered episodes, say so in one line and stop. Report the PDF path "
             "and the episode titles. Never post, upload or share it; the owner decides."

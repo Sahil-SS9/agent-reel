@@ -87,7 +87,7 @@ def _cover(title: str, subtitle: str, art: Path | None) -> Image.Image:
     draw = ImageDraw.Draw(page)
     draw.text((w / 2, int(h * 0.12)), title, font=_font(TITLE_FONT, 190), fill="white", anchor="mm")
     draw.text((w / 2, int(h * 0.19)), subtitle, font=_font(BODY_FONT, 80), fill="#ddd", anchor="mm")
-    draw.text((w / 2, h - 120), "Hermes Scrollback Reel", font=_font(BODY_FONT, 50), fill="#999", anchor="mm")
+    draw.text((w / 2, h - 120), "Agent Reel", font=_font(BODY_FONT, 50), fill="#999", anchor="mm")
     return page
 
 

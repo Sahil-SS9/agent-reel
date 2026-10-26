@@ -225,7 +225,7 @@ def export_episode(
     style: str,
     render_report: Mapping[str, Any],
     checks: Sequence[Mapping[str, Any]],
-    credit: str = "Hermes Scrollback Reel",
+    credit: str = "Agent Reel",
     roles: Sequence[str] | None = None,
 ) -> ExportSet:
     """``roles``: the role of each lettered panel (story roles or ``filler``), for layout."""

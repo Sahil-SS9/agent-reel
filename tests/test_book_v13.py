@@ -26,7 +26,7 @@ def test_book_collects_month_in_date_order(tmp_path):
     _render(tmp_path / "c", "September", sep)
     episodes = in_month(find_episodes([tmp_path]), "2026-10")
     assert [e.title for e in episodes] == ["First", "Second"]
-    report = build_book(episodes, tmp_path / "book.pdf", title="Scrollback Reel", subtitle="October 2026")
+    report = build_book(episodes, tmp_path / "book.pdf", title="Agent Reel", subtitle="October 2026")
     assert report["pages"] == 2 + 3 + 2
     assert (tmp_path / "book.pdf").read_bytes()[:4] == b"%PDF"
 

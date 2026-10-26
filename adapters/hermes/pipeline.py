@@ -1185,7 +1185,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     _install_signal_cleanup()
     parser = argparse.ArgumentParser(
         prog="python -m adapters.hermes.pipeline",
-        description="Scrollback Reel M1 pipeline: ingest, gate, beats, arcs, canon, episode.",
+        description="Agent Reel M1 pipeline: ingest, gate, beats, arcs, canon, episode.",
     )
     parser.add_argument("--data-dir", required=True, help="where artifacts and the cache live")
     parser.add_argument("--days", type=float, default=7.0)

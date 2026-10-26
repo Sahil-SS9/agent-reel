@@ -711,17 +711,22 @@ def _states_something(line: str) -> bool:
 #: Characters that fit one balloon at the page font before it has no pocket on a dense
 #: panel (measured on the 20-panel page: 70-char lines placed, 75-84 char lines did not).
 MAX_BALLOON_CHARS = 70
+#: A line with no sentence break may run this much over rather than be cut mid-phrase.
+_BALLOON_SLACK = 1.35
 
-#: Where a long line may be cut, best first: sentence end, then clause, then conjunction.
-_BALLOON_BREAKS = (". ", "? ", "! ", "; ", ", ", " and ", " but ", " so ")
+#: Where a long line may be cut: sentence ends first, then clause boundaries. A comma or a
+#: conjunction is NOT a break - splitting "a comic people can share" between "people" and
+#: "can" reads as two broken sentences, which is worse than a slightly long balloon.
+_BALLOON_BREAKS = (". ", "? ", "! ", "; ", ": ", " - ", " — ")
 
 
 def split_for_balloons(text: str, budget: int = MAX_BALLOON_CHARS) -> list[str]:
     """Split one spoken line into balloons that fit, keeping the words intact.
 
     Nothing is invented, reordered or dropped: the pieces concatenate back to the original
-    text (spacing aside). Only a line with no usable break is left long, and the letterer
-    then refuses it visibly rather than misplacing it.
+    text. A line is only cut at a sentence or clause boundary; if it has none, it is allowed
+    to run up to the slack limit rather than be chopped mid-phrase, and the letterer then
+    refuses it visibly instead of misplacing it.
     """
     line = " ".join(str(text or "").split())
     if len(line) <= budget:
@@ -729,16 +734,16 @@ def split_for_balloons(text: str, budget: int = MAX_BALLOON_CHARS) -> list[str]:
     pieces: list[str] = []
     rest = line
     while len(rest) > budget:
-        window = rest[: budget + 1]
+        window = rest[: int(budget * _BALLOON_SLACK) + 1]
         cut = -1
         for mark in _BALLOON_BREAKS:
             at = window.rfind(mark)
             if at > 0:
-                cut = at + (len(mark) if mark[0] in ".?!" else len(mark) - 1)
+                cut = at + len(mark)
                 break
         if cut <= 0:
-            space = window.rfind(" ")
-            cut = space if space > 0 else budget
+            # No sentence break inside the window: keep the line whole.
+            break
         piece = rest[:cut].strip()
         if not piece:
             break

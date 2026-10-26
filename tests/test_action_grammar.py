@@ -197,7 +197,7 @@ def test_a_long_line_is_split_into_balloons_that_fit():
     ):
         pieces = split_for_balloons(text)
         assert len(pieces) >= 2
-        assert all(len(piece) <= MAX_BALLOON_CHARS + 12 for piece in pieces)
+        assert all(len(piece) <= int(MAX_BALLOON_CHARS * 1.35) for piece in pieces)
         # nothing invented or lost: the words survive in order
         assert " ".join(pieces).split() == " ".join(text.split()).split()
 
@@ -230,3 +230,22 @@ def test_a_missing_key_names_both_routes(monkeypatch):
     monkeypatch.setattr(providers, "secret_from_host", lambda name: "")
     with pytest.raises(RenderError, match="hermes auth"):
         providers._key({}, "FAL_KEY")
+
+
+def test_a_line_with_no_sentence_break_is_never_chopped_mid_phrase():
+    """A comma is not a break: "a comic people can share" must not split before "can"."""
+    from canon.episode import MAX_BALLOON_CHARS, split_for_balloons
+
+    line = "I want a tool that turns an AI helper's real work into a comic people can share."
+    pieces = split_for_balloons(line)
+    assert pieces == [line]            # left whole rather than broken mid-clause
+    assert len(line) > MAX_BALLOON_CHARS
+
+
+def test_a_two_sentence_line_splits_at_the_sentence_end():
+    from canon.episode import split_for_balloons
+
+    pieces = split_for_balloons(
+        "So the reviewer checks the fixes, and the speed verdict waits on you. Thrilling."
+    )
+    assert pieces == ["So the reviewer checks the fixes, and the speed verdict waits on you.", "Thrilling."]

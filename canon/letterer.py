@@ -122,8 +122,12 @@ def letter_panel(
         # balloons, then a smaller size only as the last resort.
         head_blocked = [_pad(box, 18 * scale) for box in head_px.values()]
         attempts = (
+            # Tier 1: strict - faces and the vision keep-out boxes.
             (blocked, (38, 34, 30)),
-            (head_blocked + [_pad(_px(box, width, height), 10 * scale) for box in keep_out], (38, 34, 30)),
+            # Tier 2 (Quan D1, 26/10/26: this used to be byte-identical to tier 1): art may
+            # be covered, faces may not. A dense panel's keep-outs can blanket half of it.
+            (head_blocked, (38, 34, 30)),
+            # Tier 3: last resort - a smaller size, still never over a face.
             (head_blocked, (38, 34, 30, 26)),
         )
         for blockers, sizes in attempts:

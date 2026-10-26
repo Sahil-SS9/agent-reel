@@ -26,6 +26,11 @@ REPO = Path(__file__).resolve().parents[2]
 #: factor is set from the measured on-page size instead of the panel size: 2.0x puts the
 #: smallest line near 12pt on an A4 page.
 PAGE_FONT_SCALE = 2.0
+#: QAR-M2-07 readability floor for a chapter page viewed whole (Quan measured 18.9pt at
+#: 2.0 against his 15.8pt bar). A 2400px-wide page shown about 15in wide is ~160dpi, so a
+#: point is 160/72 px; the geometric test below holds the code to that.
+MIN_PAGE_POINT_SIZE = 15.8
+REFERENCE_DPI = 160
 
 
 def _data_root(explicit: str, default_dir: Callable[[], Path]) -> Path:

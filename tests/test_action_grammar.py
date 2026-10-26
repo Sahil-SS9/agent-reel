@@ -67,3 +67,30 @@ def test_the_panel_prompt_carries_the_action_grammar():
     text = request["prompt"] if isinstance(request, dict) else str(request)
     for label in ("ACTION:", "MOTION:", "IMPACT:", "REACTION:", "CAMERA:", "Full-bleed impact frame"):
         assert label in text
+
+
+def test_the_page_font_scale_clears_the_readability_floor():
+    """Quan D3: the font floor is a named constant with a geometric test, not a comment.
+
+    Geometry: a chapter page is PAGE_WIDTH px wide; side-by-side panels are never narrower
+    than MIN_PANEL_SHARE of it; every panel is lettered at its native width scaled by
+    PAGE_FONT_SCALE. At whole-page screen size (REFERENCE_DPI) the smallest line must clear
+    MIN_PAGE_POINT_SIZE.
+    """
+    from canon.export import MIN_PANEL_SHARE, PAGE_WIDTH
+    from canon.letterer import REFERENCE_WIDTH
+    from adapters.hermes.render_cli import (
+        MIN_PAGE_POINT_SIZE,
+        PAGE_FONT_SCALE,
+        REFERENCE_DPI,
+    )
+
+    panel_native = REFERENCE_WIDTH
+    on_page = PAGE_WIDTH * MIN_PANEL_SHARE
+    shrink = on_page / panel_native
+    smallest_font_px = 30 * (panel_native / REFERENCE_WIDTH * PAGE_FONT_SCALE) * shrink
+    points = smallest_font_px / REFERENCE_DPI * 72
+    assert points >= MIN_PAGE_POINT_SIZE, f"{points:.1f}pt below the {MIN_PAGE_POINT_SIZE}pt floor"
+    # And the old scale is provably below it, so the test can fail.
+    old_points = smallest_font_px / (PAGE_FONT_SCALE / 1.4) / REFERENCE_DPI * 72
+    assert old_points < MIN_PAGE_POINT_SIZE

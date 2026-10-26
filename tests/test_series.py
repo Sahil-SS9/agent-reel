@@ -105,3 +105,24 @@ def test_the_draw_avoids_what_the_last_chapters_used():
         frame = draw("Sahil", chapter, deck=deck, avoid=avoid)
         assert frame["world"]["key"] != first["world"]["key"]
         assert frame["villain"]["key"] != first["villain"]["key"]
+
+
+def test_the_deck_has_at_least_fifty_of_everything_and_no_duplicate_keys():
+    deck = load_deck()
+    for section, items in deck.items():
+        assert len(items) >= 50, f"{section} has only {len(items)}"
+        keys = [item["key"] for item in items]
+        assert len(keys) == len(set(keys)), f"{section} has duplicate keys"
+        assert all(item["label"].strip() for item in items), f"{section} has an empty label"
+
+
+def test_every_section_is_actually_reachable_across_many_chapters():
+    deck = load_deck()
+    seen = {section: set() for section in deck}
+    for chapter in range(1, 60):
+        frame = draw("Sahil", chapter, deck=deck)
+        for section in deck:
+            key = section[:-1] if section.endswith("s") else section
+            seen[section].add(frame[key]["key"])
+    for section, keys in seen.items():
+        assert len(keys) > 20, f"{section}: only {len(keys)} distinct values over 59 chapters"

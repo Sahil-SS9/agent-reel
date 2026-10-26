@@ -14,7 +14,7 @@ tags:
   - images
 requires_plugins: []
 python_dependencies:
-  - "pillow>=10.0"
+  - "pillow>=10.0,<14"
 provides_hooks: []
 provides_tools: []
 requires_env: []

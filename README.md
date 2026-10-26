@@ -18,17 +18,16 @@ hermes reel plan   --days 30 --episodes 3 --format chapter
 
 ## See it
 
-Three real pages, drawn from the author's own history, in three of the 55 styles.
+Four panels each, drawn from the author's own history. Same week, three of the 55 styles.
 
-| Ink and crosshatch | Painted storybook | Cyberpunk HUD |
+| Ink and crosshatch | Halftone noir | Clear line |
 |---|---|---|
-| ![Ink page](docs/examples/example-1-ink.jpg) | ![Storybook page](docs/examples/example-2-storybook.jpg) | ![Cyberpunk page](docs/examples/example-3-cyberpunk.jpg) |
-| "The Run Stopped On Purpose" | "Eight Fixes, Nothing Pushed" | "Calling Bullshit on LCM-X Benchmarks" |
+| ![Ink, four panels](docs/examples/example-1-ink.jpg) | ![Halftone noir, four panels](docs/examples/example-2-halftone.jpg) | ![Clear line, four panels](docs/examples/example-3-clearline.jpg) |
+| "The Run Stopped On Purpose" | "Eight Fixes, Nothing Pushed" | "The Run Stopped On Purpose" |
 
-Three different stories, three different casts: a background run that looked dead because it
-had been killed deliberately; eight rounds of review fixes that were ready and not pushed; a
-rival's benchmark numbers. The villain, the world and the art style are drawn per chapter, and
-every line in the script carries the id of the message that states it.
+Two stories, three looks: on the right, the same panels are restyled, which is the point —
+format and art style are independent. The villain, the world and the style are drawn per
+chapter, and every line in the script carries the id of the message that states it.
 
 ## Why it reads like a story and not a log
 
@@ -67,13 +66,14 @@ Adding a harness is a mapping, not a fork:
 
 ```json
 {
-  "name": "my-agent",
-  "glob": "~/.my-agent/sessions/*/*.jsonl",
+  "glob": "~/.my-agent/sessions/**/*.jsonl",
   "role": "message.role",
   "text": "message.content",
   "timestamp": "timestamp",
   "session": "sessionId",
-  "thread": "cwd"
+  "thread": "cwd",
+  "user_roles": ["user"],
+  "assistant_roles": ["assistant"]
 }
 ```
 

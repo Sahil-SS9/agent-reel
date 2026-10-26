@@ -515,7 +515,7 @@ def render_command(args: argparse.Namespace, *, ctx: Any, default_dir: Callable[
     problems += clear_to_render(style=style, kits=cast_kits, approvals=approvals, public=args.public,
                                 allow_untested_style=args.allow_untested_style or not getattr(args, "strict_styles", False))
     if not style.tested:
-        print(f"note: style {style.key!r} has not been tested with your image source yet; check the panels before sharing")
+        print(f"style: {style.key!r} carries no bake-off record for this image source — panels are drawn fresh, nothing cached")
     if problems:
         print("Not cleared to render:")
         for problem in problems:

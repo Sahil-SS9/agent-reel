@@ -373,6 +373,10 @@ def _kit_create(args: argparse.Namespace, root: Path, styles: Mapping[str, Any],
         settings = load_settings(root)
         source = args.source or settings.get("source", "host")
         dispatch = getattr(ctx, "dispatch_tool", None) if ctx is not None else None
+        if dispatch is not None:
+            # 26/10/26 release check: without this, `kit create --source host` failed with
+            # "Unknown tool: image_generate" because no tool discovery had run in this process.
+            prepare_host_tools()
         from adapters.hermes.images import host_generator
 
         generate = make_generator(source, out_dir=root / "cache" / "source-out",
@@ -443,6 +447,21 @@ def _villain_sheet(treatment: Any, style: Any, kits: Mapping[str, Any], renderer
     return target
 
 
+def prepare_host_tools() -> None:
+    """Load the host's builtin tools so ``ctx.dispatch_tool`` can find them.
+
+    A CLI subcommand runs before the agent loads its tool registry, so dispatch answers
+    "Unknown tool: image_generate" until discovery runs once. ``tools.registry`` is a
+    documented public plugin surface and discovery is idempotent.
+    """
+    try:
+        from tools.registry import discover_builtin_tools
+
+        discover_builtin_tools()
+    except Exception as exc:  # noqa: BLE001 - report, then let dispatch fail visibly
+        print(f"warning: could not load the host tools ({type(exc).__name__}: {exc})")
+
+
 def render_command(args: argparse.Namespace, *, ctx: Any, default_dir: Callable[[], Path]) -> int:
     from adapters.hermes.images import host_generator
     from adapters.hermes.vision import VisionError, host_vision
@@ -458,15 +477,7 @@ def render_command(args: argparse.Namespace, *, ctx: Any, default_dir: Callable[
     if dispatch is None:
         print("ctx.dispatch_tool is unavailable; run this through `hermes reel render`.")
         return 1
-    # A CLI subcommand runs before the agent loads its tools, so the registry is empty and
-    # every dispatch answers "Unknown tool". ``tools.registry`` is a documented public plugin
-    # surface; discovery is idempotent.
-    try:
-        from tools.registry import discover_builtin_tools
-
-        discover_builtin_tools()
-    except Exception as exc:  # noqa: BLE001 - report, then let dispatch fail visibly
-        print(f"warning: could not load the host tools ({type(exc).__name__}: {exc})")
+    prepare_host_tools()
     plan_dir = Path(args.plan_dir).expanduser()
     ir_path = plan_dir / f"script-ir-{args.episode}.json"
     if not ir_path.is_file():

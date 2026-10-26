@@ -155,3 +155,33 @@ def test_a_villain_sheet_is_drawn_once_and_reused(tmp_path):
     second = _villain_sheet(treatment, style, {}, renderer, tmp_path, tmp_path, report)
     assert first is not None and second == first
     assert renderer.calls == 1, "the villain sheet was drawn twice"
+
+
+def test_kit_create_loads_host_tools_before_asking_for_an_image(tmp_path, monkeypatch):
+    """26/10/26: without tool discovery, kit create --source host failed with
+    "Unknown tool: image_generate" while every render worked."""
+    from types import SimpleNamespace
+
+    from adapters.hermes import render_cli
+
+    calls: list[str] = []
+    monkeypatch.setattr(render_cli, "prepare_host_tools", lambda: calls.append("prepared"))
+    monkeypatch.setattr(render_cli, "load_settings", lambda root: {"source": "host"})
+    monkeypatch.setattr(render_cli, "_assets", lambda *a, **k: (tmp_path, {}, {}, None))
+
+    def fake_make_generator(source, *, out_dir, host=None, **kw):
+        assert host is not None, "the host route must be wired when discovery ran"
+        raise SystemExit(0)
+
+    monkeypatch.setattr("canon.providers.make_generator", fake_make_generator)
+    args = SimpleNamespace(
+        name="Test Runner", who="x", look="y", outfit="z", colours="c", signature="s",
+        voice="v", style="anime", source="host", dry_run=False, photo=None, owner=False,
+        kit_action="create",
+    )
+    ctx = SimpleNamespace(dispatch_tool=lambda *a, **k: "{}")
+    try:
+        render_cli._kit_create(args, tmp_path, {"anime": SimpleNamespace(prompt_block="anime", summary="")}, ctx)
+    except SystemExit:
+        pass
+    assert calls == ["prepared"]

@@ -28,6 +28,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
+from canon.grounding import NUMBER_WORDS, figures_in
+
 #: V8 (25/10/26): epic pictures, witty dialogue. Tone only; a voice never adds a fact.
 DEFAULT_VOICES: dict[str, str] = {
     "Sahil": "the builder: blunt, impatient, dry British humour, short sentences, wants results not excuses",
@@ -41,7 +43,9 @@ DEFAULT_VOICES: dict[str, str] = {
 
 #: What each arc role must do for the reader (craft notes, docs/STORY-CRAFT.md).
 PANEL_JOBS: dict[str, str] = {
-    "setup": "introduce the characters (Sahil, the builder; Kensei, his AI agent), what Sahil wants and why it matters",
+    "setup": "a cold open: start on the hook (the sharpest moment, threat or question of the story), then "
+    "introduce the characters (Sahil, the builder; Kensei, his AI agent), what Sahil wants and why it matters. "
+    "Never open on scene-setting",
     "insert": "move the story one step: what was tried, found or learned",
     "hidden_problem": "the first sign that something is wrong",
     "diagnosis": "the moment the real cause becomes clear",
@@ -70,7 +74,8 @@ SYNOPSIS_PROMPT = (
     "outcome, number, name, time or place; every event must be in the facts. "
     + AUDIENCE_RULE
     + " Answer JSON only: {\"title\": \"a punchy comic title, at most 6 words\", \"logline\": \"one sentence\", \"want\": \"...\", \"stakes\": \"...\", "
-    "\"obstacle\": \"...\", \"turn\": \"...\", \"ending\": \"...\", \"meaning\": \"...\"}. "
+    "\"obstacle\": \"...\", \"turn\": \"...\", \"ending\": \"...\", \"meaning\": \"...\", "
+    "\"hook\": \"the single most gripping moment, line or question of the story, to open on\"}. "
     "Each value is one short sentence, or empty if the facts do not support it."
 )
 
@@ -78,13 +83,16 @@ EDITOR_PROMPT = (
     "You are a comic editor. Read this script as a reader who knows nothing about software. "
     "For each panel, judge whether its words are clear, connected to the story and free of "
     "jargon, whether the whole reads as a story with a want, a problem, a turn and an "
-    "ending, and whether it delivers the requested tone. Answer JSON only: {\"score\": 1-5, \"problems\": [{\"panel\": \"<id>\", "
+    "ending, and whether it delivers the requested tone. Flag any caption that only reports "
+    "a number or a status (\"Zero failures.\") without saying what it meant to the hero or why "
+    "it mattered: call it a readout. Answer JSON only: {\"score\": 1-5, \"problems\": [{\"panel\": \"<id>\", "
     "\"issue\": \"what is wrong, in a few words\"}]}. List only real problems."
 )
 
-SYNOPSIS_FIELDS = ("title", "logline", "want", "stakes", "obstacle", "turn", "ending", "meaning")
-#: Fields that tell the story (the title is used as the episode title, not story text).
-STORY_FIELDS = SYNOPSIS_FIELDS[1:]
+SYNOPSIS_FIELDS = ("title", "logline", "want", "stakes", "obstacle", "turn", "ending", "meaning", "hook")
+#: Fields that tell the story. The title is the episode title and the hook is what the first
+#: panel opens on; neither is story text.
+STORY_FIELDS = tuple(name for name in SYNOPSIS_FIELDS if name not in ("title", "hook"))
 
 _HASH = re.compile(r"\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b", re.I)
 _EXIT = re.compile(r"\bexit(?:\s+code)?\s*\d+\b", re.I)
@@ -197,8 +205,43 @@ def _accept(
         synopsis.fields[name] = sentence.rstrip(".") if name == "title" else sentence
 
 
-def edit_script(complete_json: Any, panels: Sequence[Mapping[str, Any]], *, synopsis: str, tone: str = "") -> dict[str, Any]:
-    """The editor's read of a script: a 1-5 score and per-panel problems."""
+_PRONOUN = re.compile(r"\b(i|me|my|we|us|our|you|your|he|him|his|she|her|they|them|their)\b", re.IGNORECASE)
+
+
+def readout_problem(caption: str, *, cast: Sequence[str] = ()) -> str:
+    """Why a caption reads like a status readout ('' when it does not).
+
+    A readout is a bare statistic or status line: it has a figure, nobody in it (no character
+    and no pronoun) and no voice (no question or exclamation). "On questions about when things
+    happened, LCM-X wins by 10 to 16 points." tells the reader a result but not why they should
+    care. A caption that names who it mattered to, or asks or exclaims, is not flagged.
+    """
+    text = " ".join((caption or "").split())
+    if not text or len(text.split()) > 16 or "?" in text or "!" in text:
+        return ""
+    has_number = bool(figures_in(text)) or any(
+        re.search(rf"\b{word}\b", text, re.IGNORECASE) for word in (*NUMBER_WORDS, "zero")
+    )
+    if not has_number or _PRONOUN.search(text):
+        return ""
+    if any(re.search(rf"\b{re.escape(name)}\b", text, re.IGNORECASE) for name in cast if name):
+        return ""
+    return "reads like a status readout: say what the number meant to the hero"
+
+
+def edit_script(
+    complete_json: Any,
+    panels: Sequence[Mapping[str, Any]],
+    *,
+    synopsis: str,
+    tone: str = "",
+    cast: Sequence[str] = (),
+) -> dict[str, Any]:
+    """The editor's read of a script: a 1-5 score and per-panel problems.
+
+    Besides the model's read, any caption that is a bare readout (``readout_problem``) is
+    added as a problem, and the score is capped at 3 so the rewrite pass runs: a model that
+    liked the script is not allowed to wave a statistic through."""
     if complete_json is None or not panels:
         return {"score": 0, "problems": [], "source": "none"}
     script = [
@@ -225,6 +268,15 @@ def edit_script(complete_json: Any, panels: Sequence[Mapping[str, Any]], *, syno
         score = int(answer.get("score") or 0)
     except (TypeError, ValueError):
         score = 0
+    flagged = {item["panel"] for item in problems}
+    readouts = 0
+    for panel in panels:
+        why = readout_problem(str(panel.get("caption", "")), cast=cast)
+        if why and str(panel.get("id")) not in flagged:
+            problems.append({"panel": str(panel.get("id")), "issue": why})
+            readouts += 1
+    if readouts and score:
+        score = min(score, 3)
     return {"score": max(0, min(5, score)), "problems": problems, "source": "model"}
 
 
@@ -242,5 +294,5 @@ def behind_the_panels(panels: Sequence[Mapping[str, Any]], facts_by_panel: Mappi
 
 __all__ = (
     "AUDIENCE_RULE", "DEFAULT_VOICES", "NARRATION_LAYER", "PANEL_JOBS", "Synopsis", "behind_the_panels",
-    "edit_script", "jargon_problem", "write_synopsis",
+    "edit_script", "jargon_problem", "readout_problem", "write_synopsis",
 )

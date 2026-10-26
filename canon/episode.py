@@ -33,6 +33,7 @@ from canon.caption import (
 )
 from canon.grounding import ClaimGate, ClaimReport, GroundingReport
 from canon.llm import CachedLLM, LLMError
+from canon.reallines import real_lines_for
 
 SHOTS = ("wide", "medium", "close", "insert")
 
@@ -294,6 +295,11 @@ class LLMDialogueWriter:
         "add an event, a result, a cause, a number, a name or a time that the facts do not give. "
         "Translate engineering words for a general reader: say 'the database' not SQLite or "
         "PostgreSQL, 'the second job' not 'Handoff 2', 'the new version' not 'v2'. "
+        "If a hook is given, the first panel opens on it, not on scene-setting. A result caption "
+        "(a score, a count) says what it meant to the hero, never just reports it. Some panels list "
+        "real_lines: sentences that speaker actually said, verbatim. A real line beats an invented "
+        "one: when it carries the moment, use it unchanged (it counts as one of the panel's lines); "
+        "never reword it so it means something else. "
         "Never repeat a fact the script already stated. Each panel must move the story forward "
         "from the one before. Truth: every claim (what happened, who did it, why, a number, a "
         "name, an outcome) must be in that panel's facts or evidence or the synopsis; say it in "
@@ -327,6 +333,10 @@ class LLMDialogueWriter:
                     "evidence": str(panel.get("evidence", ""))[:700],
                     "speakers": speakers,
                 }
+                if panel.get("real_lines"):
+                    item["real_lines"] = [
+                        {"speaker": row["speaker"], "text": row["text"]} for row in panel["real_lines"]
+                    ]
                 if notes.get(f"p{position}"):
                     item["editor_note"] = notes[f"p{position}"]
                 items.append(item)
@@ -338,6 +348,8 @@ class LLMDialogueWriter:
                 "voices": {name: voices.get(name, "natural") for name in cast_here} | {"narrator": voices.get("narrator", "")},
                 "panels": items,
             }
+            if start == 0 and story.get("hook"):
+                payload["hook"] = story["hook"]
             try:
                 response = self.llm.complete_json(
                     prompt=self.SCENE_PROMPT,
@@ -983,6 +995,7 @@ def plan_episode(
     cast_map: Mapping[str, str] | None = None,
     title: str | None = None,
     caption_layer: str = "caption",
+    quotes_by_event: Mapping[str, str] | None = None,
 ) -> EpisodeIR:
     """Plan an episode from one arc.
 
@@ -993,6 +1006,11 @@ def plan_episode(
     (default) restates facts and keeps the vocabulary floor; ``"story"`` lets a caption
     interpret (stakes, feeling) while names, numbers and events stay strict. Dialogue is
     unaffected: it already allows tone.
+
+    ``quotes_by_event`` maps an event id to the gated text of a message. When given, each
+    panel offers its speakers' punchiest real sentences to the writer as candidate lines
+    (``canon.reallines``). They are candidates only: whatever the writer returns is still
+    judged by the grounding gate.
     """
     if format not in {"strip", "chapter"}:
         raise ValueError(f"unknown format: {format!r}")
@@ -1191,6 +1209,11 @@ def plan_episode(
             )
         else:
             spec["speakers"] = sorted(set(spec["actors"]) or set(spec["cast"]))
+        if quotes_by_event:
+            beat_ids = tuple(spec["beat"].event_ids) if spec.get("beat") else ()
+            spec["real_lines"] = real_lines_for(
+                beat_ids, quotes_by_event, actors_by_event or {}, spec["speakers"], owner=hero
+            )
     cast = sorted({name for spec in panel_specs for name in spec["cast"]})
     active_writer = writer or TemplateDialogueWriter(cast, hero=hero)
     dialogue = active_writer.write(panel_specs)

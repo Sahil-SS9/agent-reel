@@ -53,7 +53,7 @@ from canon.episode import (
     usable_anchor_count,
     validate_ir,
 )
-from canon.events import Event
+from canon.events import KIND_MESSAGE_ASSISTANT, KIND_MESSAGE_USER, Event
 from canon.gate import GatedEvent
 from canon.grounding import ClaimGate
 from canon.llm import CachedLLM, LLMClient, NullLLM
@@ -131,6 +131,9 @@ class PipelineConfig:
     #: feeling, motive; names, numbers and events stay strict). True keeps the literal
     #: caption layer instead (`hermes reel plan --strict-captions`).
     strict_captions: bool = False
+    #: Offer each panel's speakers' punchiest real sentences (gated, verbatim) to the script
+    #: writer as candidate lines. False (`--no-real-lines`) keeps every line model-written.
+    real_lines: bool = True
     days: float = 7.0
     since: float | None = None
     until: float | None = None
@@ -655,6 +658,19 @@ def run_pipeline(
             actors_by_event[event.id] = who
 
         evidence_map = evidence_by_event(gated, display=cast_map)
+        # The gated text of each message: the pool the script's real lines are drawn from.
+        # Gated means redacted; nothing here comes from raw history.
+        quotes_by_event: dict[str, str] = {}
+        if config.real_lines:
+            for event in gated:
+                text = (event.payload or {}).get("text")
+                if (
+                    event.kind in {KIND_MESSAGE_USER, KIND_MESSAGE_ASSISTANT}
+                    and isinstance(text, str)
+                    and text.strip()
+                ):
+                    quotes_by_event[event.id] = text
+        cast_names = tuple(dict.fromkeys(tuple(cast_map.values()) + (config.hero,)))
         structured_captions = {
             event.id: compose_caption(event, display=cast_map, hero=config.hero)
             for event in gated
@@ -836,6 +852,7 @@ def run_pipeline(
                     title=title,
                     frame=frame,
                     caption_layer=layer,
+                    quotes_by_event=quotes_by_event or None,
                 )
 
             # V6-V8: story mode - a plain-English synopsis first, the script written from
@@ -861,7 +878,7 @@ def run_pipeline(
                     else:
                         tone = parse_tone(config.tone)
                     story_ctx = {"tone": tone.writer_text(), "voices": {**DEFAULT_VOICES, **dict(config.voices or {})},
-                                 "synopsis": synopsis.text(),
+                                 "synopsis": synopsis.text(), "hook": synopsis.fields.get("hook", ""),
                                  "jobs": PANEL_JOBS, "notes": {}}
                     first_writer = LLMDialogueWriter(writer_cached, cast, story=story_ctx)
                     # Story captions may interpret (stakes, feeling) but add no event, name
@@ -869,7 +886,8 @@ def run_pipeline(
                     narration = "caption" if config.strict_captions else "story"
                     episode_ir = _plan(first_writer, narration)
                     review = edit_script(writer_cached.complete_json,
-                                         [p.as_dict() for p in episode_ir.panels], synopsis=synopsis.text(), tone=tone.label)
+                                         [p.as_dict() for p in episode_ir.panels], synopsis=synopsis.text(), tone=tone.label,
+                                         cast=cast_names)
                     reviews = [review]
                     jargon = first_writer.jargon_dropped
                     if 0 < review["score"] < 4 and review["problems"]:
@@ -881,7 +899,8 @@ def run_pipeline(
                             second = None
                         if second is not None:
                             review2 = edit_script(writer_cached.complete_json,
-                                                  [p.as_dict() for p in second.panels], synopsis=synopsis.text(), tone=tone.label)
+                                                  [p.as_dict() for p in second.panels], synopsis=synopsis.text(), tone=tone.label,
+                                                  cast=cast_names)
                             reviews.append(review2)
                             if len(second.panels) >= len(episode_ir.panels) - 1 and review2["score"] >= review["score"]:
                                 episode_ir = second

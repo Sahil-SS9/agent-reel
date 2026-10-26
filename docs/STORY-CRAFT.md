@@ -82,3 +82,13 @@ A caption that must be entailed word for word by the log can only restate the lo
 - **Facts keep the strict layer.** The "behind the panels" notes and the trace still cite source events, and `--strict-captions` keeps narrator captions literal.
 
 Dialogue is unchanged: it already allowed tone and was claim-checked. The synopsis and the story-mode scene captions use the story layer by default.
+
+## Real lines, a cold open, and no readouts
+
+Three changes that give a chapter a voice instead of a transcript:
+
+- **Real lines.** The owner's blunt, dry messages are better dialogue than anything a model invents. For each panel, `canon/reallines.py` offers the speakers' punchiest short sentences, taken verbatim from the *gated* (already redacted) text of that panel's own messages, as candidate lines (`real_lines`). The writer may use one unchanged; whatever it writes still goes through the grounding gate, so a real line is cited to the event that said it. Code, links, paths, ids, jargon, redaction masks and assistant filler are never offered. Turn it off with `hermes reel plan --no-real-lines`.
+- **A cold open.** The synopsis now has a `hook`: the single most gripping moment, line or question of the story. The setup panel opens on it before it introduces anyone.
+- **No readouts.** A caption that is only a statistic or a status ("LCM-X wins by 10 to 16 points.", "Zero failures.") reports a result without telling the reader why it matters. The editor now flags these deterministically (`readout_problem`) and caps a generous score at 3 so the one rewrite pass runs, and the writer is told a result caption says what the number meant to the hero.
+
+The caption policy that stops a *caption* from quoting the owner for more than 8 words is unchanged: it governs narrator boxes. Dialogue attributed to the owner may now be his own words.

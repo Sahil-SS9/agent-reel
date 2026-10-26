@@ -249,3 +249,25 @@ def test_a_two_sentence_line_splits_at_the_sentence_end():
         "So the reviewer checks the fixes, and the speed verdict waits on you. Thrilling."
     )
     assert pieces == ["So the reviewer checks the fixes, and the speed verdict waits on you.", "Thrilling."]
+
+
+def test_render_can_skip_wordless_filler_panels():
+    """--no-fillers: a four-panel example should be four panels, not four plus fillers."""
+    from canon.director import direct
+
+    ir = {
+        "logline": "t",
+        "panels": [
+            {"id": f"p{i}", "role": role, "cast": [], "caption": "", "lines": [], "setting": "s"}
+            for i, role in enumerate(("setup", "hidden_problem", "climax", "win"), start=1)
+        ],
+        "frame": {},
+    }
+    keep = direct(ir, story_text="a failure and a fix")
+    assert keep.fillers, "the rule director adds fillers by default"
+
+    skip = direct(ir, story_text="a failure and a fix")
+    skip.fillers = []                      # what the render does for --no-fillers
+    skip.repairs.append("fillers skipped (--no-fillers)")
+    assert skip.as_dict()["fillers"] == []
+    assert "fillers skipped (--no-fillers)" in skip.repairs

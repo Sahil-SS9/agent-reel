@@ -52,6 +52,11 @@ def register_render_cli(subs: Any) -> None:
     render.add_argument("--out", default="", help="output folder (default: <plan-dir>/render-<episode>-<style>)")
     render.add_argument("--budget", type=int, default=12, help="max new images for this episode")
     render.add_argument("--retries", type=int, default=1, help="regenerations per failed panel")
+    render.add_argument(
+        "--no-fillers",
+        action="store_true",
+        help="story panels only: skip the wordless filler panels between them",
+    )
     render.add_argument("--public", action="store_true", help="public mode: real people need consent")
     render.add_argument("--allow-untested-style", action="store_true", help=argparse.SUPPRESS)
     render.add_argument("--strict-styles", action="store_true", help="refuse styles not yet tested on a real render")
@@ -566,6 +571,10 @@ def render_command(args: argparse.Namespace, *, ctx: Any, default_dir: Callable[
             tone=tone_hint,
             frame=ir.get("frame") if isinstance(ir.get("frame"), dict) else None,
         )
+        if getattr(args, "no_fillers", False) and treatment.fillers:
+            # 26/10/26: a four-panel example should be four panels, not four plus fillers.
+            treatment.repairs.append("fillers skipped (--no-fillers)")
+            treatment.fillers = []
         out.mkdir(parents=True, exist_ok=True)
         (out / "treatment.json").write_text(json.dumps(treatment.as_dict(), indent=1) + "\n", encoding="utf-8")
         sheet = _villain_sheet(treatment, style, kits, renderer, root, raw_dir, report)

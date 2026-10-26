@@ -41,11 +41,15 @@ DEFAULT_VOICES: dict[str, str] = {
     "narrator": "a comic narrator: punchy present tense, sets time and stakes in a few words, plain English",
 }
 
-#: What each arc role must do for the reader (craft notes, docs/STORY-CRAFT.md).
-PANEL_JOBS: dict[str, str] = {
-    "setup": "a cold open: start on the hook (the sharpest moment, threat or question of the story), then "
-    "introduce the characters (Sahil, the builder; Kensei, his AI agent), what Sahil wants and why it matters. "
-    "Never open on scene-setting",
+#: What each arc role must do for the reader (craft notes, docs/STORY-CRAFT.md). `{hero}` and
+#: `{agent}` are filled by `jobs_for`; the shape of the story (arc type) can override any role.
+COLD_OPEN = (
+    "a cold open: start on the hook (the sharpest moment, threat or question of the story), then "
+)
+
+_BASE_JOBS: dict[str, str] = {
+    "setup": COLD_OPEN + "introduce the characters ({hero}, the builder; {agent}, his AI agent), what "
+    "{hero} wants and why it matters. Never open on scene-setting",
     "insert": "move the story one step: what was tried, found or learned",
     "hidden_problem": "the first sign that something is wrong",
     "diagnosis": "the moment the real cause becomes clear",
@@ -53,6 +57,53 @@ PANEL_JOBS: dict[str, str] = {
     "aftermath": "what it cost, or what changed",
     "win": "the ending: the result and what it means (or the cliffhanger)",
 }
+
+#: Roles a shape tells differently. A role not listed keeps its base job.
+TYPE_JOBS: dict[str, dict[str, str]] = {
+    "mystery": {
+        "setup": COLD_OPEN + "show the strangest symptom; {hero} and {agent} do not know what is wrong",
+        "hidden_problem": "the clue that does not fit: what should have happened and did not",
+        "diagnosis": "a false lead that fails, or the clue that finally fits",
+        "climax": "the reveal: the real cause, shown at the moment it is understood",
+        "aftermath": "what the cause explains, looking back at the earlier clues",
+        "win": "the fix, or the open question that remains",
+    },
+    "pivot": {
+        "setup": COLD_OPEN + "show the plan {hero} starts with and why he believes in it",
+        "hidden_problem": "the first sign the plan will not hold",
+        "diagnosis": "the moment {hero} accepts the plan is wrong",
+        "climax": "the change of direction: the old plan dropped, the new one chosen",
+        "aftermath": "the cost of switching: what is thrown away",
+        "win": "the new plan's first result, or the doubt that remains about it",
+    },
+    "rivalry": {
+        "setup": COLD_OPEN + "introduce the rival (what {hero} is up against) and what is at stake between them",
+        "hidden_problem": "the rival's first advantage",
+        "diagnosis": "the weakness or the tell that gives {hero} an opening",
+        "climax": "the head-to-head: the decisive comparison and its result",
+        "aftermath": "what the result does not settle",
+        "win": "who came out ahead, and the next round",
+    },
+    "training-montage": {
+        "setup": COLD_OPEN + "show where {hero} and {agent} start: the baseline and the target",
+        "hidden_problem": "the first attempt and how far it falls short",
+        "diagnosis": "the lesson that changes how they work",
+        "climax": "the best result so far",
+        "aftermath": "what it cost in time and tries",
+        "win": "how far they came, from the first number to the last",
+    },
+}
+
+
+def jobs_for(arc_type: str = "struggle-to-resolution", *, hero: str = "Sahil", agent: str = "Kensei") -> dict[str, str]:
+    """What each panel must do for the reader, for this shape of story and this cast."""
+    jobs = {**_BASE_JOBS, **TYPE_JOBS.get(arc_type, {})}
+    return {role: text.format(hero=hero, agent=agent) for role, text in jobs.items()}
+
+
+#: The default (struggle-to-resolution) jobs for the default cast, kept for callers that do not
+#: know the shape or the cast.
+PANEL_JOBS: dict[str, str] = jobs_for()
 
 AUDIENCE_RULE = (
     "Write for a general reader who has never seen a terminal. Explain technical detail by "
@@ -293,6 +344,16 @@ def behind_the_panels(panels: Sequence[Mapping[str, Any]], facts_by_panel: Mappi
 
 
 __all__ = (
-    "AUDIENCE_RULE", "DEFAULT_VOICES", "NARRATION_LAYER", "PANEL_JOBS", "Synopsis", "behind_the_panels",
-    "edit_script", "jargon_problem", "readout_problem", "write_synopsis",
+    "AUDIENCE_RULE",
+    "DEFAULT_VOICES",
+    "NARRATION_LAYER",
+    "PANEL_JOBS",
+    "TYPE_JOBS",
+    "Synopsis",
+    "behind_the_panels",
+    "edit_script",
+    "jargon_problem",
+    "jobs_for",
+    "readout_problem",
+    "write_synopsis",
 )

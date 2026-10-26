@@ -26,17 +26,17 @@ import os
 import signal
 import sys
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Iterable, Sequence
 
 from canon.brief import CHAPTER_MAX_TURNS, MAX_TURNS, build_brief
-from canon.story import DEFAULT_VOICES, PANEL_JOBS, edit_script, write_synopsis
+from canon.story import DEFAULT_VOICES, edit_script, jobs_for, write_synopsis
 from canon.selection import select_stories
 from canon.threads import beats_by_thread, thread_index
 from canon.arcs import build_brief_arc
-from canon.arcs import build_arc, build_arcs
+from canon.arcs import build_arc, build_arcs, classify_arc_type, turn_texts
 from canon.beats import Beat, beats_from_events
 from canon.cache import ModelCache
 from canon.aliases import AliasBook, apply_to_ir, masks_in
@@ -766,6 +766,8 @@ def run_pipeline(
             if arc is None:
                 skipped.append({"key": candidate.key, "reason": "no arc"})
                 continue
+            # The shape of the story is read from what actually happened, not assumed.
+            arc = replace(arc, type=classify_arc_type(goal=brief.goal, turns=turn_texts(brief), outcome=brief.outcome))
             # R4-F5: two episodes in one run must not stand on the same events.
             beat_index = {beat.id: beat for beat in (story_beats or thread_beats)}
             anchor_events = {
@@ -879,7 +881,7 @@ def run_pipeline(
                         tone = parse_tone(config.tone)
                     story_ctx = {"tone": tone.writer_text(), "voices": {**DEFAULT_VOICES, **dict(config.voices or {})},
                                  "synopsis": synopsis.text(), "hook": synopsis.fields.get("hook", ""),
-                                 "jobs": PANEL_JOBS, "notes": {}}
+                                 "jobs": jobs_for(arc.type, hero=config.hero, agent=cast_map.get("default") or "Kensei"), "notes": {}}
                     first_writer = LLMDialogueWriter(writer_cached, cast, story=story_ctx)
                     # Story captions may interpret (stakes, feeling) but add no event, name
                     # or number; `--strict-captions` keeps them literal.
@@ -905,7 +907,7 @@ def run_pipeline(
                             if len(second.panels) >= len(episode_ir.panels) - 1 and review2["score"] >= review["score"]:
                                 episode_ir = second
                                 jargon = second_writer.jargon_dropped
-                    story_info = {"synopsis": synopsis.as_dict(), "editor": reviews, "jargon_dropped": jargon,
+                    story_info = {"arc_type": arc.type, "synopsis": synopsis.as_dict(), "editor": reviews, "jargon_dropped": jargon,
                                   "tone": tone.as_dict()}
                 else:
                     episode_ir = _plan(writer)

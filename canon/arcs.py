@@ -14,6 +14,7 @@ Recurring problems become villains (an entity promoted after 3+ arcs); a
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -27,6 +28,91 @@ ARC_TYPES = ("struggle-to-resolution", "pivot", "rivalry", "mystery", "training-
 
 #: A weekly strip has 4-6 panels, so a thread needs at least this many beats.
 MIN_BEATS_PER_ARC = 4
+
+DEFAULT_ARC_TYPE = "struggle-to-resolution"
+
+# --------------------------------------------------------------------------- #
+# Telling the shapes apart
+# --------------------------------------------------------------------------- #
+#
+# Every arc used to be "struggle-to-resolution": a problem appears, is diagnosed and is
+# fixed. Real work has other shapes, and a chapter reads as a different story when it is
+# told as one. The classifier below reads the thread's own words (goal, turns, outcome) and
+# only moves off the default when the signal is clear, so an ordinary bug fix stays one.
+#
+#   rivalry           something is being measured against a rival (a benchmark, a competitor)
+#   pivot             the plan was dropped for another one
+#   mystery           the cause was unknown for most of the story and is revealed at the end
+#   training-montage  a run of small improvements, with little going wrong
+
+_RIVALRY = re.compile(
+    r"\b(rival\w*|competitor\w*|versus|vs|outperform\w*|benchmark\w*|leaderboard\w*|head[- ]to[- ]head)\b",
+    re.IGNORECASE,
+)
+_PIVOT = re.compile(
+    r"\b(instead|scrap(?:ped|ping)?|switch(?:ed|ing)?|pivot\w*|abandon\w*|different approach|"
+    r"new approach|change of plan|rethink\w*|start(?:ed)? over|from scratch|"
+    r"drop(?:ped|ping)? the|gave up on the)\b",
+    re.IGNORECASE,
+)
+_MYSTERY = re.compile(
+    r"\b(why|mystery|unexplained|strange(?:ly)?|weird(?:ly)?|odd(?:ly)?|puzzl\w+|no idea|"
+    r"can'?t (?:tell|explain|see why)|doesn'?t make sense|nobody knows|still don'?t know)\b",
+    re.IGNORECASE,
+)
+_REVEAL = re.compile(
+    r"\b(turned out|root cause|the cause|was actually|culprit|the reason|it was|because)\b",
+    re.IGNORECASE,
+)
+_IMPROVE = re.compile(
+    r"(\b(better|faster|improv\w+|up from|down from|more accurate|score|accuracy|latency|"
+    r"iteration|round \d+|run \d+)\b|\d+(?:\.\d+)?\s?%)",
+    re.IGNORECASE,
+)
+_FAIL = re.compile(
+    r"\b(fail\w*|broke|broken|crash\w*|error\w*|exception\w*|blocked|stuck|timed out|timeout|hung|bug\w*)\b",
+    re.IGNORECASE,
+)
+
+#: How many of the thread's texts must show a signal before the shape is called.
+MIN_RIVALRY_HITS = 2
+MIN_PIVOT_HITS = 2
+MIN_MYSTERY_HITS = 2
+MIN_TRAINING_HITS = 3
+MAX_TRAINING_FAILURES = 1
+
+
+def _hits(pattern: re.Pattern[str], texts: Iterable[str]) -> int:
+    return sum(1 for text in texts if pattern.search(text or ""))
+
+
+def turn_texts(brief: Any) -> list[str]:
+    """The texts of a brief's turns, whether they are objects or dicts."""
+    out: list[str] = []
+    for turn in getattr(brief, "turns", ()) or ():
+        text = turn.get("text") if isinstance(turn, Mapping) else getattr(turn, "text", "")
+        if text:
+            out.append(str(text))
+    return out
+
+
+def classify_arc_type(*, goal: str = "", turns: Sequence[str] = (), outcome: str = "") -> str:
+    """The shape of a story, from its own words. Defaults to struggle-to-resolution.
+
+    Order matters: a rivalry or a pivot is a stronger, rarer signal than a run of "why"
+    questions, and a training montage is only called when little went wrong.
+    """
+    turns = [str(turn) for turn in turns if str(turn).strip()]
+    everything = [goal, *turns, outcome]
+    if _hits(_RIVALRY, everything) >= MIN_RIVALRY_HITS:
+        return "rivalry"
+    if _hits(_PIVOT, [*turns, outcome]) >= MIN_PIVOT_HITS:
+        return "pivot"
+    if _hits(_MYSTERY, turns) >= MIN_MYSTERY_HITS and _REVEAL.search(f"{outcome} {turns[-1] if turns else ''}"):
+        return "mystery"
+    if _hits(_IMPROVE, turns) >= MIN_TRAINING_HITS and _hits(_FAIL, turns) <= MAX_TRAINING_FAILURES:
+        return "training-montage"
+    return DEFAULT_ARC_TYPE
 
 
 @dataclass(frozen=True, slots=True)

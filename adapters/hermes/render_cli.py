@@ -565,13 +565,14 @@ def render_command(args: argparse.Namespace, *, ctx: Any, default_dir: Callable[
             complete_json=complete_json,
             tone=tone_hint,
             frame=ir.get("frame") if isinstance(ir.get("frame"), dict) else None,
+            arc_type=str(ir.get("arc_type") or ""),
         )
         out.mkdir(parents=True, exist_ok=True)
         (out / "treatment.json").write_text(json.dumps(treatment.as_dict(), indent=1) + "\n", encoding="utf-8")
-        sheet = _villain_sheet(treatment, style, kits, renderer, root, raw_dir, report)
+        sheet = _villain_sheet(treatment, style, kits, renderer, root, raw_dir, report) if treatment.has_villain else None
         if sheet is not None:
             villain = (treatment.villain_name, treatment.villain_look, sheet)
-        else:
+        elif treatment.has_villain:
             print(f"warning: no sheet for villain {treatment.villain_name!r}; panels drawn without it")
 
     requests, prompt_problems = build_episode_requests(ir, style=style, kits=kits, treatment=treatment, villain=villain)

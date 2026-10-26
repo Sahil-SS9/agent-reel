@@ -92,3 +92,23 @@ Three changes that give a chapter a voice instead of a transcript:
 - **No readouts.** A caption that is only a statistic or a status ("LCM-X wins by 10 to 16 points.", "Zero failures.") reports a result without telling the reader why it matters. The editor now flags these deterministically (`readout_problem`) and caps a generous score at 3 so the one rewrite pass runs, and the writer is told a result caption says what the number meant to the hero.
 
 The caption policy that stops a *caption* from quoting the owner for more than 8 words is unchanged: it governs narrator boxes. Dialogue attributed to the owner may now be his own words.
+
+## Story shapes (arc variety)
+
+Every thread used to be told as a fight with a monster. The shape is now read from what
+happened (`canon.arcs.classify_arc_type`) and changes both the writing and the pictures:
+
+| Shape | Called when | Told as | Opponent |
+| --- | --- | --- | --- |
+| mystery | repeated "why/strange" turns and a stated cause at the end | clues, a false lead, a reveal | hidden until the reveal |
+| pivot | repeated "scrap / switch / instead" turns | a plan that stops working, a decision | none, the plan is the opponent |
+| rivalry | repeated "rival / versus / benchmark" words | two sides in frame from panel one | present from the start |
+| training-montage | steady "better / faster / %" turns with at most one failure | the same hero, a visibly different attempt each panel | none |
+| struggle-to-resolution | anything else (the default) | the original problem-and-fix arc | the original villain |
+
+- `canon.story.jobs_for(shape, hero=, agent=)` gives the writer one job per panel role for the
+  shape. Every shape still opens on a cold open. The cast is filled in, not hardcoded.
+- `direct(..., arc_type=)` picks shot, angle and villain presence per shape. Pivot and
+  training-montage draw no creature at all, even if the model or the idea deck offers one.
+- The default shape is byte-for-byte what it was, so existing chapters do not change.
+- The classifier is deliberately conservative: one stray word never changes the shape.

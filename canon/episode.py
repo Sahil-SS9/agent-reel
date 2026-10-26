@@ -130,6 +130,8 @@ class EpisodeIR:
     #: M3: the idea-deck frame this chapter was drawn from (world, villain, genre, motif,
     #: shot). Kept so the director can honour it and a reader can see why it looks different.
     frame: Mapping[str, Any] = field(default_factory=dict)
+    #: The shape of the story (canon.arcs.ARC_TYPES). The director and the panel jobs follow it.
+    arc_type: str = ""
 
     def as_dict(self) -> dict[str, Any]:
         scene = {
@@ -150,6 +152,7 @@ class EpisodeIR:
             "grounding": dict(self.grounding),
             "cliffhanger": self.cliffhanger,
             "frame": dict(self.frame),
+            **({"arc_type": self.arc_type} if self.arc_type else {}),
             "panels": [panel.as_dict() for panel in self.panels],
             "scenes": [scene],
         }
@@ -1472,6 +1475,7 @@ def plan_episode(
         citation_pool=dict(line_pool),
         caption_pool_ids=tuple(episode_pool),
         frame=dict(frame or {}),
+        arc_type=str(getattr(arc, "type", "") or ""),
     )
 
 

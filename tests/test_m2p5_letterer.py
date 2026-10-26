@@ -66,3 +66,32 @@ def test_no_space_is_reported_not_dropped():
 def test_scales_to_small_images():
     im, report = letter_panel(_blank(768, 512), heads=HEADS, free=FREE, lines=[("Sahil", "Smaller panel.")])
     assert report.complete and im.size == (768, 512)
+
+
+def test_a_balloon_tail_never_crosses_another_balloon():
+    """26/10/26: crossing tails read as a layout mistake and can clip words."""
+    from PIL import Image
+
+    from canon.letterer import letter_panel
+
+    image = Image.new("RGB", (900, 600), "white")
+    panel = {
+        "id": "p1", "role": "climax", "setting": "a roof", "cast": ["Sahil", "Kensei"],
+        "lines": [
+            {"speaker": "Sahil", "text": "First line that has to be placed somewhere."},
+            {"speaker": "Kensei", "text": "Second line, aimed back at the other speaker."},
+        ],
+    }
+    heads = {"Sahil": [0.1, 0.5, 0.25, 0.75], "Kensei": [0.7, 0.5, 0.85, 0.75]}
+    lettered, report = letter_panel(
+        image, heads=heads, free=[], caption="", lines=[(l["speaker"], l["text"]) for l in panel["lines"]],
+    )
+    boxes = [b["box"] for b in report.balloons]
+    assert len(boxes) == 2
+    for balloon in report.balloons:
+        tip = balloon["tip"]
+        for box in boxes:
+            if [int(v) for v in box] == balloon["box"]:
+                continue
+            inside = box[0] <= tip[0] <= box[2] and box[1] <= tip[1] <= box[3]
+            assert not inside, f"tail tip {tip} lands inside another balloon {box}"

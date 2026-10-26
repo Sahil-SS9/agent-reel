@@ -169,6 +169,19 @@ def letter_panel(
         ex, ey = cx + (bw / 2) * math.cos(angle), cy + (bh / 2) * math.sin(angle)
         length = math.hypot(tx - ex, ty - ey)
         tail = min(max(length - (head[3] - head[1]) * 0.35, 30 * scale), 480 * scale)
+        # 26/10/26: a tail that crosses another balloon reads as a layout mistake (and can
+        # clip its words). Shorten it to stop short of the first balloon in its path.
+        others = [b for b in placed if b is not box]
+        step = max(4.0, 6 * scale)
+        drawn = tail
+        probe = step
+        while probe <= tail:
+            px, py = ex + probe * math.cos(angle), ey + probe * math.sin(angle)
+            if any(b[0] <= px <= b[2] and b[1] <= py <= b[3] for b in others):
+                drawn = max(step, probe - step)
+                break
+            probe += step
+        tail = drawn
         tip = (ex + tail * math.cos(angle), ey + tail * math.sin(angle))
         perp = angle + math.pi / 2
         base = 26 * scale

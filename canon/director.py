@@ -82,6 +82,121 @@ ROLE_ACTION = {
 }
 
 
+#: The default shape. Its treatment is the original one, untouched.
+DEFAULT_TYPE = "struggle-to-resolution"
+#: Shapes with no creature in them: the opponent is a plan, a number, the clock.
+NO_VILLAIN_TYPES = frozenset({"pivot", "training-montage"})
+
+#: Per-shape overrides of ROLE_DEFAULTS: (shot, angle, villain presence).
+TYPE_ROLE_DEFAULTS: dict[str, dict[str, tuple[str, str, str]]] = {
+    # The cause stays unseen until the reveal, so the camera hunts for it.
+    "mystery": {
+        "setup": ("close", "dutch", "absent"),
+        "hidden_problem": ("extreme-close", "eye", "absent"),
+        "diagnosis": ("medium", "high", "absent"),
+        "climax": ("full", "low", "attacking"),
+        "aftermath": ("medium", "eye", "defeated"),
+    },
+    # The plan is the opponent, so no creature, and the turn is a quiet decision.
+    "pivot": {
+        "setup": ("long", "eye", "absent"),
+        "hidden_problem": ("medium", "high", "absent"),
+        "diagnosis": ("close", "eye", "absent"),
+        "climax": ("full", "overhead", "absent"),
+        "aftermath": ("medium", "low", "absent"),
+        "win": ("long", "eye", "absent"),
+    },
+    # The rival is in the room from the first panel.
+    "rivalry": {
+        "setup": ("medium", "eye", "lurking"),
+        "hidden_problem": ("full", "low", "attacking"),
+        "diagnosis": ("close", "dutch", "lurking"),
+        "aftermath": ("medium", "eye", "lurking"),
+        "win": ("long", "low", "defeated"),
+    },
+    # Same hero and place, again and again: the change is in the framing, not a creature.
+    "training-montage": {
+        "setup": ("medium", "eye", "absent"),
+        "hidden_problem": ("medium", "high", "absent"),
+        "diagnosis": ("close", "eye", "absent"),
+        "climax": ("full", "low", "absent"),
+        "aftermath": ("close", "low", "absent"),
+        "win": ("long", "low", "absent"),
+    },
+}
+
+#: Per-shape action lines, `{name}` is the opponent. A role not listed keeps the default.
+TYPE_ACTION: dict[str, dict[str, str]] = {
+    "mystery": {
+        "setup": "the heroes stare at something that makes no sense",
+        "hidden_problem": "a clue that does not fit, lit from the side",
+        "diagnosis": "the heroes chase a lead and it goes cold",
+        "climax": "{name} revealed at last, the heroes see what was behind it all",
+    },
+    "pivot": {
+        "setup": "the hero lays out the plan with confidence",
+        "hidden_problem": "the plan bends under its first real test",
+        "diagnosis": "the hero looks at the plan and sees that it will not hold",
+        "climax": "the old plan swept aside, a new one drawn in its place",
+        "aftermath": "the discarded work stacked up behind the heroes",
+        "win": "the heroes walk a new road, uncertain but moving",
+    },
+    "rivalry": {
+        "setup": "the heroes face {name} across the room, neither blinking",
+        "hidden_problem": "{name} makes the first move and gains ground",
+        "diagnosis": "the heroes spot the tell in {name}'s guard",
+        "climax": "the heroes and {name} collide head to head",
+    },
+    "training-montage": {
+        "setup": "the hero marks the starting line and the target",
+        "hidden_problem": "the first attempt falls short of the mark",
+        "diagnosis": "the hero changes grip and tries a different way",
+        "climax": "the best attempt yet clears the mark",
+        "aftermath": "tired hands, worn tools, a long day behind them",
+        "win": "the hero looks back along the road they climbed",
+    },
+}
+
+#: Per-shape ROLE_ACTION overrides (motion, impact, reaction, camera) where a creature would not fit.
+TYPE_MOTION: dict[str, dict[str, tuple[str, str, str, str]]] = {
+    shape: {
+        "setup": ("still air, a screen glowing", "", "the pair size up the problem", "slow push in"),
+        "hidden_problem": ("a small thing slips out of place", "a thin crack spreads", "a frown", "slow push in"),
+        "diagnosis": ("a hand stops mid-motion", "the picture shifts", "eyes widen", "slow zoom to the detail"),
+        "climax": ("the whole frame turns on one gesture", "the old way falls away", "a long breath out", "wide hold"),
+        "aftermath": ("papers settling", "", "a slow nod", "slow pull back"),
+        "win": ("the pair move on together", "", "a small, tired smile", "crane up and away"),
+    }
+    for shape in NO_VILLAIN_TYPES
+}
+
+ARC_DIRECTION: dict[str, str] = {
+    "mystery": (
+        " This is a MYSTERY: keep the cause out of frame (villain_presence absent) until the "
+        "climax, which is the reveal; show clues, shadows and close details, not the culprit."
+    ),
+    "pivot": (
+        " This is a PIVOT: there is NO villain and no creature. The opponent is a plan that "
+        "stops working. Leave the villain name and look empty and use villain_presence absent "
+        "everywhere. The climax is a decision, not a fight."
+    ),
+    "rivalry": (
+        " This is a RIVALRY: the opponent is on the page from the first panel (lurking or "
+        "attacking), and two sides stay in frame together."
+    ),
+    "training-montage": (
+        " This is a TRAINING MONTAGE: there is NO villain and no creature. Show the same hero "
+        "and place getting better, with each panel a visibly different attempt. Leave the "
+        "villain name and look empty and use villain_presence absent everywhere."
+    ),
+}
+
+
+def _role_defaults(arc_type: str, role: str) -> tuple[str, str, str]:
+    base = ROLE_DEFAULTS.get(role, ("medium", "eye", "absent"))
+    return TYPE_ROLE_DEFAULTS.get(arc_type, {}).get(role, base)
+
+
 def frame_villain(frame: Mapping[str, Any] | None) -> tuple[str, str] | None:
     """The chapter's villain, named from the deck archetype.
 
@@ -103,19 +218,24 @@ def frame_villain(frame: Mapping[str, Any] | None) -> tuple[str, str] | None:
     return key.replace("-", " ").title(), look
 
 
-def _frame_brief(frame: Mapping[str, Any] | None) -> str:
-    """A one-line deck brief for the director (empty when there is no deck)."""
+def _frame_brief(frame: Mapping[str, Any] | None, *, villainless: bool = False) -> str:
+    """A one-line deck brief for the director (empty when there is no deck).
+
+    A shape with no creature in it drops the deck's villain archetype from the brief.
+    """
     if not frame:
         return ""
     from canon.ideas import frame_prompt
 
-    return frame_prompt(frame)
+    brief = frame_prompt(frame)
+    if villainless:
+        brief = "; ".join(bit for bit in brief.split("; ") if not bit.startswith("villain archetype:"))
+    return brief
 
 
-WORLD_DEFAULT = (
-    "a neon-lit command deck high above a rain-soaked cyber city, its walls lined with "
-    "glowing server towers"
-)
+#: Used only when neither the style nor the deck names a world. Deliberately plain: a style
+#: owns its world (StyleCard.world), the director does not impose a sci-fi one.
+WORLD_DEFAULT = "the place where the work happens, a desk and a screen in an ordinary lit room"
 
 _TEXT_REQUEST = re.compile(r"(\"[^\"]*\"|'[^']*'|\b(sign|banner|label|screen|text|words?|caption)s? (that )?(says?|reads?|showing)\b[^,.;]*)", re.I)
 
@@ -201,9 +321,17 @@ class Treatment:
     repairs: list[str] = field(default_factory=list)
     #: V5: wordless filler panels (establishing, reaction, lurking, impact, quiet beat).
     fillers: list[PanelTreatment] = field(default_factory=list)
+    #: The shape of the story this treatment was made for ("" = the default shape).
+    arc_type: str = ""
+
+    @property
+    def has_villain(self) -> bool:
+        return bool(self.villain_name)
 
     def as_dict(self) -> dict[str, Any]:
+        extra = {"arc_type": self.arc_type} if self.arc_type else {}
         return {
+            **extra,
             "villain": {"name": self.villain_name, "look": self.villain_look},
             "world": self.world,
             "source": self.source,
@@ -262,9 +390,15 @@ def _rule_fillers(treatment: "Treatment", ir: Mapping[str, Any]) -> list[PanelTr
         if upcoming == "climax":
             kind, who, shot, angle, presence = "calm", (hero,), "extreme-close", "eye", "absent"
             action = f"{hero}'s eyes narrow in the half-light, a breath before the storm"
+        elif role == "climax" and not treatment.has_villain:
+            kind, who, shot, angle, presence = "impact", (), "extreme-long", "overhead", "absent"
+            action = "the room goes still after the decision; nothing moves for a moment"
         elif role == "climax":
             kind, who, shot, angle, presence = "impact", (), "extreme-long", "overhead", "defeated"
             action = f"the shockwave of the clash rolls out; fragments of {name} scatter across the ground"
+        elif upcoming in {"hidden_problem", "diagnosis", "insert"} and index < len(panels) * 0.7 and not treatment.has_villain:
+            kind, who, shot, angle, presence = "establishing", (), "long", "dutch", "absent"
+            action = "the workspace in silence, one thing slightly out of place"
         elif upcoming in {"hidden_problem", "diagnosis", "insert"} and index < len(panels) * 0.7:
             kind, who, shot, angle, presence = "lurk", (), "long", "dutch", "lurking"
             action = f"{name} stir in the shadows, unseen, closer than before"
@@ -325,21 +459,25 @@ def no_text(value: str) -> str:
 
 
 def _rules(
-    ir: Mapping[str, Any], story_text: str, *, frame: Mapping[str, Any] | None = None
+    ir: Mapping[str, Any], story_text: str, *, frame: Mapping[str, Any] | None = None, arc_type: str = "",
+    world: str = "",
 ) -> Treatment:
     name, look = pick_villain(story_text)
-    world = WORLD_DEFAULT
+    world = world or WORLD_DEFAULT
+    villainless = arc_type in NO_VILLAIN_TYPES
     if frame:
         villain = frame.get("villain") or {}
-        if villain.get("look"):
+        if villain.get("look") and not villainless:
             name, look = str(villain.get("label") or name), str(villain["look"])
         world_spec = frame.get("world") or {}
         if world_spec.get("label"):
             world = str(world_spec["label"])
-    treatment = Treatment(villain_name=name, villain_look=look, world=world)
+    if villainless:
+        name = look = ""
+    treatment = Treatment(villain_name=name, villain_look=look, world=world, arc_type=arc_type)
     for panel in ir.get("panels", []) or []:
         role = str(panel.get("role", "aftermath"))
-        shot, angle, presence = ROLE_DEFAULTS.get(role, ("medium", "eye", "absent"))
+        shot, angle, presence = _role_defaults(arc_type, role)
         action = {
             "setup": "the heroes arrive and survey the scene, calm before the storm",
             "hidden_problem": f"{name} creep in unnoticed in the shadows behind the heroes",
@@ -348,10 +486,12 @@ def _rules(
             "aftermath": f"the dust settles; scattered remains of {name} fade away",
             "win": "the heroes stand victorious, the world calm again",
         }.get(role, "the heroes press on")
-        motion, impact, reaction, camera = ROLE_ACTION.get(
+        action = TYPE_ACTION.get(arc_type, {}).get(role, action).format(name=name)
+        table = {**ROLE_ACTION, **TYPE_MOTION.get(arc_type, {})}
+        motion, impact, reaction, camera = table.get(
             role, ("the scene moves with the heroes", "", "the other side answers", "steady push in")
         )
-        if frame and role == "setup":
+        if frame and role == "setup" and not villainless:
             shot_spec = frame.get("shot") or {}
             if shot_spec.get("label"):
                 action = f"{action}; opening on {shot_spec['label']}"
@@ -366,12 +506,14 @@ def _rules(
 
 def _repair(treatment: Treatment, ir: Mapping[str, Any]) -> Treatment:
     """Enforce the craft rules on whatever the model returned."""
+    arc_type = treatment.arc_type
+    villainless = arc_type in NO_VILLAIN_TYPES
     previous: tuple[str, str] | None = None
     for panel in ir.get("panels", []) or []:
         pid = str(panel.get("id"))
         role = str(panel.get("role", "aftermath"))
         item = treatment.panels.get(pid)
-        default_shot, default_angle, default_presence = ROLE_DEFAULTS.get(role, ("medium", "eye", "absent"))
+        default_shot, default_angle, default_presence = _role_defaults(arc_type, role)
         if item is None:
             item = PanelTreatment(pid, role, treatment.world, "the heroes press on", default_presence, default_shot, default_angle)
             treatment.panels[pid] = item
@@ -384,6 +526,11 @@ def _repair(treatment: Treatment, ir: Mapping[str, Any]) -> Treatment:
             item.angle = default_angle
         if item.villain_presence not in {"absent", "lurking", "attacking", "defeated"}:
             item.villain_presence = default_presence
+        if villainless:
+            item.villain_presence = "absent"
+        elif arc_type == "mystery" and role != "climax" and item.villain_presence == "attacking" and role in {"setup", "hidden_problem", "diagnosis"}:
+            treatment.repairs.append(f"{pid}: culprit kept out of frame until the reveal")
+            item.villain_presence = "absent"
         if role == "climax" and (item.angle not in {"low", "dutch"} or item.shot not in {"full", "long"}):
             treatment.repairs.append(f"{pid}: climax made dynamic")
             item.shot, item.angle = "full", "low" if item.angle not in {"low", "dutch"} else item.angle
@@ -397,11 +544,11 @@ def _repair(treatment: Treatment, ir: Mapping[str, Any]) -> Treatment:
             setattr(item, field_name, value[:160])
         previous = (item.shot, item.angle)
     treatment.villain_look = no_text(treatment.villain_look)
-    treatment.world = no_text(treatment.world) or WORLD_DEFAULT
+    treatment.world = no_text(treatment.world) or WORLD_DEFAULT  # callers pass a style world through `direct`
     for filler in treatment.fillers:
         filler.shot = filler.shot if filler.shot in SHOTS else "extreme-long"
         filler.angle = filler.angle if filler.angle in ANGLES else "high"
-        if filler.villain_presence not in {"absent", "lurking", "attacking", "defeated"}:
+        if filler.villain_presence not in {"absent", "lurking", "attacking", "defeated"} or villainless:
             filler.villain_presence = "absent"
         filler.location = no_text(filler.location) or treatment.world
         filler.action = no_text(filler.action) or "a quiet beat"
@@ -427,16 +574,26 @@ def direct(
     complete_json: Callable[..., Mapping[str, Any]] | None = None,
     tone: str = "",
     frame: Mapping[str, Any] | None = None,
+    arc_type: str = "",
+    world: str = "",
 ) -> Treatment:
     """A visual treatment for the episode: model when available, rules otherwise.
+
+    ``world`` is the style's own setting (StyleCard.world); it replaces the plain default
+    when the idea deck does not name one.
+
+    ``arc_type`` is the shape of the story. The default shape (or "") keeps the original
+    villain treatment; pivot and training-montage have no villain at all.
 
     ``frame`` is the idea-deck draw for this chapter (world, villain archetype, genre,
     motif, opening shot). It fixes the look a chapter cannot repeat, while the facts of
     the episode still decide what happens.
     """
-    frame_brief = _frame_brief(frame)
+    arc_type = "" if arc_type == DEFAULT_TYPE else arc_type
+    villainless = arc_type in NO_VILLAIN_TYPES
+    frame_brief = _frame_brief(frame, villainless=villainless)
     if complete_json is None:
-        return _with_tone(_repair(_rules(ir, story_text, frame=frame), ir), tone)
+        return _with_tone(_repair(_rules(ir, story_text, frame=frame, arc_type=arc_type, world=world), ir), tone)
     panels = [
         {"id": p.get("id"), "role": p.get("role"), "caption": p.get("caption", ""),
          "lines": [f"{l.get('speaker')}: {l.get('text')}" for l in p.get("lines", [])],
@@ -445,9 +602,12 @@ def direct(
     ]
     try:
         answer = complete_json(
-            prompt=DIRECTOR_PROMPT,
+            prompt=DIRECTOR_PROMPT + ARC_DIRECTION.get(arc_type, "") + (
+                f" The art style's own world is: {world}. Stay inside it." if world else ""
+            ),
             payload={"title": ir.get("logline", ""), "story": story_text[:3000], "panels": panels,
-                     "visual_tone": tone, "frame": frame_brief},
+                     "visual_tone": tone, "frame": frame_brief,
+                     **({"story_shape": arc_type} if arc_type else {})},
             schema_hint={
                 "villain": {"name": "str", "look": "str"},
                 "world": "str",
@@ -457,17 +617,18 @@ def direct(
             stage="episode.director",
         )
     except Exception:  # noqa: BLE001 - a missing director never blocks a render
-        fallback = _with_tone(_repair(_rules(ir, story_text), ir), tone)
+        fallback = _with_tone(_repair(_rules(ir, story_text, arc_type=arc_type, world=world), ir), tone)
         fallback.repairs.append("director model unavailable; rules used")
         return fallback
     raw_villain = answer.get("villain")
     villain: Mapping[str, Any] = raw_villain if isinstance(raw_villain, dict) else {}
     default_name, default_look = pick_villain(story_text)
     treatment = Treatment(
-        villain_name=str(villain.get("name") or default_name)[:40],
-        villain_look=str(villain.get("look") or default_look)[:300],
-        world=str(answer.get("world") or WORLD_DEFAULT)[:300],
+        villain_name="" if villainless else str(villain.get("name") or default_name)[:40],
+        villain_look="" if villainless else str(villain.get("look") or default_look)[:300],
+        world=str(answer.get("world") or world or WORLD_DEFAULT)[:300],
         source="model",
+        arc_type=arc_type,
     )
     roles = {str(p.get("id")): str(p.get("role", "")) for p in ir.get("panels", []) or []}
     for item in answer.get("panels") or []:
@@ -480,7 +641,7 @@ def direct(
             villain_presence=str(item.get("villain_presence") or "absent"),
             shot=str(item.get("shot") or ""), angle=str(item.get("angle") or ""),
         )
-    fixed_villain = frame_villain(frame)
+    fixed_villain = None if villainless else frame_villain(frame)
     if fixed_villain is not None:
         name, look = fixed_villain
         if (name, look) != (treatment.villain_name, treatment.villain_look):
@@ -501,4 +662,4 @@ def _with_tone(treatment: Treatment, tone: str) -> Treatment:
     return treatment
 
 
-__all__: Sequence[str] = ("Treatment", "PanelTreatment", "direct", "pick_villain", "no_text", "SHOT_WORDS", "ANGLE_WORDS")
+__all__: Sequence[str] = ("Treatment", "PanelTreatment", "ARC_DIRECTION", "NO_VILLAIN_TYPES", "direct", "pick_villain", "no_text", "SHOT_WORDS", "ANGLE_WORDS")

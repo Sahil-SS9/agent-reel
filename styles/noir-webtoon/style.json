@@ -7,5 +7,16 @@
  "status": "experimental",
  "refs": [],
  "staging_rules": "Keep the top 25 percent of the frame as uncluttered background (wall, ceiling or sky) for speech balloons added later.",
- "licence": "Prompt text: MIT (this repo). Reference sheets: generated for this project with the owner's image account; fictional characters only."
+ "licence": "Prompt text: MIT (this repo). Reference sheets: generated for this project with the owner's image account; fictional characters only.",
+ "world": "a rain-slick city at night: a cramped office, a fire escape, a wet street under one buzzing streetlight",
+ "composition": "Tight, low-key framing: one strong light source, long shadows, faces half in dark.",
+ "impact": "Full-bleed impact frame: a single hard flash of light cutting the dark, the moment frozen in silhouette.",
+ "lettering": {
+  "balloon": "rounded",
+  "balloon_fill": "#f1efe6",
+  "caption_fill": "#d9d4c3",
+  "ink": "#101216",
+  "caption_shape": "rect",
+  "outline": "0.8"
+ }
 }

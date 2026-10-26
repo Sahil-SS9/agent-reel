@@ -472,7 +472,7 @@ def render_command(args: argparse.Namespace, *, ctx: Any, default_dir: Callable[
     from adapters.hermes.vision import VisionError, host_vision
     from canon.assets import clear_to_render
     from canon.export import export_episode
-    from canon.letterer import letter_panel
+    from canon.letterer import LetterStyle, letter_panel
     from canon.panel_check import LETTER_QUESTION, TIGHT_QUESTION, check_question, interpret
     from canon.panel_prompt import build_episode_requests, episode_cast
     from canon.render import PanelRenderer, RenderError, RenderReport, write_render_manifest
@@ -570,6 +570,8 @@ def render_command(args: argparse.Namespace, *, ctx: Any, default_dir: Callable[
             complete_json=complete_json,
             tone=tone_hint,
             frame=ir.get("frame") if isinstance(ir.get("frame"), dict) else None,
+            arc_type=str(ir.get("arc_type") or ""),
+            world=style.world,
         )
         if getattr(args, "no_fillers", False) and treatment.fillers:
             # 26/10/26: a four-panel example should be four panels, not four plus fillers.
@@ -577,12 +579,13 @@ def render_command(args: argparse.Namespace, *, ctx: Any, default_dir: Callable[
             treatment.fillers = []
         out.mkdir(parents=True, exist_ok=True)
         (out / "treatment.json").write_text(json.dumps(treatment.as_dict(), indent=1) + "\n", encoding="utf-8")
-        sheet = _villain_sheet(treatment, style, kits, renderer, root, raw_dir, report)
+        sheet = _villain_sheet(treatment, style, kits, renderer, root, raw_dir, report) if treatment.has_villain else None
         if sheet is not None:
             villain = (treatment.villain_name, treatment.villain_look, sheet)
-        else:
+        elif treatment.has_villain:
             print(f"warning: no sheet for villain {treatment.villain_name!r}; panels drawn without it")
 
+    letter_look = LetterStyle.from_style(style.lettering)
     requests, prompt_problems = build_episode_requests(ir, style=style, kits=kits, treatment=treatment, villain=villain)
     if prompt_problems:
         for problem in prompt_problems:
@@ -642,6 +645,7 @@ def render_command(args: argparse.Namespace, *, ctx: Any, default_dir: Callable[
             caption=display_text(str(panel.get("caption", ""))),
             lines=[(speaker, display_text(text)) for speaker, text in lines],
             font_scale=PAGE_FONT_SCALE if treatment is not None else 1.0,
+            look=letter_look,
         )
         if lines and letter_report.balloons:
             # Letterer self-check (bake-off r2): ask whether every tail points at its
@@ -675,6 +679,7 @@ def render_command(args: argparse.Namespace, *, ctx: Any, default_dir: Callable[
                     caption=display_text(str(panel.get("caption", ""))),
                     lines=[(speaker, display_text(text)) for speaker, text in lines],
                     font_scale=PAGE_FONT_SCALE if treatment is not None else 1.0,
+                    look=letter_look,
                 )
                 checks[-1]["tail_misses_fixed"] = misses
         checks[-1]["lettering"] = letter_report.as_dict()

@@ -331,6 +331,10 @@ class GroundingReport:
 # model, because whether "it broke *because* X" is supported is a reading question. A
 # line with no claims (emotion, banter, reaction) passes: there is nothing to be wrong.
 
+#: The grounding layers a line can be checked on (ClaimGate.check). "caption" is a fact,
+#: "dialogue" is a performance, "story" is narration that may interpret but not add events.
+STORY_LAYER = "story"
+
 CAUSE_WORDS = ("because", "due to", "so that", "caused", "as a result", "which is why")
 OUTCOME_WORDS = (
     "fixed", "broke", "broken", "completed", "failed", "gave up", "passed", "shipped",
@@ -574,6 +578,26 @@ class ClaimGate:
         "a plain-English rewording or a new fact. When unsure, answer false."
     )
 
+    #: The story layer: narration that tells the work as a story. It may interpret (what was
+    #: at stake, how a moment felt, why it mattered) but it may not add anything that
+    #: happened. This is the difference between a caption that restates a log line and one
+    #: that carries the reader through it. Facts stay on the strict caption layer.
+    STORY_PROMPT = (
+        "You check one line of narration in a comic that retells real work with an AI agent, "
+        "against the evidence it cites. "
+        'Answer JSON only: {"supported": true|false, "unbacked": ["..."]}. '
+        "Narration may interpret the work: what was at stake, what a moment felt like, why it "
+        "mattered, a character's motive or mood, tension, humour, a rhetorical question or a "
+        "metaphor. Those are NOT claims and must not be counted against the line. "
+        "The line is NOT supported if it states or implies anything that happened which the "
+        "evidence does not say: a new action, result, outcome or cause, a number, a name, a "
+        "time or duration, a place, a wrong actor, or a flipped outcome. It is also not "
+        "supported if it contradicts the evidence. A vivid metaphor that implies a new fact "
+        '("the server caught fire") is not supported. Stakes must be stakes the evidence '
+        "points to, not new consequences. When unsure whether the line adds an event, "
+        "answer false."
+    )
+
     #: With a model, a caption must share at least this much vocabulary with its
     #: evidence before the model is asked; below it the caption is about something else.
     #: In meaning mode (V7) there is no vocabulary floor; the judge decides meaning.
@@ -614,11 +638,15 @@ class ClaimGate:
         ``layer="caption"`` is a factual sentence: every content word must be in the
         evidence (the model confirms when it is available). ``layer="dialogue"`` is a
         performance: only claims are checked, so a reaction passes untouched.
+        ``layer="story"`` is narration: names and numbers stay strict, but it may
+        interpret (stakes, feeling, motive) as long as it adds no event (see STORY_PROMPT).
         """
         report = check_claims(line, evidence_text, allow=self.allow)
         if report.unbacked:
             detail = ", ".join(f"{claim.kind}:{claim.text}" for claim in report.unbacked[:4])
             return ClaimVerdict(False, f"unbacked {detail}", report)
+        if layer == STORY_LAYER:
+            return self._check_story(line, evidence_text, report)
         if layer == "dialogue" and self.meaning:
             # t_6950a3d0 (Quan): meaning mode drops the vocabulary floor, so a statement
             # whose cited evidence says nothing it says reached a lenient judge and was
@@ -697,6 +725,11 @@ class ClaimGate:
             prompt = self.MEANING_PROMPT
         else:
             prompt = self.CAPTION_PROMPT if layer == "caption" else self.PROMPT
+        return self._judge(prompt, payload, report)
+
+    def _judge(self, prompt: str, payload: dict[str, Any], report: ClaimReport) -> ClaimVerdict:
+        """Ask the model one entailment question. Fails closed when it cannot answer."""
+        assert self.llm is not None
         try:
             response = self.llm.complete_json(
                 prompt=prompt,
@@ -716,6 +749,50 @@ class ClaimGate:
             False, f"not entailed{(' (' + detail + ')') if detail else ''}", report,
             model_checked=True,
         )
+
+    def _check_story(self, line: str, evidence_text: str, report: ClaimReport) -> ClaimVerdict:
+        """Narration: interpretation is free, events are not.
+
+        Names and numbers were already checked by the caller. What is left is the question
+        the term rule cannot answer: does the line add something that *happened*? Only a
+        model can tell a feeling from a new event, so with no model this is exactly as
+        strict as a caption (fail closed) and the story voice simply stays off.
+        """
+        if self.llm is None:
+            return self.check(line, evidence_text, layer="caption")
+        named = [
+            name for name in self.cast
+            if re.search(rf"\b{re.escape(name)}\b", line, re.IGNORECASE)
+        ]
+        missing = [
+            name for name in named
+            if not re.search(rf"\b{re.escape(name)}\b", evidence_text or "", re.IGNORECASE)
+        ]
+        if missing:
+            return ClaimVerdict(
+                False,
+                "unbacked actor " + ", ".join(missing[:4]) + " (not in the cited evidence)",
+                report,
+            )
+        if report.needs_model:
+            # The line states an outcome or a cause, so who did it matters.
+            unbound = self._unbound_actors(line, evidence_text, named)
+            if unbound:
+                return ClaimVerdict(
+                    False,
+                    "actor not bound to the action: " + ", ".join(unbound[:4])
+                    + " (no cited event names them doing it)",
+                    report,
+                )
+        elif len(statement_content_terms(line, allow=self.allow)) < 2:
+            # A question or a lone reaction asserts nothing, so there is nothing to verify.
+            return ClaimVerdict(True, "story line asserts nothing", report)
+        payload: dict[str, Any] = {
+            "line": line,
+            "evidence": (evidence_text or "")[:4000],
+            "claims": [claim.as_dict() for claim in report.claims],
+        }
+        return self._judge(self.STORY_PROMPT, payload, report)
 
     def _unbound_actors(self, line: str, evidence_text: str, named: Sequence[str]) -> list[str]:
         """Named actors with no evidence block that names them *and* shares the action.

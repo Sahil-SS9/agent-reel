@@ -71,3 +71,70 @@ Pictures may exaggerate how it *felt*; words may only say what *happened*.
 - A caption or line never claims a fight, a weapon or a place that is not in the evidence.
 
 The approved r2 strip followed exactly this split.
+
+## Two layers: facts and story (story layer)
+
+A caption that must be entailed word for word by the log can only restate the log, which is why chapters read like a playback. Narration now runs on its own grounding layer (`ClaimGate.check(..., layer="story")`):
+
+- **What it may do:** interpret. What was at stake, what a moment felt like, why it mattered, a character's motive or mood, humour, a rhetorical question.
+- **What it may not do:** add anything that happened. Names and numbers are checked deterministically against the cited evidence, a named character must be in that evidence, an outcome or cause must bind to its actor, and a model judge refuses any new action, result, cause, time or place (`ClaimGate.STORY_PROMPT`).
+- **No model, no story voice.** With no model to tell a feeling from a new event, the story layer is exactly as strict as a caption.
+- **Facts keep the strict layer.** The "behind the panels" notes and the trace still cite source events, and `--strict-captions` keeps narrator captions literal.
+
+Dialogue is unchanged: it already allowed tone and was claim-checked. The synopsis and the story-mode scene captions use the story layer by default.
+
+## Real lines, a cold open, and no readouts
+
+Three changes that give a chapter a voice instead of a transcript:
+
+- **Real lines.** The owner's blunt, dry messages are better dialogue than anything a model invents. For each panel, `canon/reallines.py` offers the speakers' punchiest short sentences, taken verbatim from the *gated* (already redacted) text of that panel's own messages, as candidate lines (`real_lines`). The writer may use one unchanged; whatever it writes still goes through the grounding gate, so a real line is cited to the event that said it. Code, links, paths, ids, jargon, redaction masks and assistant filler are never offered. Turn it off with `hermes reel plan --no-real-lines`.
+- **A cold open.** The synopsis now has a `hook`: the single most gripping moment, line or question of the story. The setup panel opens on it before it introduces anyone.
+- **No readouts.** A caption that is only a statistic or a status ("LCM-X wins by 10 to 16 points.", "Zero failures.") reports a result without telling the reader why it matters. The editor now flags these deterministically (`readout_problem`) and caps a generous score at 3 so the one rewrite pass runs, and the writer is told a result caption says what the number meant to the hero.
+
+The caption policy that stops a *caption* from quoting the owner for more than 8 words is unchanged: it governs narrator boxes. Dialogue attributed to the owner may now be his own words.
+
+## Story shapes (arc variety)
+
+Every thread used to be told as a fight with a monster. The shape is now read from what
+happened (`canon.arcs.classify_arc_type`) and changes both the writing and the pictures:
+
+| Shape | Called when | Told as | Opponent |
+| --- | --- | --- | --- |
+| mystery | repeated "why/strange" turns and a stated cause at the end | clues, a false lead, a reveal | hidden until the reveal |
+| pivot | repeated "scrap / switch / instead" turns | a plan that stops working, a decision | none, the plan is the opponent |
+| rivalry | repeated "rival / versus / benchmark" words | two sides in frame from panel one | present from the start |
+| training-montage | steady "better / faster / %" turns with at most one failure | the same hero, a visibly different attempt each panel | none |
+| struggle-to-resolution | anything else (the default) | the original problem-and-fix arc | the original villain |
+
+- `canon.story.jobs_for(shape, hero=, agent=)` gives the writer one job per panel role for the
+  shape. Every shape still opens on a cold open. The cast is filled in, not hardcoded.
+- `direct(..., arc_type=)` picks shot, angle and villain presence per shape. Pivot and
+  training-montage draw no creature at all, even if the model or the idea deck offers one.
+- The default shape is byte-for-byte what it was, so existing chapters do not change.
+- The classifier is deliberately conservative: one stray word never changes the shape.
+
+## A style owns its look
+
+Under every style there used to be one shared look: a cyber-city default world, a "dynamic
+comic-book, cinematic energy" line on every prompt, speed lines on every climax, and the same
+white ellipse balloons and yellow caption box. Different styles therefore came out alike.
+The shared layer is gone. A style card may now set, in `style.json` or the `style.md`
+frontmatter:
+
+| Key | What it owns |
+| --- | --- |
+| `world` | where its stories happen (used when the idea deck names no world) |
+| `composition` | how its panels are framed, appended to every panel prompt |
+| `impact` | its climax frame (the neutral default asks for no genre effects) |
+| `lettering` / `lettering_*` | balloon shape (`ellipse`, `rounded`, `rect`), balloon, comms and caption fills, ink colour, outline weight, font (`comic`, `display`), caption shape |
+
+A style that sets none of these adds nothing, and the lettering is drawn exactly as before.
+
+## Three styles that look different
+
+`ligne-claire` (flat colour, one even line, calm wide settings), `halftone-noir` (hard
+shadow, dots, tilted angles, square balloons in a heavy display face) and `risograph-print`
+(two inks, off-register, rounded balloons in deep blue ink on cream) each own a world,
+composition, impact frame and lettering. `tests/test_three_styles.py` fails if any two of
+them share one of those, so a future edit cannot quietly pull them back to a common look.
+The same story drawn in each should read as three different books.

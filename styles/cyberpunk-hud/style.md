@@ -6,6 +6,16 @@ status: experimental
 tested_on: []
 source: KENSEI style skill `dark-cyberpunk-hud` (owner's own prompt library)
 licence: Prompt text written for the owner's style skills; MIT in this repo.
+world: a neon-lit command deck high above a rain-soaked cyber city, its walls lined with glowing server towers
+composition: Wide, symmetrical command-deck framing with holographic overlays and layered glow.
+impact: Full-bleed impact frame: a surge of neon light and shattering holograms at the centre of the composition.
+lettering_balloon: rect
+lettering_balloon_fill: #0d1b2a
+lettering_comms_fill: #12293f
+lettering_caption_fill: #07121c
+lettering_ink: #7ff3ff
+lettering_outline: 0.7
+lettering_font: display
 ---
 
 Create an extraordinary dark cyberpunk HUD illustration that follows the visual language of **Dark Cyberpunk HUD** — a fictional interface atelier known for transforming technical ideas into cinematic command surfaces: neon-on-dark systems maps, holographic overlays, terminal aesthetics, circuit traces, diagnostic panels, glitch textures, and precise data-light compositions.

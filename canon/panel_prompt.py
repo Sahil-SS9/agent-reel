@@ -49,6 +49,10 @@ class PromptError(ValueError):
     """A panel cannot be turned into a prompt (missing kit, too many characters)."""
 
 
+#: The climax frame when a style does not describe its own: no speed lines, no debris, no genre.
+IMPACT_DEFAULT = "Full-bleed impact frame: the decisive moment at the centre of the composition."
+
+
 @dataclass(frozen=True, slots=True)
 class PanelRequest:
     panel_id: str
@@ -151,13 +155,12 @@ def build_panel_request(
             if value:
                 parts.append(f"{label}: {value}.")
         if str(getattr(treatment, "role", "")) == "climax":
-            parts.append(
-                "Full-bleed impact frame: speed lines, flying debris, the strike at the centre "
-                "of the composition."
-            )
+            # The impact frame is the style's own; the neutral default asks for no genre effects.
+            parts.append(getattr(style, "impact", "") or IMPACT_DEFAULT)
         if getattr(treatment, "tone", ""):
             parts.append(f"VISUAL TONE: {treatment.tone}.")
-        parts.append("Dynamic comic-book composition, dramatic lighting, cinematic energy.")
+        if getattr(style, "composition", ""):
+            parts.append(style.composition)
     if caption:
         parts.append(f"The real event behind this panel (for mood only, never write it): {caption}")
     if villain_shown:

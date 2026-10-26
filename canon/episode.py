@@ -33,6 +33,7 @@ from canon.caption import (
 )
 from canon.grounding import ClaimGate, ClaimReport, GroundingReport
 from canon.llm import CachedLLM, LLMError
+from canon.reallines import real_lines_for
 
 SHOTS = ("wide", "medium", "close", "insert")
 
@@ -129,6 +130,8 @@ class EpisodeIR:
     #: M3: the idea-deck frame this chapter was drawn from (world, villain, genre, motif,
     #: shot). Kept so the director can honour it and a reader can see why it looks different.
     frame: Mapping[str, Any] = field(default_factory=dict)
+    #: The shape of the story (canon.arcs.ARC_TYPES). The director and the panel jobs follow it.
+    arc_type: str = ""
 
     def as_dict(self) -> dict[str, Any]:
         scene = {
@@ -149,6 +152,7 @@ class EpisodeIR:
             "grounding": dict(self.grounding),
             "cliffhanger": self.cliffhanger,
             "frame": dict(self.frame),
+            **({"arc_type": self.arc_type} if self.arc_type else {}),
             "panels": [panel.as_dict() for panel in self.panels],
             "scenes": [scene],
         }
@@ -289,9 +293,16 @@ class LLMDialogueWriter:
         "Rules: dialogue carries the scene - at most 2 lines per panel, each under 90 characters, "
         "in the speaker's voice, only from that panel's speakers; give EVERY main character a "
         "voice across the stretch (Kensei is the AI agent and should speak, not only be described). "
-        "A caption is optional (time, stakes, or a fact nobody would say aloud), at most 15 words. "
+        "A caption is optional narration, at most 15 words: the stakes, the tension, what a moment "
+        "meant, or a fact nobody would say aloud. It may interpret and it may feel, but it may not "
+        "add an event, a result, a cause, a number, a name or a time that the facts do not give. "
         "Translate engineering words for a general reader: say 'the database' not SQLite or "
         "PostgreSQL, 'the second job' not 'Handoff 2', 'the new version' not 'v2'. "
+        "If a hook is given, the first panel opens on it, not on scene-setting. A result caption "
+        "(a score, a count) says what it meant to the hero, never just reports it. Some panels list "
+        "real_lines: sentences that speaker actually said, verbatim. A real line beats an invented "
+        "one: when it carries the moment, use it unchanged (it counts as one of the panel's lines); "
+        "never reword it so it means something else. "
         "Never repeat a fact the script already stated. Each panel must move the story forward "
         "from the one before. Truth: every claim (what happened, who did it, why, a number, a "
         "name, an outcome) must be in that panel's facts or evidence or the synopsis; say it in "
@@ -325,6 +336,10 @@ class LLMDialogueWriter:
                     "evidence": str(panel.get("evidence", ""))[:700],
                     "speakers": speakers,
                 }
+                if panel.get("real_lines"):
+                    item["real_lines"] = [
+                        {"speaker": row["speaker"], "text": row["text"]} for row in panel["real_lines"]
+                    ]
                 if notes.get(f"p{position}"):
                     item["editor_note"] = notes[f"p{position}"]
                 items.append(item)
@@ -336,6 +351,8 @@ class LLMDialogueWriter:
                 "voices": {name: voices.get(name, "natural") for name in cast_here} | {"narrator": voices.get("narrator", "")},
                 "panels": items,
             }
+            if start == 0 and story.get("hook"):
+                payload["hook"] = story["hook"]
             try:
                 response = self.llm.complete_json(
                     prompt=self.SCENE_PROMPT,
@@ -985,11 +1002,23 @@ def plan_episode(
     actors_by_event: Mapping[str, str] | None = None,
     cast_map: Mapping[str, str] | None = None,
     title: str | None = None,
+    caption_layer: str = "caption",
+    quotes_by_event: Mapping[str, str] | None = None,
 ) -> EpisodeIR:
     """Plan an episode from one arc.
 
     ``format`` is ``strip`` (6 panels, one per arc role) or ``chapter`` (8-12
     panels: the six roles plus detail panels from the arc's own beats).
+
+    ``caption_layer`` is the grounding layer narrator captions are judged on: ``"caption"``
+    (default) restates facts and keeps the vocabulary floor; ``"story"`` lets a caption
+    interpret (stakes, feeling) while names, numbers and events stay strict. Dialogue is
+    unaffected: it already allows tone.
+
+    ``quotes_by_event`` maps an event id to the gated text of a message. When given, each
+    panel offers its speakers' punchiest real sentences to the writer as candidate lines
+    (``canon.reallines``). They are candidates only: whatever the writer returns is still
+    judged by the grounding gate.
     """
     if format not in {"strip", "chapter"}:
         raise ValueError(f"unknown format: {format!r}")
@@ -1188,6 +1217,11 @@ def plan_episode(
             )
         else:
             spec["speakers"] = sorted(set(spec["actors"]) or set(spec["cast"]))
+        if quotes_by_event:
+            beat_ids = tuple(spec["beat"].event_ids) if spec.get("beat") else ()
+            spec["real_lines"] = real_lines_for(
+                beat_ids, quotes_by_event, actors_by_event or {}, spec["speakers"], owner=hero
+            )
     cast = sorted({name for spec in panel_specs for name in spec["cast"]})
     active_writer = writer or TemplateDialogueWriter(cast, hero=hero)
     dialogue = active_writer.write(panel_specs)
@@ -1244,7 +1278,7 @@ def plan_episode(
             if caption_problem(text, owner_texts=owner_texts, max_owner_quote=limit):
                 return False
             if grounder is not None:
-                verdict = grounder.check(text, judge_text, layer="caption")
+                verdict = grounder.check(text, judge_text, layer=caption_layer)
                 if not verdict.supported:
                     return False
             return True
@@ -1263,7 +1297,7 @@ def plan_episode(
                 if not why and grounder is not None:
                     # Round 10: name the real reason. r9's generic wording hid that the
                     # deterministic term rule, not the model, refused these captions.
-                    why = grounder.check(trimmed, judge_text, layer="caption").reason
+                    why = grounder.check(trimmed, judge_text, layer=caption_layer).reason
                 why = why or "not supported by the panel evidence"
                 report.reasons.append(f"{role} caption refused: {why}")
         if caption and (len(caption.split()) < 3 or looks_like_provenance(caption)):
@@ -1274,7 +1308,7 @@ def plan_episode(
             # must be re-checked against the same text. Re-checking a fact sentence against
             # the long raw evidence failed it, which is what "repaired" the strip with the
             # composer's "Kensei worked on ..." sentence on real runs.
-            verdict = grounder.check(caption, judge_text, layer="caption")
+            verdict = grounder.check(caption, judge_text, layer=caption_layer)
             if verdict.supported:
                 report.captions_supported += 1
             else:
@@ -1446,6 +1480,7 @@ def plan_episode(
         citation_pool=dict(line_pool),
         caption_pool_ids=tuple(episode_pool),
         frame=dict(frame or {}),
+        arc_type=str(getattr(arc, "type", "") or ""),
     )
 
 

@@ -16,11 +16,11 @@ from __future__ import annotations
 
 import math
 import textwrap
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Mapping, Sequence
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageColor, ImageDraw, ImageFont
 
 FONT_DIR = Path(__file__).resolve().parents[1] / "assets" / "fonts"
 BODY_FONT = FONT_DIR / "ComicNeue-Bold.ttf"
@@ -63,6 +63,49 @@ def _pad(box: Sequence[float], amount: float) -> list[float]:
     return [box[0] - amount, box[1] - amount, box[2] + amount, box[3] + amount]
 
 
+@dataclass(frozen=True, slots=True)
+class LetterStyle:
+    """How a style letters its panels. The defaults are the original comic look."""
+
+    balloon: str = "ellipse"  # ellipse | rounded | rect
+    balloon_fill: str = "white"
+    comms_fill: str = "#e8fbff"
+    caption_fill: str = "#fff3b0"
+    ink: str = "black"
+    outline: float = 1.0  # multiplier on the line weight
+    font: str = "comic"  # comic | display
+    caption_shape: str = "rect"  # rect | rounded
+
+    @classmethod
+    def from_style(cls, lettering: Mapping[str, str] | None) -> LetterStyle:
+        """A letter style from a style card's ``lettering`` block; unknown values are ignored."""
+        data = dict(lettering or {})
+        base = cls()
+        choices = {"balloon": ("ellipse", "rounded", "rect"), "font": ("comic", "display"),
+                   "caption_shape": ("rect", "rounded")}
+        kwargs: dict[str, object] = {}
+        for key, value in data.items():
+            if key == "outline":
+                try:
+                    kwargs[key] = min(3.0, max(0.5, float(value)))
+                except ValueError:
+                    pass
+            elif key in choices:
+                if value in choices[key]:
+                    kwargs[key] = value
+            elif key in {"balloon_fill", "comms_fill", "caption_fill", "ink"} and _colour(value):
+                kwargs[key] = value
+        return replace(base, **kwargs)
+
+
+def _colour(value: str) -> bool:
+    try:
+        ImageColor.getrgb(value)
+    except ValueError:
+        return False
+    return True
+
+
 def _font(path: Path, size: float) -> ImageFont.FreeTypeFont:
     return ImageFont.truetype(str(path), max(10, int(size)))
 
@@ -78,9 +121,12 @@ def letter_panel(
     comms: Sequence[str] = (),
     step: int = 16,
     font_scale: float = 1.0,
+    look: LetterStyle | None = None,
 ) -> tuple[Image.Image, LetterReport]:
     """``font_scale``: QAR-M2-07 - panels shown smaller on a multi-panel page get bigger text,
     so dialogue stays readable at whole-page view."""
+    look = look or LetterStyle()
+    body_font = TITLE_FONT if look.font == "display" else BODY_FONT
     im = image.convert("RGB").copy()
     draw = ImageDraw.Draw(im)
     width, height = im.size
@@ -93,7 +139,7 @@ def letter_panel(
     free_px = [_px(box, width, height) for box in free]
     placed: list[list[float]] = []
 
-    cap_font = _font(BODY_FONT, 30 * scale)
+    cap_font = _font(body_font, 30 * scale)
     capbox: list[float] | None = None
     if caption:
         wrapped_caption = textwrap.fill(caption, max(30, int(width / (17 * scale))))
@@ -134,7 +180,7 @@ def letter_panel(
             if best is not None:
                 break
             for size in sizes:
-                font = _font(BODY_FONT, size * scale)
+                font = _font(body_font, size * scale)
                 for wrap in (14, 18, 22, 28, 34):
                     wrapped = textwrap.fill(text, wrap)
                     tb = draw.multiline_textbbox((0, 0), wrapped, font=font, spacing=4, align="center")
@@ -189,22 +235,28 @@ def letter_panel(
               cy + (bh / 2 - 20 * scale) * math.sin(angle) + base * math.sin(perp))
         b2 = (cx + (bw / 2 - 30 * scale) * math.cos(angle) - base * math.cos(perp),
               cy + (bh / 2 - 20 * scale) * math.sin(angle) - base * math.sin(perp))
-        fill = "#e8fbff" if is_comms else "white"
-        outline = max(2, int(4 * scale))
-        draw.polygon([b1, b2, tip], fill=fill, outline="black", width=outline)
-        if is_comms:
-            draw.rounded_rectangle(box, radius=int(18 * scale), fill=fill, outline="black", width=outline + 1)
+        fill = look.comms_fill if is_comms else look.balloon_fill
+        outline = max(2, int(4 * scale * look.outline))
+        draw.polygon([b1, b2, tip], fill=fill, outline=look.ink, width=outline)
+        if is_comms or look.balloon == "rounded":
+            draw.rounded_rectangle(box, radius=int(18 * scale), fill=fill, outline=look.ink, width=outline + 1)
+        elif look.balloon == "rect":
+            draw.rectangle(box, fill=fill, outline=look.ink, width=outline + 1)
         else:
-            draw.ellipse(box, fill=fill, outline="black", width=outline + 1)
+            draw.ellipse(box, fill=fill, outline=look.ink, width=outline + 1)
         draw.polygon([(b1[0] * 0.9 + tip[0] * 0.1, b1[1] * 0.9 + tip[1] * 0.1),
                       (b2[0] * 0.9 + tip[0] * 0.1, b2[1] * 0.9 + tip[1] * 0.1), (cx, cy)], fill=fill)
-        draw.multiline_text((cx, cy), wrapped, font=font, fill="black", anchor="mm", spacing=4, align="center")
+        draw.multiline_text((cx, cy), wrapped, font=font, fill=look.ink, anchor="mm", spacing=4, align="center")
         report.placed.append(speaker)
         report.balloons.append({"speaker": speaker, "box": [int(v) for v in box], "tip": [int(tip[0]), int(tip[1])], "comms": is_comms})
 
     if caption and capbox is not None:
         wrapped_caption = textwrap.fill(caption, max(30, int(width / (17 * scale))))
-        draw.rectangle(capbox, fill="#fff3b0", outline="black", width=max(2, int(4 * scale)))
-        draw.multiline_text((capbox[0] + 18 * scale, capbox[1] + 10 * scale), wrapped_caption, font=cap_font, fill="black", spacing=4)
+        cap_outline = max(2, int(4 * scale * look.outline))
+        if look.caption_shape == "rounded":
+            draw.rounded_rectangle(capbox, radius=int(14 * scale), fill=look.caption_fill, outline=look.ink, width=cap_outline)
+        else:
+            draw.rectangle(capbox, fill=look.caption_fill, outline=look.ink, width=cap_outline)
+        draw.multiline_text((capbox[0] + 18 * scale, capbox[1] + 10 * scale), wrapped_caption, font=cap_font, fill=look.ink, spacing=4)
         report.caption_box = [int(v) for v in capbox]
     return im, report

@@ -2,8 +2,10 @@
 
 A CLI command and nothing else - no hooks, no slash commands, no tools, no schedule. It
 runs the existing pipeline with the writer, title and entailment calls on ``ctx.llm``
-(the production path), while redaction stays on the local route so only post-gate text is
-ever sent to the host model.
+(the production path), while redaction runs the deterministic regex pass by default. The
+model redaction pass - which is the only thing that reads raw name candidates and gated
+event text - runs only when the operator names a route with ``--llm-url``; with it, that
+text goes to that route and nowhere else.
 
 ``--dry-run`` is required on purpose: this is a planning command that writes its artefacts
 to a directory the operator names, and nothing else.
@@ -71,8 +73,25 @@ def register_cli(subparser: argparse.ArgumentParser) -> None:
         help="cap a strip to this many story panels (4 gives the social/README shape); 0 keeps all six",
     )
     plan.add_argument("--data-dir", default="", help="where to write artefacts")
-    plan.add_argument("--llm-url", default=DEFAULT_LOCAL_URL, help="local route for redaction")
+    plan.add_argument(
+        "--llm-url",
+        default=None,
+        help=(
+            "opt in to the local redaction model at this OpenAI-compatible route "
+            f"(the rig's serving port is {DEFAULT_LOCAL_URL}). Without it, redaction is the "
+            "deterministic regex pass only and no history text leaves the machine; the "
+            "story writer still runs on your Hermes model."
+        ),
+    )
     plan.add_argument("--max-deep-events", type=int, default=90)
+    plan.add_argument(
+        "--all-profiles",
+        action="store_true",
+        help=(
+            "read every profile under ~/.hermes/profiles, not just the one this process "
+            "runs as. Off by default: profiles are kept separate on purpose"
+        ),
+    )
     plan.add_argument("--json", action="store_true", help="print the metrics JSON")
     plan.add_argument("--harness", default="hermes",
                       help="history to read: hermes, claude-code, codex, opencode, pi, jsonl - or several, comma-separated")
@@ -202,6 +221,21 @@ def _harness_options(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
     return options
 
 
+def redaction_client(llm_url: str | None) -> Any:
+    """The redaction model client: opt-in only.
+
+    With no URL the deterministic regex pass is the whole redaction story and nothing is
+    posted anywhere. Naming a URL opts in to the model pass on that route.
+    """
+    if not llm_url:
+        from canon.llm import NullLLM
+
+        return NullLLM()
+    from adapters.hermes.llm import OpenAICompatLLMClient
+
+    return OpenAICompatLLMClient(base_url=llm_url, model="auto")
+
+
 def reel_command(args: argparse.Namespace) -> int:
     action = getattr(args, "reel_action", None)
     if action == "eval-grounding":
@@ -236,13 +270,11 @@ def reel_command(args: argparse.Namespace) -> int:
     # Imported here: the pipeline is a dev/CLI surface and must not load during the
     # host's capability probe.
     try:
-        from adapters.hermes.llm import OpenAICompatLLMClient
         from adapters.hermes.pipeline import PipelineConfig, run_pipeline
     except ImportError:  # directory install: the plugin dir is not on sys.path
         here = Path(__file__).resolve().parents[2]
         if str(here) not in sys.path:
             sys.path.insert(0, str(here))
-        from adapters.hermes.llm import OpenAICompatLLMClient
         from adapters.hermes.pipeline import PipelineConfig, run_pipeline
 
     from adapters.hermes.plugin_llm import PluginLLMClient
@@ -250,7 +282,10 @@ def reel_command(args: argparse.Namespace) -> int:
     data_dir = Path(args.data_dir).expanduser() if args.data_dir else _default_data_dir()
     # V4: a chapter needs about twice the writer calls of a strip per story tried.
     writer = PluginLLMClient(llm, max_calls=300 if getattr(args, "format", "strip") == "chapter" else 150)
-    local = OpenAICompatLLMClient(base_url=args.llm_url, model="auto")
+    # Redaction is deterministic by default (regex + alias book, nothing leaves the
+    # machine). The model pass that reads raw name candidates only runs when the operator
+    # names the route with --llm-url.
+    local: Any = redaction_client(getattr(args, "llm_url", None))
 
     def _day(value: str) -> float | None:
         if not value:
@@ -277,6 +312,7 @@ def reel_command(args: argparse.Namespace) -> int:
         real_lines=not bool(getattr(args, "no_real_lines", False)),
         harnesses=tuple(h.strip() for h in str(getattr(args, "harness", "hermes")).split(",") if h.strip()),
         harness_options=_harness_options(args),
+        all_profiles=bool(getattr(args, "all_profiles", False)),
         voices=_kit_voices(),
         tone=_tone_choice(args),
         episodes=max(1, args.episodes),

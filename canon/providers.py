@@ -166,7 +166,14 @@ def secret_from_host(name: str) -> str:
 
 
 def _key(env: Mapping[str, Any], name: str) -> str:
-    value = env.get(name) or secret_from_host(name)
+    """The key for one image source: the host route decides, the environment is the fallback.
+
+    Order matters when one process serves several profiles: a bare ``os.environ`` read can
+    return whichever profile's key was exported last, so the host route (``get_secret``,
+    scoped to the active profile) is asked first and the environment only answers when
+    there is no host route at all (a plain CLI run, or a test's injected mapping).
+    """
+    value = secret_from_host(name) or env.get(name)
     if not value:
         raise RenderError(
             f"{name} is not set; add it in Hermes (`hermes auth`) or your environment to "
@@ -438,7 +445,10 @@ def check_source(source: str, *, env: Mapping[str, str] | None = None, transport
     if spec is None:
         return {"source": source, "ready": False, "problem": "unknown source"}
     environ = os.environ if env is None else env
-    missing = [name for name in spec.env if not environ.get(name)]
+    # A key can arrive two ways: the host route for the active profile, or the plain
+    # environment of a CLI run. ``sources --check`` must accept either, or it reports a
+    # key as missing when a run would in fact find it.
+    missing = [name for name in spec.env if not (secret_from_host(name) or environ.get(name))]
     report: dict[str, Any] = {"source": source, "label": spec.label, "status": spec.status,
                               "ready": not missing, "problem": f"missing {', '.join(missing)}" if missing else ""}
     if source == "comfyui":

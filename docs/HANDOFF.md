@@ -79,7 +79,7 @@ If any expectation fails, stop and report. Don't work around it.
 
 ### Stage M0: history adapter (read-only)
 
-- `adapters/hermes/history.py` reads all profiles (sessions + messages + tool calls from `messages.tool_calls` JSON), `kanban.db` (tasks, assignee, status changes), skills `.usage.json`, cron runs and MEMORY/USER fact diffs into one normalised `Event` stream. Schema per SPEC §4.
+- `adapters/hermes/history.py` reads the profile it runs as (`--all-profiles` opts in to every profile under `profiles/`) — sessions + messages + tool calls from `messages.tool_calls` JSON — plus `kanban.db` (tasks, assignee, status changes), skills `.usage.json`, cron runs and MEMORY/USER fact diffs into one normalised `Event` stream. Schema per SPEC §4.
 - Write `canon/HERMES_SCHEMA.md` mapping each source table/field → Event.
 - CLI: `python -m adapters.hermes.history --days 7 --summary` prints counts per profile and source, plus the last 50 sessions (title, profile, time, message count). It must not print message content.
 - Synthetic fixture generator: 4 weeks, 4 profiles, kanban + skills + cron.

@@ -144,6 +144,9 @@ class PipelineConfig:
     #: is the social/README shape); 0 keeps every role.
     strip_panels: int = 0
     profiles: tuple[str, ...] | None = None
+    #: Read every profile under ``<home>/profiles`` instead of only the one this process
+    #: runs as. Off by default: profiles are separate by design.
+    all_profiles: bool = False
     format: str = "strip"
     season: int = 1
     number: int = 1
@@ -474,6 +477,7 @@ def run_pipeline(
             if harness == "hermes":
                 parts.append(HermesHistorySource(
                     profiles=config.profiles,
+                    all_profiles=config.all_profiles,
                     memory_snapshot=prior_hashes or None,
                     snapshot_root=config.snapshot_root,
                 ))
@@ -517,15 +521,14 @@ def run_pipeline(
 
         # ---- gate: deterministic + vocabulary ----------------------------
         cache = ModelCache(config.data_dir / "cache")
-        client: LLMClient
-        if config.use_model:
-            client = config.llm or OpenAICompatLLMClient.local()
-        else:
-            client = config.llm or NullLLM()
+        # Never construct a model route on the caller's behalf: a run that was given no
+        # client is the deterministic path, so nothing reaches an endpoint the operator
+        # did not name.
+        client: LLMClient = config.llm or NullLLM()
         cached = CachedLLM(client, cache, stage="m1")
-        # R3-F6: the writer, title and entailment calls use the owner's main model via
-        # the local API server. Redaction stays on the local model, so only post-gate
-        # text ever reaches the other endpoint.
+        # R3-F6: the writer, title and entailment calls use the owner's main model. They
+        # are given gated text only: the redaction model (when the operator names one) is
+        # a separate client, so nothing ungated reaches the writer's endpoint.
         writer_cached = (
             CachedLLM(config.writer_llm, cache, stage="m1")
             if config.writer_llm is not None
@@ -540,7 +543,12 @@ def run_pipeline(
         # learned-sensitive vocabulary or every character turns into "Agent N".
         cast_allowlist = tuple(sorted({*config.allowlist, *(p.name for p in source.info().profiles)}))
         model_gate = (
-            ModelEntityGate(cached, allowlist=cast_allowlist) if config.use_model else None
+            # No model client, no model pass: without a named route redaction is the
+            # deterministic regex pass only, rather than a gate that fails closed on
+            # every candidate because it has nothing to ask.
+            ModelEntityGate(cached, allowlist=cast_allowlist)
+            if config.use_model and not isinstance(client, NullLLM)
+            else None
         )
         gate = RedactionGate(
             redactor,
@@ -1256,6 +1264,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--until", type=float, default=None, help="pin the window end (epoch seconds)"
     )
     parser.add_argument("--profile", action="append", default=None)
+    parser.add_argument(
+        "--all-profiles",
+        action="store_true",
+        help=(
+            "read every profile under <home>/profiles. Default reads only the profile this "
+            "process runs as, because profiles are kept separate by design"
+        ),
+    )
     parser.add_argument("--format", choices=("strip", "chapter"), default="strip")
     parser.add_argument("--number", type=int, default=1)
     parser.add_argument("--season", type=int, default=1)
@@ -1340,6 +1356,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         since=args.since,
         until=args.until,
         profiles=tuple(args.profile) if args.profile else None,
+        all_profiles=args.all_profiles,
         format=args.format,
         season=args.season,
         number=args.number,

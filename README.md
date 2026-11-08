@@ -146,6 +146,10 @@ the line `**[INSERT CHARACTERS, ACTION AND SCENE HERE]**`. See `docs/STYLES.md`.
 | `hermes reel kit` | Create a character sheet, or import the Hermes Multiverse set. |
 | `hermes reel tones` | Tone: witty, comical, serious, quirky, epic, wholesome, noir — or a blend. |
 
+`hermes reel plan` reads the profile it runs as; `--all-profiles` widens that to every profile in
+the fleet. It redacts deterministically; `--llm-url` opts in to the local model redaction pass (see
+[Privacy](#privacy)).
+
 ## Install
 
 ```bash
@@ -171,16 +175,38 @@ your live sessions.
 - **Reads** your own history read-only: no file is created, renamed, truncated or deleted under
   `~/.hermes` while the tool reads it (only normal SQLite read-locking touches an existing WAL
   index). `scripts/readonly_proof.sh` proves this with strace.
-- **Redaction runs before any model sees text** — a deterministic pass plus a model pass that
-  masks secrets, credentials, paths and personal data.
+- **Reads one profile.** Hermes keeps profiles separate on purpose, so a run reads the profile it
+  runs as: `HERMES_HOME` pointing at `~/.hermes/profiles/<name>` means that profile, a root home
+  means the default one, and `HERMES_PROFILE` names it outright. The other profiles under
+  `profiles/` are not opened. Reading all of them is an explicit opt-in:
+  `hermes reel plan --dry-run --all-profiles`. (The fleet-wide stores — `kanban.db`, cron, skills
+  usage — are still read, and a kanban task records the profile that ran it whatever you do.)
+- **Redaction runs before any model sees text.** The default is the deterministic pass only: regex
+  rules for secrets, credentials, paths, emails, money and health, plus your alias book. It runs on
+  this machine and sends nothing anywhere.
+- **The model redaction pass is opt-in.** Pass `--llm-url` and a local OpenAI-compatible server gets
+  a second opinion; leave it out and no request is made at all:
+  ```bash
+  # deterministic only (default)
+  hermes reel plan --dry-run
+  # opt in: the rig's own serving port
+  hermes reel plan --dry-run --llm-url http://127.0.0.1:8091/v1
+  ```
+  When it is on, that route receives exactly two payloads and nothing else: the candidate name
+  list (distinct capitalised tokens pulled from the raw history text before redaction, capped at
+  400 by default), and, for the events the story actually uses, the event text after the
+  deterministic regex pass (capped at 2,000 characters per event). It never receives whole
+  sessions, tool output, memory files or raw message bodies.
 - **Sends** text to your model for the writing, the editor pass and the meaning checks, and
   panel images to the image route you choose. With `host` that is your own provider; with
   `comfyui`, a local server on your machine; with `openai`, `gemini` or `fal`, that vendor's API
   using a key Hermes holds.
 - **Stores** plans, renders, the series ledger and character kits under the plugin's data
   directory. Nothing is posted anywhere. There is no telemetry.
-- **Credentials** are read through Hermes (`agent.secret_scope`), never from files, and no key
-  is needed at all for `host` or `comfyui`.
+- **Credentials** are read through Hermes (`agent.secret_scope`) for the active profile first and
+  only fall back to this process's environment when there is no host route (a plain CLI run), never
+  from files. No key is needed at all for `host` or `comfyui`, and `hermes reel sources --check`
+  accepts a key that Hermes holds even when it is not exported.
 
 ## Licence
 

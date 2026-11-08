@@ -40,10 +40,39 @@ def test_info_reports_profiles_and_stores(synthetic_home):
     source = HermesHistorySource(root=synthetic_home)
     info = source.info()
     assert info.harness == "hermes"
-    assert {p.name for p in info.profiles} == {"alpha", "beta", "gamma", "delta"}
+    # Default is the profile this process runs as. A Hermes root is the default profile,
+    # so no sibling profile directory is read unless the caller opts in.
+    assert info.profiles == ()
     assert "state.db" in info.stores
     assert "kanban.db" in info.stores
     assert "cron/executions.db" in info.stores
+
+
+def test_reading_every_profile_is_an_explicit_opt_in(synthetic_home, monkeypatch):
+    monkeypatch.delenv("HERMES_PROFILE", raising=False)
+    opted_in = HermesHistorySource(root=synthetic_home, all_profiles=True)
+    assert {p.name for p in opted_in.info().profiles} == {"alpha", "beta", "gamma", "delta"}
+    # And a named profile is still read on request, without the fleet.
+    one = HermesHistorySource(root=synthetic_home, profiles=["alpha"])
+    assert {p.name for p in one.info().profiles} == {"alpha"}
+
+
+def test_the_default_reads_only_the_current_profile(monkeypatch, synthetic_home):
+    """HERMES_HOME pointing at profiles/<name> means that profile, and only that profile."""
+    monkeypatch.delenv("HERMES_PROFILE", raising=False)
+    profile_home = synthetic_home / "profiles" / "beta"
+    source = HermesHistorySource(root=profile_home)
+    assert source.paths.current_profile_name() == "beta"
+    # A profile home has no nested profiles: its own state.db is the profile's store.
+    assert source._selected_profiles() == []
+    assert source.info().profiles == ()
+    # A root home is the default profile: siblings stay out of the read.
+    root_source = HermesHistorySource(root=synthetic_home)
+    assert root_source.paths.current_profile_name() == "default"
+    assert root_source._selected_profiles() == []
+    # HERMES_PROFILE names the profile outright when a launcher sets it.
+    monkeypatch.setenv("HERMES_PROFILE", "gamma")
+    assert HermesHistorySource(root=synthetic_home)._selected_profiles()[0].name == "gamma"
 
 
 def test_every_source_produces_events(synthetic_home):

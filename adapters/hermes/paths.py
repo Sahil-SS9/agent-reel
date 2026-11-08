@@ -70,8 +70,26 @@ class HermesPaths:
     def profiles_dir(self) -> Path:
         return self.home / "profiles"
 
+    def current_profile_name(self) -> str:
+        """Which profile this process is running as.
+
+        Hermes points ``HERMES_HOME`` at ``<root>/profiles/<name>`` for a named profile and
+        at the root itself for the default one, and a launcher may also name it outright in
+        ``HERMES_PROFILE``. Only that profile's stores are read unless the caller asks for
+        the whole fleet: profiles exist so one profile's history does not land in another
+        profile's comic.
+        """
+        explicit = (os.environ.get("HERMES_PROFILE") or "").strip()
+        if explicit:
+            return explicit
+        home = Path(self.home).expanduser()
+        if home.parent.name == "profiles" and home.name:
+            return home.name
+        # The home itself is a Hermes root, so its own state.db is the default profile's.
+        return "default"
+
     def profiles(self) -> list[ProfileStore]:
-        """Every profile directory that has a state.db, sorted by name."""
+        """Every profile directory under this home, sorted by name."""
         found: list[ProfileStore] = []
         root = self.profiles_dir
         if not root.is_dir():

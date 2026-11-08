@@ -259,12 +259,17 @@ class HermesHistorySource:
         root: str | os.PathLike[str] | None = None,
         *,
         profiles: Sequence[str] | None = None,
+        all_profiles: bool = False,
         include_main: bool = True,
         memory_snapshot: Mapping[str, Any] | None = None,
         snapshot_root: Path | str | None = None,
     ) -> None:
         self.paths = HermesPaths.resolve(root if root is not None else None)
         self._profile_filter = tuple(profiles) if profiles else None
+        # Default is the profile this process runs as. Reading every profile under
+        # profiles/ would put other profiles' history into this one's comic, so the whole
+        # fleet is an explicit opt-in.
+        self._all_profiles = bool(all_profiles)
         self._include_main = include_main
         self._memory_snapshot = dict(memory_snapshot or {})
         self._counters: dict[str, ReadCounts] = {}
@@ -310,10 +315,13 @@ class HermesHistorySource:
 
     def _selected_profiles(self) -> list[ProfileStore]:
         stores = self.paths.profiles()
-        if self._profile_filter is None:
+        if self._profile_filter is not None:
+            wanted = set(self._profile_filter)
+            return [store for store in stores if store.name in wanted]
+        if self._all_profiles:
             return stores
-        wanted = set(self._profile_filter)
-        return [store for store in stores if store.name in wanted]
+        current = self.paths.current_profile_name()
+        return [store for store in stores if store.name == current]
 
     def counters(self) -> dict[str, ReadCounts]:
         return dict(self._counters)
@@ -1674,7 +1682,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             "restrict to this profile (repeatable). Scopes every source that carries a "
             "profile attribution (sessions, messages, tool calls, skills, memory, "
             "kanban-by-assignee). Fleet-level cron runs are omitted while a filter is set. "
-            "Default: every profile plus the fleet-wide store."
+            "Default: the profile this process runs as, plus the fleet-wide store."
+        ),
+    )
+    parser.add_argument(
+        "--all-profiles",
+        action="store_true",
+        help=(
+            "read every profile under <home>/profiles, not just the current one. Opt-in: "
+            "profiles are kept separate by design"
         ),
     )
     parser.add_argument(
@@ -1708,6 +1724,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     include_main = not args.profile or "default" in args.profile
     source = HermesHistorySource(
         profiles=args.profile,
+        all_profiles=args.all_profiles,
         include_main=include_main,
         memory_snapshot=snapshot,
     )

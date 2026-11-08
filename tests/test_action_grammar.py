@@ -209,16 +209,35 @@ def test_a_short_line_is_left_alone():
 
 
 def test_an_api_key_is_read_through_the_host_secret_route_first(monkeypatch):
-    """Catalogue rule 11: credentials come through Hermes, not a bare os.environ read."""
+    """Catalogue rule 11: the host route decides, so one process cannot serve another
+    profile's key. The environment is the fallback for a plain CLI run, never the winner
+    when both are present."""
     from canon import providers
 
     calls: list[str] = []
     monkeypatch.setattr(providers, "secret_from_host", lambda name: calls.append(name) or "host-key")
-    assert providers._key({}, "OPENAI_API_KEY") == "host-key"
+    # Both routes answer: the host route wins, and the environment is not even read first.
+    assert providers._key({"OPENAI_API_KEY": "stale-other-profile-key"}, "OPENAI_API_KEY") == "host-key"
     assert calls == ["OPENAI_API_KEY"]
-    # An injected env (tests, CI) still wins, and nothing else is consulted.
+    # No host route (a plain CLI run): the environment still works.
+    monkeypatch.setattr(providers, "secret_from_host", lambda name: "")
     assert providers._key({"OPENAI_API_KEY": "env-key"}, "OPENAI_API_KEY") == "env-key"
-    assert calls == ["OPENAI_API_KEY"]
+
+
+def test_sources_check_accepts_a_key_only_the_host_route_returns(monkeypatch):
+    """``sources --check`` must agree with the run: a key Hermes holds is not missing just
+    because it is absent from this process's environment."""
+    from canon import providers
+
+    monkeypatch.setattr(providers, "secret_from_host", lambda name: "host-key" if name == "OPENAI_API_KEY" else "")
+    report = providers.check_source("openai", env={})
+    assert report["ready"] is True, report
+    assert report["problem"] == ""
+    # The negative case still reports the truth: nothing anywhere means not ready.
+    monkeypatch.setattr(providers, "secret_from_host", lambda name: "")
+    missing = providers.check_source("openai", env={})
+    assert missing["ready"] is False
+    assert "OPENAI_API_KEY" in missing["problem"]
 
 
 def test_a_missing_key_names_both_routes(monkeypatch):
